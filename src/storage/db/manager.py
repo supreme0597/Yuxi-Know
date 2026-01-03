@@ -33,17 +33,23 @@ class DBManager(metaclass=SingletonMeta):
         # 创建异步SQLAlchemy引擎，配置JSON序列化器以支持中文
         # 使用 ensure_ascii=False 确保中文字符不被转义为 Unicode 序列
         self.async_engine = create_async_engine(
-            f"sqlite+aiosqlite:///{self.db_path}",
+            config.database_url,
             json_serializer=lambda obj: json.dumps(obj, ensure_ascii=False),
             json_deserializer=json.loads,
+            # PostgreSQL连接池配置（SQLite会忽略这些参数）
+            pool_size=10,
+            max_overflow=20,
         )
 
-        # 创建异步会话工厂
-        self.AsyncSession = async_sessionmaker(bind=self.async_engine, class_=AsyncSession, expire_on_commit=False)
+        self.AsyncSession = async_sessionmaker(
+            bind=self.async_engine,
+            class_=AsyncSession,
+            expire_on_commit=False
+        )
 
-        # 保留同步引擎用于迁移等特殊操作
+        # 同步引擎（用于Alembic迁移）
         self.engine = create_engine(
-            f"sqlite:///{self.db_path}",
+            config.database_url_sync,
             json_serializer=lambda obj: json.dumps(obj, ensure_ascii=False),
             json_deserializer=json.loads,
         )
@@ -53,7 +59,7 @@ class DBManager(metaclass=SingletonMeta):
         self.create_tables()
 
         # 然后检查并执行数据库迁移
-        self.run_migrations()
+        # self.run_migrations()  # Removed for Alembic migration
 
     def ensure_db_dir(self):
         """确保数据库目录存在"""

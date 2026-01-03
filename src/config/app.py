@@ -45,6 +45,14 @@ class Config(BaseModel):
     # 基础配置
     # ============================================================
     save_dir: str = Field(default="saves", description="保存目录")
+    database_url: str = os.getenv(
+        "DATABASE_URL",
+        f"sqlite+aiosqlite:///{save_dir}/database/server.db"
+    )
+    database_url_sync: str = os.getenv(
+        "DATABASE_URL_SYNC",
+        f"sqlite:///{save_dir}/database/server.db"
+    )
     model_dir: str = Field(default="", description="本地模型目录")
 
     # ============================================================
