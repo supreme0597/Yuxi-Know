@@ -1,6 +1,6 @@
 {
   "name": "yuxi-know-web",
-  "version": "0.3.0.web",
+  "version": "0.4.0.web",
   "private": true,
   "scripts": {
     "dev": "vite",
@@ -8,7 +8,7 @@
     "server:prod": "vite serve --host --port 8080",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs --fix --ignore-path .gitignore",
+    "lint": "eslint . --fix",
     "format": "prettier --write src/"
   },
   "dependencies": {
@@ -29,6 +29,8 @@
     "lucide-vue-next": "^0.542.0",
     "marked": "^16.2.1",
     "marked-highlight": "^2.2.2",
+    "markmap-lib": "^0.18.12",
+    "markmap-view": "^0.18.12",
     "md-editor-v3": "^5.8.4",
     "pinia": "^3.0.3",
     "sigma": "^3.0.2",

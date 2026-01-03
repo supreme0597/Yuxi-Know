@@ -6,7 +6,7 @@ services:
       args:
         HTTP_PROXY: ${HTTP_PROXY:-}
         HTTPS_PROXY: ${HTTPS_PROXY:-}
-    image: yuxi-api:0.3.dev
+    image: yuxi-api:0.4.dev
     container_name: api-dev
     working_dir: /app
     volumes:
@@ -62,7 +62,7 @@ services:
       context: .
       dockerfile: docker/web.Dockerfile
       target: development
-    image: yuxi-web:0.3.dev
+    image: yuxi-web:0.4.dev
     container_name: web-dev
     volumes:
       - ./web/src:/app/src
@@ -80,34 +80,6 @@ services:
       - VITE_API_URL=http://api:5050
     command: pnpm run server
     restart: unless-stopped
-
-  # PostgreSQL 服务 - 基于官方推荐的 shangor/postgres-for-rag 镜像
-  # 提供 KV store, VectorDB (pgvector) 和 GraphDB (Apache AGE) 功能
-  # postgres:
-  #   image: shangor/postgres-for-rag:v1.0
-  #   container_name: postgres-lightrag
-  #   environment:
-  #     - POSTGRES_DATABASE=${POSTGRES_DATABASE:-lightrag}
-  #     - POSTGRES_USER=${POSTGRES_USER:-lightrag}
-  #     - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-lightrag}
-  #     - POSTGRES_HOST_AUTH_METHOD=md5
-  #     # 启用必要的扩展
-  #     - POSTGRES_INITDB_ARGS=--auth-host=md5
-  #   volumes:
-  #     - ./docker/volumes/postgres/data:/var/lib/postgresql/data
-  #     - ./docker/init-postgres.sh:/init-postgres.sh
-  #   ports:
-  #     - "5432:5432"
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "PGPASSWORD=${POSTGRES_PASSWORD:-lightrag} psql -h localhost -U ${POSTGRES_USER:-lightrag} -d ${POSTGRES_DATABASE:-lightrag} -c \"SELECT ag_catalog.create_graph('test_ready');\" || PGPASSWORD=${POSTGRES_PASSWORD:-lightrag} psql -h localhost -U ${POSTGRES_USER:-lightrag} -d ${POSTGRES_DATABASE:-lightrag} -c 'SELECT 1'"]
-  #     interval: 30s
-  #     timeout: 15s
-  #     retries: 15
-  #     start_period: 120s
-  #   networks:
-  #     - app-network
-  #   restart: unless-stopped
-  #   command: ["bash", "/init-postgres.sh"]
 
   # region neo4j
   graph:
@@ -214,7 +186,7 @@ services:
       context: .
       dockerfile: docker/mineru.Dockerfile
     image: mineru-vllm:latest
-    container_name: mineru
+    container_name: mineru-vllm-server
     profiles:
       - all
     env_file:
@@ -265,20 +237,10 @@ services:
     command:
       --host 0.0.0.0
       --port 30001
-      # parameters for vllm-engine
-      # --data-parallel-size 2  # If using multiple GPUs, increase throughput using vllm's multi-GPU parallel mode
-      # --gpu-memory-utilization 0.5  # If running on a single GPU and encountering VRAM shortage, reduce the KV cache size by this parameter, if VRAM issues persist, try lowering it further to `0.4` or below.
     ulimits:
       memlock: -1
       stack: 67108864
     ipc: host
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              device_ids: [ "0" ]
-              capabilities: [ gpu ]
     restart: unless-stopped
 
   paddlex:

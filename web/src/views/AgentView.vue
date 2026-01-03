@@ -22,9 +22,9 @@
               <div class="agent-card-header">
                 <div class="agent-card-title">
                   <span class="agent-card-name">{{ agent.name || 'Unknown' }}</span>
-                  <StarFilled v-if="agent.id === defaultAgentId" class="default-icon" />
-                  <StarOutlined v-else @click.prevent="setAsDefaultAgent(agent.id)" class="default-icon" />
                 </div>
+                <StarFilled v-if="agent.id === defaultAgentId" class="default-icon" />
+                <StarOutlined v-else @click.prevent="setAsDefaultAgent(agent.id)" class="default-icon" />
               </div>
 
               <div class="agent-card-description">
@@ -44,12 +44,12 @@
           @open-agent-modal="openAgentModal"
           @close-config-sidebar="() => chatUIStore.isConfigSidebarOpen = false"
         >
-          <template #header-right>
+          <template #header-right="{ isMediumContainer }">
             <div type="button" class="agent-nav-btn" @click="toggleConf">
               <Settings2 size="18" class="nav-btn-icon"/>
-              <span class="text">配置</span>
+              <span class="text" :class="{ 'hide-text': isMediumContainer }">配置</span>
             </div>
-            <div v-if="selectedAgentId" type="button" class="agent-nav-btn" @click="toggleMoreMenu">
+            <div v-if="selectedAgentId" ref="moreButtonRef" type="button" class="agent-nav-btn" @click="toggleMoreMenu">
               <Ellipsis size="18"  class="nav-btn-icon"/>
             </div>
           </template>
@@ -165,13 +165,6 @@ const loadAgentConfig = async () => {
   }
 };
 
-// 监听智能体选择变化
-watch(
-  () => selectedAgentId.value,
-  () => {
-    loadAgentConfig();
-  }
-);
 
 // 选择智能体（使用store方法）
 const selectAgent = (agentId) => {
@@ -198,6 +191,7 @@ const toggleConf = () => {
 
 // 更多菜单相关
 const moreMenuRef = ref(null);
+const moreButtonRef = ref(null);
 
 const toggleMoreMenu = (event) => {
   event.stopPropagation();
@@ -220,7 +214,7 @@ onClickOutside(moreMenuRef, () => {
   if (chatUIStore.moreMenuOpen) {
     closeMoreMenu();
   }
-});
+}, { ignore: [moreButtonRef] });
 
 const handleShareChat = async () => {
   closeMoreMenu();
@@ -387,7 +381,7 @@ const handlePreview = () => {
 }
 
 .action-button {
-  background-color: white;
+  background-color: var(--gray-0);
   border: 1px solid var(--main-20);
   text-align: left;
   height: auto;
@@ -434,12 +428,6 @@ const handlePreview = () => {
       white-space: pre-wrap;
     }
   }
-
-  .default-icon {
-    color: #faad14;
-    font-size: 14px;
-    margin-left: 4px;
-  }
 }
 // 工具选择器样式（与项目风格一致）
 .tools-selector {
@@ -469,7 +457,7 @@ const handlePreview = () => {
     .select-tools-btn {
       background: var(--main-color);
       border: none;
-      color: #fff;
+      color: var(--gray-0);
       border-radius: 6px;
       padding: 4px 12px;
       font-size: 13px;
@@ -525,7 +513,7 @@ const handlePreview = () => {
     overflow: hidden;
   }
   :deep(.ant-modal-header) {
-    background: #fff;
+    background: var(--gray-0);
     border-bottom: 1px solid var(--gray-200);
     padding: 16px 20px;
     .ant-modal-title {
@@ -536,7 +524,7 @@ const handlePreview = () => {
   }
   :deep(.ant-modal-body) {
     padding: 20px;
-    background: #fff;
+    background: var(--gray-0);
   }
   .tools-modal-content {
     .tools-search {
@@ -558,7 +546,7 @@ const handlePreview = () => {
       border: 1px solid var(--gray-200);
       border-radius: 8px;
       margin-bottom: 16px;
-      background: #fff;
+      background: var(--gray-0);
       .tool-item {
         padding: 14px 16px;
         border-bottom: 1px solid var(--gray-100);
@@ -626,7 +614,7 @@ const handlePreview = () => {
           &.ant-btn-default {
             border: 1px solid var(--gray-300);
             color: var(--gray-900);
-            background: #fff;
+            background: var(--gray-0);
             &:hover {
               border-color: var(--main-color);
               color: var(--main-color);
@@ -636,7 +624,7 @@ const handlePreview = () => {
           &.ant-btn-primary {
             background: var(--main-color);
             border: none;
-            color: #fff;
+            color: var(--gray-0);
             &:hover {
               background: var(--main-color);
             }
@@ -671,7 +659,7 @@ const handlePreview = () => {
     padding: 8px 12px;
     cursor: pointer;
     transition: all 0.2s ease;
-    background: white;
+    background: var(--gray-0);
     user-select: none;
 
     &:hover {
@@ -737,12 +725,13 @@ const handlePreview = () => {
   }
 }
 
+
 // 智能体选择器样式
 .agent-selector {
   border: 1px solid var(--gray-300);
   border-radius: 8px;
   padding: 8px 12px;
-  background: white;
+  background: var(--gray-0);
   transition: border-color 0.2s ease;
 
   &:hover {
@@ -759,11 +748,6 @@ const handlePreview = () => {
       color: var(--gray-900);
       font-weight: 500;
     }
-
-    .default-icon {
-      color: #faad14;
-      font-size: 14px;
-    }
   }
 }
 
@@ -775,7 +759,7 @@ const handlePreview = () => {
   }
 
   :deep(.ant-modal-header) {
-    background: #fff;
+    background: var(--gray-0);
     border-bottom: 1px solid var(--gray-200);
     padding: 16px 20px;
 
@@ -788,7 +772,7 @@ const handlePreview = () => {
 
   :deep(.ant-modal-body) {
     padding: 20px;
-    background: #fff;
+    background: var(--gray-0);
   }
 
   .agent-modal-content {
@@ -806,7 +790,7 @@ const handlePreview = () => {
       padding: 16px;
       cursor: pointer;
       transition: border-color 0.2s ease;
-      background: white;
+      background: var(--gray-0);
 
       &:hover {
         border-color: var(--main-color);
@@ -819,9 +803,6 @@ const handlePreview = () => {
         margin-bottom: 12px;
 
         .agent-card-title {
-          display: flex;
-          align-items: center;
-          gap: 8px;
           flex: 1;
 
           .agent-card-name {
@@ -830,11 +811,17 @@ const handlePreview = () => {
             color: var(--gray-900);
             line-height: 1.4;
           }
+        }
 
-          .default-icon {
-            color: #faad14;
-            font-size: 16px;
-            flex-shrink: 0;
+        .default-icon {
+          color: var(--color-warning-500);
+          font-size: 16px;
+          flex-shrink: 0;
+          margin-left: 8px;
+          cursor: pointer;
+
+          &:hover {
+            color: var(--color-warning-600);
           }
         }
       }
@@ -884,7 +871,7 @@ const handlePreview = () => {
 .more-popup-menu {
   position: fixed;
   min-width: 130px;
-  background: white;
+  background: var(--gray-0);
   border-radius: 10px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
   border: 1px solid var(--gray-100);
@@ -936,6 +923,7 @@ const handlePreview = () => {
     margin: 4px 8px;
   }
 }
+
 
 // 菜单淡入淡出动画
 .menu-fade-enter-active {
@@ -1020,5 +1008,9 @@ const handlePreview = () => {
     font-size: 14px;
     font-weight: 500;
   }
+}
+
+.hide-text {
+  display: none;
 }
 </style>

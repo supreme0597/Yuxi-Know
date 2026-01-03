@@ -5,8 +5,21 @@
       <div v-if="$slots.top" class="overlay top">
         <slot name="top" />
       </div>
-      <div class="content">
+      <div class="canvas-content">
         <slot name="content" />
+      </div>
+      <!-- Statistical Info Panel -->
+      <div class="graph-stats-panel" v-if="graphData.nodes.length > 0">
+        <div class="stat-item">
+          <span class="stat-label">节点</span>
+          <span class="stat-value">{{ graphData.nodes.length }}</span>
+          <span v-if="graphInfo?.node_count" class="stat-total">/ {{ graphInfo.node_count }}</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">边</span>
+          <span class="stat-value">{{ graphData.edges.length }}</span>
+          <span v-if="graphInfo?.edge_count" class="stat-total">/ {{ graphInfo.edge_count }}</span>
+        </div>
       </div>
       <div v-if="$slots.bottom" class="overlay bottom">
         <slot name="bottom" />
@@ -18,12 +31,17 @@
 <script setup>
 import { Graph } from '@antv/g6'
 import { onMounted, onUnmounted, ref, watch, nextTick } from 'vue'
+import { useThemeStore } from '@/stores/theme'
 
 const props = defineProps({
   graphData: {
     type: Object,
     required: true,
     default: () => ({ nodes: [], edges: [] })
+  },
+  graphInfo: {
+    type: Object,
+    default: () => ({})
   },
   labelField: { type: String, default: 'name' },
   autoFit: { type: Boolean, default: true },
@@ -36,10 +54,11 @@ const props = defineProps({
   highlightKeywords: { type: Array, default: () => [] }
 })
 
-const emit = defineEmits(['ready', 'node-click', 'edge-click', 'canvas-click', 'data-rendered'])
+const emit = defineEmits(['ready', 'data-rendered', 'node-click', 'edge-click', 'canvas-click'])
 
 const container = ref(null)
 const rootEl = ref(null)
+const themeStore = useThemeStore()
 let graphInstance = null
 let resizeObserver = null
 let renderTimeout = null
@@ -49,23 +68,22 @@ const MAX_RETRIES = 5
 const defaultLayout = {
   type: 'd3-force',
   preventOverlap: true,
-  // 性能友好参数（参考 GraphView.vue）
   alphaDecay: 0.1,
   alphaMin: 0.01,
-  velocityDecay: 0.7,
-  iterations: 100,
+  velocityDecay: 0.6,
+  iterations: 150,
   force: {
     center: { x: 0.5, y: 0.5, strength: 0.1 },
-    charge: { strength: -400, distanceMax: 400 },
+    charge: { strength: -400, distanceMax: 600 },
     link: { distance: 100, strength: 0.8 },
   },
   collide: { radius: 40, strength: 0.8, iterations: 3 },
 }
 
-const paletteColors = [
-  '#60a5fa', '#34d399', '#f59e0b', '#f472b6', '#22d3ee',
-  '#a78bfa', '#f97316', '#4ade80', '#f43f5e', '#2dd4bf',
-]
+// CSS 变量解析工具函数
+function getCSSVariable(variableName, element = document.documentElement) {
+  return getComputedStyle(element).getPropertyValue(variableName).trim()
+}
 
 function formatData() {
   const data = props.graphData || { nodes: [], edges: [] }
@@ -86,6 +104,7 @@ function formatData() {
     data: {
       label: n[props.labelField] ?? n.name ?? String(n.id),
       degree: degrees.get(String(n.id)) || 0,
+      original: n // 保存原始数据
     },
   }))
 
@@ -93,7 +112,10 @@ function formatData() {
     id: e.id ? String(e.id) : `edge-${idx}`,
     source: String(e.source_id),
     target: String(e.target_id),
-    data: { label: e.type ?? '' },
+    data: {
+      label: e.type ?? '',
+      original: e // 保存原始数据
+    },
   }))
 
   return { nodes, edges }
@@ -133,144 +155,119 @@ function initGraph() {
       type: 'circle',
       style: {
         labelText: (d) => d.data.label,
-        size: (d) => {
+        labelFill: getCSSVariable('--gray-700'),
+        labelWordWrap: true, // enable label ellipsis
+        labelMaxWidth: '300%',
+          size: (d) => {
           if (!props.sizeByDegree) return 24
           const deg = d.data.degree || 0
           return Math.min(15 + deg * 5, 50)
         },
-        fillOpacity: 0.8,
-        opacity: 0.8,
-        stroke: '#ffffff',
+        opacity: 0.9,
+        stroke: getCSSVariable('--color-bg-container'),
         lineWidth: 1.5,
-        shadowColor: '#94a3b8',
+        shadowColor: getCSSVariable('--gray-400'),
         shadowBlur: 4,
-        'label-text-fill': '#334155',
         ...(props.nodeStyleOptions.style || {}),
       },
       palette: props.nodeStyleOptions.palette || {
         field: 'label',
-        color: paletteColors,
-      },
-      state: props.nodeStyleOptions.state || {
-        hidden: { opacity: 0.15, 'label-text-opacity': 0 },
-        focus: { opacity: 1, stroke: '#2563eb', lineWidth: 2.5, shadowColor: '#60a5fa', shadowBlur: 16 },
-        highlighted: {
-          opacity: 1,
-          stroke: '#ff0000',
-          lineWidth: 4,
-          shadowColor: '#ff0000',
-          shadowBlur: 30,
-          'label-text-fill': '#ff0000',
-          'label-text-font-weight': 'bold',
-          'label-text-size': 20,
-          fill: '#ffcccc',
-        },
+        color: [
+          '#60a5fa', '#34d399', '#f59e0b', '#f472b6', '#22d3ee',
+          '#a78bfa', '#f97316', '#4ade80', '#f43f5e', '#2dd4bf',
+        ],
       },
     },
     edge: {
-      type: 'line',
+      type: 'quadratic',
       style: {
         labelText: (d) => d.data.label,
-        labelBackground: '#ffffff',
-        stroke: '#94a3b8',
-        opacity: 0.6,
+        labelFill: getCSSVariable('--gray-800'),
+        labelBackground: true,
+        labelBackgroundFill: getCSSVariable('--gray-100'),
+        stroke: getCSSVariable('--gray-400'),
+        opacity: 0.8,
         lineWidth: 1.2,
         endArrow: true,
-        'label-text-fill': '#334155',
         ...(props.edgeStyleOptions.style || {}),
       },
-      state: props.edgeStyleOptions.state || {
-        hidden: { opacity: 0.15, 'label-text-opacity': 0 },
-        focus: { opacity: 0.95, stroke: '#2563eb', lineWidth: 2, 'label-text-opacity': 1 },
-      },
     },
-    behaviors: ['drag-element', 'zoom-canvas', 'drag-canvas'],
+    behaviors: [
+      'drag-element',
+      'zoom-canvas',
+      'drag-canvas',
+      'hover-activate',
+      {
+        type: 'click-select',
+        degree: 1,
+        state: 'selected', // 选中的状态
+        neighborState: 'active', // 相邻节点附着状态
+        unselectedState: 'inactive', // 未选中节点状态
+        multiple: true,
+        trigger: ['shift'],
+        // 禁用默认的选中效果，避免与自定义事件冲突
+        disableDefault: false,
+      }
+    ],
   })
 
-  bindEvents()
-  emit('ready', graphInstance)
-}
+  // 绑定事件
+  graphInstance.on('node:click', (evt) => {
+    const { target } = evt
+    // 获取节点ID
+    const nodeId = target.id
+    const nodeData = graphInstance.getNodeData(nodeId)
+    emit('node-click', nodeData)
+  })
 
-function bindEvents() {
-  if (!graphInstance) return
+  graphInstance.on('edge:click', (evt) => {
+    const { target } = evt
+    const edgeId = target.id
+    const edgeData = graphInstance.getEdgeData(edgeId)
+    emit('edge-click', edgeData)
+  })
 
-  const getIds = () => {
-    const { nodes, edges } = graphInstance.getData()
-    return { nodeIds: nodes.map(n => n.id), edgeIds: edges.map(e => e.id), edges }
-  }
-
-  const getClickedId = (e) => e?.id || e?.data?.id || e?.target?.id || null
-
-  let activeNodeId = null
-
-  const resetStyles = async () => {
-    const { nodeIds, edgeIds } = getIds()
-    const updates = {}
-    nodeIds.forEach(id => updates[id] = [])
-    edgeIds.forEach(id => updates[id] = [])
-    if (nodeIds.length + edgeIds.length > 0) {
-      await graphInstance.setElementState(updates)
+  graphInstance.on('canvas:click', (evt) => {
+    // 只有点击画布空白处才触发
+    if (!evt.target) {
+        emit('canvas-click')
     }
-    activeNodeId = null
-    await graphInstance.draw()
-  }
+  })
 
-  if (props.enableFocusNeighbor) {
-    graphInstance.on('node:click', async (e) => {
-      emit('node-click', e)
-      const clickedNodeId = getClickedId(e)
-      if (!clickedNodeId) return
-
-      if (activeNodeId === clickedNodeId) {
-        await resetStyles()
-        return
-      }
-
-      activeNodeId = clickedNodeId
-      const { nodeIds, edgeIds, edges } = getIds()
-
-      const updates = {}
-      nodeIds.forEach(id => updates[id] = ['hidden'])
-      edgeIds.forEach(id => updates[id] = ['hidden'])
-
-      const neighborSet = new Set()
-      const relatedEdgeIds = []
-      edges.forEach((edge) => {
-        if (edge.source === clickedNodeId) { neighborSet.add(edge.target); relatedEdgeIds.push(edge.id) }
-        else if (edge.target === clickedNodeId) { neighborSet.add(edge.source); relatedEdgeIds.push(edge.id) }
-      })
-
-      updates[clickedNodeId] = ['focus']
-      Array.from(neighborSet).forEach(id => updates[id] = ['focus'])
-      relatedEdgeIds.forEach(id => updates[id] = ['focus'])
-
-      await graphInstance.setElementState(updates)
-      await graphInstance.draw()
-    })
-
-    graphInstance.on('canvas:click', async () => {
-      emit('canvas-click')
-      await resetStyles()
-    })
-  } else {
-    graphInstance.on('node:click', (e) => emit('node-click', e))
-    graphInstance.on('edge:click', (e) => emit('edge-click', e))
-    graphInstance.on('canvas:click', () => emit('canvas-click'))
-  }
+  emit('ready', graphInstance)
 }
 
 function setGraphData() {
   if (!graphInstance) initGraph()
   if (!graphInstance) return
   const data = formatData()
+
+  console.log('开始设置图谱数据:', {
+    nodes: data.nodes.length,
+    edges: data.edges.length
+  })
+
   graphInstance.setData(data)
   graphInstance.render()
 
-  // 应用关键词高亮
+  // 手动触发布局重新计算，确保节点分布
   setTimeout(() => {
-    applyHighlightKeywords()
-    emit('data-rendered')
-  }, 100)
+    try {
+      if (graphInstance && graphInstance.layout) {
+        graphInstance.layout()
+        console.log('触发布局重新计算')
+      }
+    } catch (error) {
+      console.warn('布局重新计算失败:', error)
+    }
+
+    // 等待力导向布局稳定后再应用高亮
+    setTimeout(() => {
+      applyHighlightKeywords()
+      emit('data-rendered')
+      console.log('图谱渲染完成，布局已稳定')
+    }, 1500)
+  }, 10)  // 等待 10ms 确保布局完成
 }
 
 // 关键词高亮功能
@@ -380,6 +377,13 @@ watch(() => props.highlightKeywords, () => {
   }
 }, { deep: true })
 
+// 监听主题切换，重新加载图形
+watch(() => themeStore.isDark, () => {
+  if (graphInstance) {
+    refreshGraph()
+  }
+})
+
 onMounted(() => {
   // ResizeObserver 监听容器尺寸，自动重渲染
   if (window.ResizeObserver) {
@@ -425,10 +429,50 @@ defineExpose({
   position: relative;
   width: 100%;
   height: 100%;
+  // background-color: var(--gray-0);
 
   .graph-canvas {
     width: 100%;
     height: 100%;
+  }
+
+  .graph-stats-panel {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 6px 12px;
+    background: var(--color-trans-light);
+    border: 1px solid var(--color-border-secondary);
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    pointer-events: auto;
+    z-index: 10;
+    font-size: 13px;
+    backdrop-filter: blur(4px);
+
+    .stat-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+
+      .stat-label {
+        color: var(--color-text-secondary);
+        font-weight: 500;
+      }
+
+      .stat-value {
+        color: var(--color-text);
+        font-weight: 600;
+      }
+
+      .stat-total {
+        color: var(--color-text-quaternary);
+        font-size: 11px;
+      }
+    }
   }
 
   .slots {
@@ -452,16 +496,19 @@ defineExpose({
       &.top { top: 0; }
       &.bottom { bottom: 0; }
     }
-    .content {
+    .canvas-content {
       // 中间内容层及其子元素全部穿透
       pointer-events: none;
       flex: 1;
+      background: transparent !important;
     }
-    .content * {
+    .canvas-content * {
       pointer-events: none;
     }
   }
 }
+
+
 
 /* 高亮节点的脉冲动画效果 */
 @keyframes highlightPulse {

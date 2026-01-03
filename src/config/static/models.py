@@ -19,6 +19,7 @@ class ChatModelProvider(BaseModel):
     default: str = Field(..., description="默认模型名称")
     env: str = Field(..., description="API Key 环境变量名")
     models: list[str] = Field(default_factory=list, description="支持的模型列表")
+    custom: bool = Field(default=False, description="是否为自定义供应商")
 
 
 class EmbedModelInfo(BaseModel):
@@ -28,6 +29,7 @@ class EmbedModelInfo(BaseModel):
     dimension: int = Field(..., description="向量维度")
     base_url: str = Field(..., description="API 基础 URL")
     api_key: str = Field(..., description="API Key 或环境变量名")
+    model_id: str | None = Field(None, description="可选的模型 ID")
 
 
 class RerankerInfo(BaseModel):
@@ -71,24 +73,24 @@ DEFAULT_CHAT_MODEL_PROVIDERS: dict[str, ChatModelProvider] = {
         name="SiliconFlow",
         url="https://cloud.siliconflow.cn/models",
         base_url="https://api.siliconflow.cn/v1",
-        default="deepseek-ai/DeepSeek-V3.2-Exp",
+        default="deepseek-ai/DeepSeek-V3.2",
         env="SILICONFLOW_API_KEY",
         models=[
-            "deepseek-ai/DeepSeek-V3.2-Exp",
+            "deepseek-ai/DeepSeek-V3.2",
             "Qwen/Qwen3-235B-A22B-Thinking-2507",
             "Qwen/Qwen3-235B-A22B-Instruct-2507",
             "moonshotai/Kimi-K2-Instruct-0905",
             "zai-org/GLM-4.6",
         ],
     ),
-    "together.ai": ChatModelProvider(
-        name="Together.ai",
-        url="https://api.together.ai/models",
-        base_url="https://api.together.xyz/v1/",
-        default="meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
-        env="TOGETHER_API_KEY",
-        models=["meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"],
-    ),
+    # "together": ChatModelProvider(
+    #     name="Together",
+    #     url="https://api.together.ai/models",
+    #     base_url="https://api.together.xyz/v1/",
+    #     default="meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
+    #     env="TOGETHER_API_KEY",
+    #     models=["meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"],
+    # ),
     "dashscope": ChatModelProvider(
         name="阿里百炼 (DashScope)",
         url="https://bailian.console.aliyun.com/?switchAgent=10226727&productCode=p_efm#/model-market",
@@ -128,6 +130,26 @@ DEFAULT_CHAT_MODEL_PROVIDERS: dict[str, ChatModelProvider] = {
             "anthropic/claude-sonnet-4",
         ],
     ),
+    # "moonshot": ChatModelProvider(
+    #     name="月之暗面",
+    #     url="https://platform.moonshot.cn/docs/overview",
+    #     base_url="https://api.moonshot.cn/v1",
+    #     default="kimi-latest",
+    #     env="MOONSHOT_API_KEY",
+    #     models=[
+    #         "kimi-latest",
+    #         "kimi-k2-thinking",
+    #         "kimi-k2-0905-preview",
+    #     ],
+    # ), # 目前适配有问题 Error code: 400 - {'error': {'message': 'Invalid request: function name is invalid, must start with a letter and can contain letters, numbers, underscores, and dashes', 'type': 'invalid_request_error'}}   # noqa: E501
+    "modelscope": ChatModelProvider(
+        name="ModelScope",
+        url="https://www.modelscope.cn/docs/model-service/API-Inference/intro",
+        base_url="https://api-inference.modelscope.cn/v1/",
+        default="deepseek-ai/DeepSeek-V3.2",
+        env="MODELSCOPE_ACCESS_TOKEN",
+        models=["Qwen/Qwen3-32B", "deepseek-ai/DeepSeek-V3.2"],
+    ),
 }
 
 
@@ -137,40 +159,53 @@ DEFAULT_CHAT_MODEL_PROVIDERS: dict[str, ChatModelProvider] = {
 
 DEFAULT_EMBED_MODELS: dict[str, EmbedModelInfo] = {
     "siliconflow/BAAI/bge-m3": EmbedModelInfo(
+        model_id="siliconflow/BAAI/bge-m3",
         name="BAAI/bge-m3",
         dimension=1024,
         base_url="https://api.siliconflow.cn/v1/embeddings",
         api_key="SILICONFLOW_API_KEY",
     ),
     "siliconflow/Pro/BAAI/bge-m3": EmbedModelInfo(
+        model_id="siliconflow/Pro/BAAI/bge-m3",
         name="Pro/BAAI/bge-m3",
         dimension=1024,
         base_url="https://api.siliconflow.cn/v1/embeddings",
         api_key="SILICONFLOW_API_KEY",
     ),
     "siliconflow/Qwen/Qwen3-Embedding-0.6B": EmbedModelInfo(
+        model_id="siliconflow/Qwen/Qwen3-Embedding-0.6B",
         name="Qwen/Qwen3-Embedding-0.6B",
         dimension=1024,
         base_url="https://api.siliconflow.cn/v1/embeddings",
         api_key="SILICONFLOW_API_KEY",
     ),
     "vllm/Qwen/Qwen3-Embedding-0.6B": EmbedModelInfo(
+        model_id="vllm/Qwen/Qwen3-Embedding-0.6B",
         name="Qwen3-Embedding-0.6B",
         dimension=1024,
         base_url="http://localhost:8000/v1/embeddings",
         api_key="no_api_key",
     ),
     "ollama/nomic-embed-text": EmbedModelInfo(
+        model_id="ollama/nomic-embed-text",
         name="nomic-embed-text",
         dimension=768,
         base_url="http://localhost:11434/api/embed",
         api_key="no_api_key",
     ),
     "ollama/bge-m3": EmbedModelInfo(
+        model_id="ollama/bge-m3",
         name="bge-m3",
         dimension=1024,
         base_url="http://localhost:11434/api/embed",
         api_key="no_api_key",
+    ),
+    "dashscope/text-embedding-v4": EmbedModelInfo(
+        model_id="dashscope/text-embedding-v4",
+        name="text-embedding-v4",
+        dimension=1024,
+        base_url="https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings",
+        api_key="DASHSCOPE_API_KEY",
     ),
 }
 
@@ -189,6 +224,16 @@ DEFAULT_RERANKERS: dict[str, RerankerInfo] = {
         name="Pro/BAAI/bge-reranker-v2-m3",
         base_url="https://api.siliconflow.cn/v1/rerank",
         api_key="SILICONFLOW_API_KEY",
+    ),
+    "dashscope/gte-rerank-v2": RerankerInfo(
+        name="gte-rerank-v2",
+        base_url="https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank",
+        api_key="DASHSCOPE_API_KEY",
+    ),
+    "dashscope/qwen3-rerank": RerankerInfo(
+        name="qwen3-rerank",
+        base_url="https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank",
+        api_key="DASHSCOPE_API_KEY",
     ),
     "vllm/BAAI/bge-reranker-v2-m3": RerankerInfo(
         name="BAAI/bge-reranker-v2-m3",

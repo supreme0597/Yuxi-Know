@@ -46,6 +46,7 @@ class KnowledgeBase(ABC):
         self.work_dir = work_dir
         self.databases_meta: dict[str, dict] = {}
         self.files_meta: dict[str, dict] = {}
+        self.benchmarks_meta: dict[str, dict] = {}
 
         # 初始化类级别的锁
         if KnowledgeBase._processing_lock is None:
@@ -83,6 +84,17 @@ class KnowledgeBase(ABC):
                 normalized = self._normalize_timestamp(file_info.get("created_at"))
                 if normalized:
                     file_info["created_at"] = normalized
+
+        for db_benchmarks in self.benchmarks_meta.values():
+            for b in db_benchmarks.values():
+                if "created_at" in b:
+                    normalized = self._normalize_timestamp(b.get("created_at"))
+                    if normalized:
+                        b["created_at"] = normalized
+                if "updated_at" in b:
+                    normalized = self._normalize_timestamp(b.get("updated_at"))
+                    if normalized:
+                        b["updated_at"] = normalized
 
     @property
     @abstractmethod
@@ -143,11 +155,12 @@ class KnowledgeBase(ABC):
 
         # 创建数据库记录
         # 确保 Pydantic 模型被转换为字典，以便 JSON 序列化
+        embed_info_dump = embed_info.model_dump() if hasattr(embed_info, "model_dump") else embed_info
         self.databases_meta[db_id] = {
             "name": database_name,
             "description": description,
             "kb_type": self.kb_type,
-            "embed_info": embed_info.model_dump() if hasattr(embed_info, "model_dump") else embed_info,
+            "embed_info": embed_info_dump,
             "llm_info": llm_info.model_dump() if hasattr(llm_info, "model_dump") else llm_info,
             "metadata": kwargs,
             "created_at": utc_isoformat(),
@@ -196,6 +209,26 @@ class KnowledgeBase(ABC):
                 logger.error(f"Error deleting working directory {working_dir}: {e}")
 
         return {"message": "删除成功"}
+
+    def create_folder(self, db_id: str, folder_name: str, parent_id: str | None = None) -> dict:
+        """Create a folder in the database."""
+        import uuid
+
+        folder_id = f"folder-{uuid.uuid4()}"
+
+        self.files_meta[folder_id] = {
+            "file_id": folder_id,
+            "filename": folder_name,
+            "is_folder": True,
+            "parent_id": parent_id,
+            "database_id": db_id,
+            "created_at": utc_isoformat(),
+            "status": "done",
+            "path": folder_name,
+            "file_type": "folder",
+        }
+        self._save_metadata()
+        return self.files_meta[folder_id]
 
     @abstractmethod
     async def add_content(self, db_id: str, items: list[str], params: dict | None = None) -> list[dict]:
@@ -294,6 +327,8 @@ class KnowledgeBase(ABC):
                     "status": file_info.get("status", "done"),
                     "created_at": created_at,
                     "processing_params": file_info.get("processing_params", None),
+                    "is_folder": file_info.get("is_folder", False),
+                    "parent_id": file_info.get("parent_id", None),
                 }
 
         # 按创建时间倒序排序文件列表
@@ -337,6 +372,8 @@ class KnowledgeBase(ABC):
                         "type": file_info.get("file_type", ""),
                         "status": file_info.get("status", "done"),
                         "created_at": created_at,
+                        "is_folder": file_info.get("is_folder", False),
+                        "parent_id": file_info.get("parent_id", None),
                     }
 
             # 按创建时间倒序排序文件列表
@@ -425,6 +462,72 @@ class KnowledgeBase(ABC):
 
         except Exception as e:
             logger.error(f"Error checking processing status for database {db_id}: {e}")
+
+    async def delete_folder(self, db_id: str, folder_id: str) -> None:
+        """
+        Recursively delete a folder and its content.
+
+        Args:
+            db_id: Database ID
+            folder_id: Folder ID to delete
+        """
+        # Find all children
+        children = [
+            fid
+            for fid, meta in self.files_meta.items()
+            if meta.get("database_id") == db_id and meta.get("parent_id") == folder_id
+        ]
+
+        for child_id in children:
+            child_meta = self.files_meta.get(child_id)
+            if child_meta and child_meta.get("is_folder"):
+                await self.delete_folder(db_id, child_id)
+            else:
+                await self.delete_file(db_id, child_id)
+
+        # Delete the folder itself
+        # We call delete_file which should handle the actual removal.
+        # Implementations should ensure they handle folder deletion gracefully (e.g. skip vector deletion)
+        await self.delete_file(db_id, folder_id)
+
+    async def move_file(self, db_id: str, file_id: str, new_parent_id: str | None) -> dict:
+        """
+        Move a file or folder to a new parent folder.
+
+        Args:
+            db_id: Database ID
+            file_id: File/Folder ID to move
+            new_parent_id: New parent folder ID (None for root)
+
+        Returns:
+            dict: Updated metadata
+        """
+        if file_id not in self.files_meta:
+            raise ValueError(f"File {file_id} not found")
+
+        meta = self.files_meta[file_id]
+        if meta.get("database_id") != db_id:
+            raise ValueError(f"File {file_id} does not belong to database {db_id}")
+
+        # Basic cycle detection for folders
+        if meta.get("is_folder") and new_parent_id:
+            # Check if new_parent_id is a child of file_id (or is file_id itself)
+            if new_parent_id == file_id:
+                raise ValueError("Cannot move a folder into itself")
+
+            # Walk up the tree from new_parent_id
+            current = new_parent_id
+            while current:
+                parent_meta = self.files_meta.get(current)
+                if not parent_meta:
+                    break  # Should not happen if integrity is maintained
+                if current == file_id:
+                    raise ValueError("Cannot move a folder into its own subfolder")
+                current = parent_meta.get("parent_id")
+
+        meta["parent_id"] = new_parent_id
+        self._save_metadata()
+        return meta
 
     @abstractmethod
     async def delete_file(self, db_id: str, file_id: str) -> None:
@@ -536,8 +639,8 @@ class KnowledgeBase(ABC):
         for db_id, meta in self.databases_meta.items():
 
             def make_retriever(db_id):
-                async def retriever(query_text):
-                    return await self.aquery(query_text, db_id)
+                async def retriever(query_text, **kwargs):
+                    return await self.aquery(query_text, db_id, **kwargs)
 
                 return retriever
 
@@ -559,6 +662,7 @@ class KnowledgeBase(ABC):
                     data = json.load(f)
                     self.databases_meta = data.get("databases", {})
                     self.files_meta = data.get("files", {})
+                    self.benchmarks_meta = data.get("benchmarks", {})
                 logger.info(f"Loaded {self.kb_type} metadata for {len(self.databases_meta)} databases")
             except Exception as e:
                 logger.error(f"Failed to load {self.kb_type} metadata: {e}")
@@ -570,6 +674,7 @@ class KnowledgeBase(ABC):
                             data = json.load(f)
                             self.databases_meta = data.get("databases", {})
                             self.files_meta = data.get("files", {})
+                            self.benchmarks_meta = data.get("benchmarks", {})
                         logger.info(f"Loaded {self.kb_type} metadata from backup")
                         # 恢复备份文件
                         shutil.copy2(backup_file, meta_file)
@@ -581,6 +686,7 @@ class KnowledgeBase(ABC):
                 logger.warning(f"Initializing empty {self.kb_type} metadata")
                 self.databases_meta = {}
                 self.files_meta = {}
+                self.benchmarks_meta = {}
 
     def _serialize_metadata(self, obj):
         """递归序列化元数据中的 Pydantic 模型"""
@@ -608,6 +714,7 @@ class KnowledgeBase(ABC):
             data = {
                 "databases": self._serialize_metadata(self.databases_meta),
                 "files": self._serialize_metadata(self.files_meta),
+                "benchmarks": self._serialize_metadata(self.benchmarks_meta),
                 "kb_type": self.kb_type,
                 "updated_at": utc_isoformat(),
             }

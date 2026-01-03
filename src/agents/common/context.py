@@ -46,7 +46,11 @@ class BaseContext:
 
     model: Annotated[str, {"__template_metadata__": {"kind": "llm"}}] = field(
         default=sys_config.default_model,
-        metadata={"name": "智能体模型", "options": [], "description": "智能体的驱动模型"},
+        metadata={
+            "name": "智能体模型",
+            "options": [],
+            "description": "智能体的驱动模型，建议选择 Agent 能力较强的模型，不建议使用小参数模型。",
+        },
     )
 
     @classmethod
@@ -107,10 +111,14 @@ class BaseContext:
                     # 提取 Annotated 的元数据
                     template_metadata = cls._extract_template_metadata(field_type)
 
+                    options = f.metadata.get("options", [])
+                    if callable(options):
+                        options = options()
+
                     configurable_items[f.name] = {
                         "type": type_name,
                         "name": f.metadata.get("name", f.name),
-                        "options": f.metadata.get("options", []),
+                        "options": options,
                         "default": f.default
                         if f.default is not MISSING
                         else f.default_factory()

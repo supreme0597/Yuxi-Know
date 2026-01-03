@@ -11,7 +11,7 @@ from src.utils import get_docker_safe_url, hashstr, logger
 
 
 class BaseEmbeddingModel(ABC):
-    def __init__(self, model=None, name=None, dimension=None, url=None, base_url=None, api_key=None):
+    def __init__(self, model=None, name=None, dimension=None, url=None, base_url=None, api_key=None, model_id=None):
         """
         Args:
             model: 模型名称，冗余设计，同name
@@ -89,6 +89,24 @@ class BaseEmbeddingModel(ABC):
 
         return data
 
+    async def test_connection(self) -> tuple[bool, str]:
+        """
+        测试embedding模型的连接性
+
+        Returns:
+            tuple: (success: bool, message: str)
+        """
+        try:
+            # 使用简单的测试文本
+            test_text = ["Hello world"]
+            await self.aencode(test_text)
+            return True, "连接正常"
+        except Exception as e:
+            error_msg = str(e)
+            error_msg += f", maybe you can check the `{self.base_url}` end with /embeddings as examples."
+            logger.error(error_msg)
+            return False, error_msg
+
 
 class OllamaEmbedding(BaseEmbeddingModel):
     """
@@ -122,6 +140,7 @@ class OllamaEmbedding(BaseEmbeddingModel):
         payload = {"model": self.model, "input": message}
         async with httpx.AsyncClient() as client:
             try:
+                print(f"\n\n\nOllama Embedding request: {payload}\n\n\n")
                 response = await client.post(self.base_url, json=payload, timeout=60)
                 response.raise_for_status()
                 result = response.json()
@@ -129,24 +148,7 @@ class OllamaEmbedding(BaseEmbeddingModel):
                     raise ValueError(f"Ollama Embedding failed: Invalid response format {result}")
                 return result["embeddings"]
             except (httpx.RequestError, json.JSONDecodeError) as e:
-                logger.error(f"Ollama Embedding async request failed: {e}, {payload}")
-                raise ValueError(f"Ollama Embedding async request failed: {e}")
-
-    async def test_connection(self) -> tuple[bool, str]:
-        """
-        测试embedding模型的连接性
-
-        Returns:
-            tuple: (success: bool, message: str)
-        """
-        try:
-            # 使用简单的测试文本
-            test_text = ["Hello world"]
-            await self.aencode(test_text)
-            return True, "连接正常"
-        except Exception as e:
-            error_msg = str(e)
-            return False, error_msg
+                raise ValueError(f"Ollama Embedding async request failed: {e}, {payload}, {self.base_url=}")
 
 
 class OtherEmbedding(BaseEmbeddingModel):
@@ -181,24 +183,7 @@ class OtherEmbedding(BaseEmbeddingModel):
                     raise ValueError(f"Other Embedding failed: Invalid response format {result}")
                 return [item["embedding"] for item in result["data"]]
             except (httpx.RequestError, json.JSONDecodeError) as e:
-                logger.error(f"Other Embedding async request failed: {e}, {payload}")
-                raise ValueError(f"Other Embedding async request failed: {e}")
-
-    async def test_connection(self) -> tuple[bool, str]:
-        """
-        测试embedding模型的连接性
-
-        Returns:
-            tuple: (success: bool, message: str)
-        """
-        try:
-            # 使用简单的测试文本
-            test_text = ["Hello world"]
-            await self.aencode(test_text)
-            return True, "连接正常"
-        except Exception as e:
-            error_msg = str(e)
-            return False, error_msg
+                raise ValueError(f"Other Embedding async request failed: {e}, {payload}, {self.base_url=}")
 
 
 async def test_embedding_model_status(model_id: str) -> dict:

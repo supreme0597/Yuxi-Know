@@ -19,17 +19,18 @@ def setup_logging():
     uvicorn_logger = logging.getLogger("uvicorn")
     uvicorn_access_logger = logging.getLogger("uvicorn.access")
 
+    # 禁用默认的uvicorn访问日志（因为我们使用自定义中间件）
+    uvicorn_access_logger.handlers.clear()
+
     # 创建格式化器
     formatter = logging.Formatter(fmt="%(asctime)s %(levelname)s: %(message)s", datefmt="%m-%d %H:%M:%S")
 
-    # 为所有处理器设置格式化器
+    # 为uvicorn主日志设置格式化器
     for handler in uvicorn_logger.handlers:
         handler.setFormatter(formatter)
-    for handler in uvicorn_access_logger.handlers:
-        handler.setFormatter(formatter)
 
 
-def log_operation(db: Session, user_id: int, operation: str, details: str = None, request: Request = None):
+async def log_operation(db: Session, user_id: int, operation: str, details: str = None, request: Request = None):
     """记录用户操作日志"""
     ip_address = None
     if request:
@@ -37,7 +38,7 @@ def log_operation(db: Session, user_id: int, operation: str, details: str = None
 
     log = OperationLog(user_id=user_id, operation=operation, details=details, ip_address=ip_address)
     db.add(log)
-    db.commit()
+    await db.commit()
 
 
 def get_user_dict(user: User, include_password: bool = False) -> dict:

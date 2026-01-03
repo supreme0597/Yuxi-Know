@@ -174,6 +174,13 @@ class KnowledgeBaseManager:
         logger.info(f"Created {kb_type} knowledge base instance")
         return kb_instance
 
+    async def move_file(self, db_id: str, file_id: str, new_parent_id: str | None) -> dict:
+        """
+        移动文件/文件夹
+        """
+        kb_instance = self._get_kb_for_database(db_id)
+        return await kb_instance.move_file(db_id, file_id, new_parent_id)
+
     def _get_kb_for_database(self, db_id: str) -> KnowledgeBase:
         """
         根据数据库ID获取对应的知识库实例
@@ -220,8 +227,13 @@ class KnowledgeBaseManager:
 
         return {"databases": all_databases}
 
+    async def create_folder(self, db_id: str, folder_name: str, parent_id: str = None) -> dict:
+        """Create a folder in the database."""
+        kb_instance = self._get_kb_for_database(db_id)
+        return kb_instance.create_folder(db_id, folder_name, parent_id)
+
     async def create_database(
-        self, database_name: str, description: str, kb_type: str, embed_info: dict | None = None, **kwargs
+        self, database_name: str, description: str, kb_type: str = "lightrag", embed_info: dict | None = None, **kwargs
     ) -> dict:
         """
         创建数据库
@@ -303,13 +315,22 @@ class KnowledgeBaseManager:
             # 添加全局元数据中的additional_params信息
             if db_info and db_id in self.global_databases_meta:
                 global_meta = self.global_databases_meta[db_id]
-                additional_params = global_meta.get("additional_params", {})
-                if additional_params:
-                    db_info["additional_params"] = additional_params
+                additional_params = global_meta.get("additional_params", {}).copy()
+
+                # 确保 auto_generate_questions 存在，默认为 False
+                if "auto_generate_questions" not in additional_params:
+                    additional_params["auto_generate_questions"] = False
+
+                db_info["additional_params"] = additional_params
 
             return db_info
         except KBNotFoundError:
             return None
+
+    async def delete_folder(self, db_id: str, folder_id: str) -> None:
+        """递归删除文件夹"""
+        kb_instance = self._get_kb_for_database(db_id)
+        await kb_instance.delete_folder(db_id, folder_id)
 
     async def delete_file(self, db_id: str, file_id: str) -> None:
         """删除文件"""
@@ -351,7 +372,81 @@ class KnowledgeBaseManager:
         os.makedirs(general_uploads, exist_ok=True)
         return general_uploads
 
-    def file_existed_in_db(self, db_id: str | None, content_hash: str | None) -> bool:
+    async def file_name_existed_in_db(self, db_id: str | None, file_name: str | None) -> bool:
+        """检查指定数据库中是否存在同名的文件"""
+        if not db_id or not file_name:
+            return False
+        try:
+            kb_instance = self._get_kb_for_database(db_id)
+        except KBNotFoundError:
+            return False
+
+        for file_info in kb_instance.files_meta.values():
+            if file_info.get("database_id") != db_id:
+                continue
+            if file_info.get("status") == "failed":
+                continue
+            if file_info.get("file_name") == file_name:
+                return True
+
+        return False
+
+    async def get_same_name_files(self, db_id: str, filename: str) -> list[dict]:
+        """获取同一知识库中同名文件列表
+        基于原始文件名直接比较
+        返回基础信息：文件名、大小、上传时间
+
+        Args:
+            db_id: 数据库ID
+            filename: 要检测的文件名（原始文件名）
+
+        Returns:
+            同名文件列表，每项包含：
+            - filename: 文件名
+            - size: 文件大小
+            - created_at: 上传时间
+            - file_id: 文件ID（用于下载）
+        """
+        if not db_id or not filename:
+            return []
+        try:
+            kb_instance = self._get_kb_for_database(db_id)
+        except KBNotFoundError:
+            return []
+
+        same_name_files = []
+        for file_id, file_info in kb_instance.files_meta.items():
+            if file_info.get("database_id") != db_id:
+                continue
+            if file_info.get("status") == "failed":
+                continue
+
+            # 直接比较文件名（现在就是原始文件名）
+            current_filename = file_info.get("filename", "")
+
+            if current_filename.lower() == filename.lower():
+                same_name_files.append(
+                    {
+                        "file_id": file_id,
+                        "filename": current_filename,
+                        "size": file_info.get("size", 0),
+                        "created_at": file_info.get("created_at", ""),
+                        "content_hash": file_info.get("content_hash", ""),
+                    }
+                )
+
+        # 按上传时间降序排序
+        same_name_files.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+        return same_name_files
+
+    async def update_file(self, db_id: str, region_file_id: str, file_name: str, params: dict | None = None) -> dict:
+        """对单个文件执行更新"""
+        kb_instance = self._get_kb_for_database(db_id)
+        await kb_instance.delete_file(db_id, region_file_id)
+        data_list = await kb_instance.add_content(db_id, [file_name], params or {})
+        return data_list[0]
+
+    async def file_existed_in_db(self, db_id: str | None, content_hash: str | None) -> bool:
         """检查指定数据库中是否存在相同内容哈希的文件"""
         if not db_id or not content_hash:
             return False
@@ -371,7 +466,9 @@ class KnowledgeBaseManager:
 
         return False
 
-    async def update_database(self, db_id: str, name: str, description: str, llm_info: dict = None) -> dict:
+    async def update_database(
+        self, db_id: str, name: str, description: str, llm_info: dict = None, additional_params: dict | None = None
+    ) -> dict:
         """更新数据库"""
         kb_instance = self._get_kb_for_database(db_id)
         result = kb_instance.update_database(db_id, name, description, llm_info)
@@ -380,6 +477,16 @@ class KnowledgeBaseManager:
             if db_id in self.global_databases_meta:
                 self.global_databases_meta[db_id]["name"] = name
                 self.global_databases_meta[db_id]["description"] = description
+
+                # 合并现有的 additional_params 和新的 additional_params
+                existing_additional_params = self.global_databases_meta[db_id].get("additional_params", {})
+                if additional_params:
+                    existing_additional_params.update(additional_params)
+                self.global_databases_meta[db_id]["additional_params"] = existing_additional_params
+
+                # 清理旧的 top-level key (如果存在)
+                self.global_databases_meta[db_id].pop("auto_generate_questions", None)
+
                 self._save_global_metadata()
 
         return result
@@ -519,23 +626,12 @@ class KnowledgeBaseManager:
             包含不一致信息的字典，按知识库类型分组
         """
         inconsistencies = {
-            "chroma": {"missing_collections": [], "missing_files": []},
             "milvus": {"missing_collections": [], "missing_files": []},
             "total_missing_collections": 0,
             "total_missing_files": 0,
         }
 
         logger.info("开始检测向量数据库与元数据的一致性...")
-
-        # 检测 ChromaDB 数据不一致
-        if "chroma" in self.kb_instances:
-            try:
-                chroma_inconsistencies = await self._detect_chroma_inconsistencies()
-                inconsistencies["chroma"] = chroma_inconsistencies
-                inconsistencies["total_missing_collections"] += len(chroma_inconsistencies["missing_collections"])
-                inconsistencies["total_missing_files"] += len(chroma_inconsistencies["missing_files"])
-            except Exception as e:
-                logger.error(f"检测 ChromaDB 数据不一致时出错: {e}")
 
         # 检测 Milvus 数据不一致
         if "milvus" in self.kb_instances:
@@ -549,79 +645,6 @@ class KnowledgeBaseManager:
 
         # 输出检测结果到日志
         self._log_inconsistencies(inconsistencies)
-
-        return inconsistencies
-
-    async def _detect_chroma_inconsistencies(self) -> dict:
-        """检测 ChromaDB 中的数据不一致"""
-        inconsistencies = {"missing_collections": [], "missing_files": []}
-
-        chroma_kb = self.kb_instances["chroma"]
-
-        # 获取 ChromaDB 中所有实际的集合
-        try:
-            actual_collections = chroma_kb.chroma_client.list_collections()
-            actual_collection_names = {col.name for col in actual_collections}
-
-            # 获取 metadata 中记录的数据库ID
-            metadata_collection_names = set()
-            for db_id, db_meta in chroma_kb.databases_meta.items():
-                metadata_collection_names.add(db_id)
-
-            # 找出存在于 ChromaDB 但不在 metadata 中的集合
-            missing_collections = actual_collection_names - metadata_collection_names
-            for collection_name in missing_collections:
-                # 跳过一些系统集合
-                if not collection_name.startswith("kb_"):
-                    continue
-
-                collection_info = {"collection_name": collection_name, "detected_at": utc_isoformat()}
-
-                # 尝试获取集合的基本信息
-                try:
-                    collection = chroma_kb.chroma_client.get_collection(name=collection_name)
-                    collection_info["count"] = collection.count()
-                    collection_info["metadata"] = collection.metadata
-                except Exception as e:
-                    logger.warning(f"无法获取集合 {collection_name} 的详细信息: {e}")
-                    collection_info["count"] = "unknown"
-
-                inconsistencies["missing_collections"].append(collection_info)
-                logger.warning(
-                    f"发现 ChromaDB 中存在但 metadata 中缺失的集合: {collection_name} "
-                    f"(文档数: {collection_info['count']})"
-                )
-
-            # 检查文件级别的不一致（针对已知的数据库）
-            for db_id in metadata_collection_names:
-                try:
-                    collection = chroma_kb.chroma_client.get_collection(name=db_id)
-                    actual_count = collection.count()
-
-                    # 获取 metadata 中记录的文件数量
-                    metadata_files_count = sum(
-                        1 for file_info in chroma_kb.files_meta.values() if file_info.get("database_id") == db_id
-                    )
-
-                    # 如果向量数据库中有数据但 metadata 中没有文件记录，可能存在文件缺失
-                    if actual_count > 0 and metadata_files_count == 0:
-                        inconsistencies["missing_files"].append(
-                            {
-                                "database_id": db_id,
-                                "vector_count": actual_count,
-                                "metadata_files_count": metadata_files_count,
-                                "detected_at": utc_isoformat(),
-                            }
-                        )
-                        logger.warning(
-                            f"发现数据库 {db_id} 在 ChromaDB 中有 {actual_count} 条向量数据，但 metadata 中没有文件记录"
-                        )
-
-                except Exception as e:
-                    logger.debug(f"检查数据库 {db_id} 的文件一致性时出错: {e}")
-
-        except Exception as e:
-            logger.error(f"检测 ChromaDB 数据不一致时出错: {e}")
 
         return inconsistencies
 
@@ -715,21 +738,6 @@ class KnowledgeBaseManager:
         logger.warning("=" * 80)
         logger.warning("数据一致性检测完成，发现以下不一致情况：")
         logger.warning("=" * 80)
-
-        # ChromaDB 不一致情况
-        chroma_missing = inconsistencies["chroma"]["missing_collections"]
-        chroma_files_missing = inconsistencies["chroma"]["missing_files"]
-        if chroma_missing or chroma_files_missing:
-            logger.warning("ChromaDB 不一致情况：")
-            logger.warning(f"  缺失集合数量: {len(chroma_missing)}")
-            for collection_info in chroma_missing:
-                logger.warning(f"    - 集合: {collection_info['collection_name']}, 向量数: {collection_info['count']}")
-            logger.warning(f"  缺失文件记录数量: {len(chroma_files_missing)}")
-            for file_info in chroma_files_missing:
-                logger.warning(
-                    f"    - 数据库: {file_info['database_id']}, 向量数: {file_info['vector_count']}, "
-                    f"元数据文件数: {file_info['metadata_files_count']}"
-                )
 
         # Milvus 不一致情况
         milvus_missing = inconsistencies["milvus"]["missing_collections"]

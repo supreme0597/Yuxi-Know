@@ -15,7 +15,7 @@
 
 ## 网页搜索
 
-系统内置了基于 Tavily 的联网搜索能力，配置完成后，大模型会自动在需要时调用 `enable_web_search` 对应的工具，为回答提供实时网页信息。
+系统内置了基于 Tavily 的联网搜索能力，配置完成后，大模型会自动在需要时调用对应的工具，为回答提供实时网页信息。
 
 
 1. 前往 [Tavily 官网](https://app.tavily.com/) 注册并在控制台创建 API Key。
@@ -29,7 +29,7 @@
    ```
    若服务已运行，则使用 `docker compose restart api-dev` 即可。
 
-完成以上步骤后，后端会自动将 `enable_web_search` 标记为启用，在智能体的工具配置区域即可看到这个工具，展示 Tavily 返回的实时结果。若需要关闭该能力，删除或清空 `TAVILY_API_KEY` 后再次重启服务即可。
+完成以上步骤后，在智能体的工具配置区域即可看到这个工具，展示 Tavily 返回的实时结果。若需要关闭该能力，删除或清空 `TAVILY_API_KEY` 后再次重启服务即可。
 
 ## 服务端口
 
@@ -43,7 +43,7 @@
 | **9000/9001** | MinIO | milvus-minio | 对象存储 |
 | **19530/9091** | Milvus | milvus | 向量数据库 |
 | **30000** | MinerU | mineru | PDF 解析（可选）|
-| **8080** | PaddleX | paddlex-ocr | OCR 服务（可选）|
+| **8080** | PP-StructureV3 | paddlex-ocr | OCR 服务（可选）|
 | **8081** | vLLM | - | 本地推理（可选）|
 
 ::: tip 端口访问

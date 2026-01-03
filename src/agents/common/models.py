@@ -1,11 +1,12 @@
 import os
 import traceback
 
-from langchain.chat_models import BaseChatModel
+from langchain.chat_models import BaseChatModel, init_chat_model
 from pydantic import SecretStr
 
 from src import config
 from src.utils import get_docker_safe_url
+from src.utils.logging_config import logger
 
 
 def load_chat_model(fully_specified_name: str, **kwargs) -> BaseChatModel:
@@ -22,11 +23,16 @@ def load_chat_model(fully_specified_name: str, **kwargs) -> BaseChatModel:
 
     env_var = model_info.env
 
-    api_key = os.getenv(env_var, env_var)
+    api_key = os.getenv(env_var) or env_var
 
     base_url = get_docker_safe_url(model_info.base_url)
 
-    if provider in ["deepseek", "dashscope"]:
+    if provider in ["openai", "deepseek"]:
+        model_spec = f"{provider}:{model}"
+        logger.debug(f"[offical] Loading model {model_spec} with kwargs {kwargs}")
+        return init_chat_model(model_spec, **kwargs)
+
+    elif provider in ["dashscope"]:
         from langchain_deepseek import ChatDeepSeek
 
         return ChatDeepSeek(

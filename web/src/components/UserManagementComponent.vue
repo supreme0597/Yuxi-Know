@@ -469,7 +469,8 @@ onMounted(() => {
 
 <style lang="less" scoped>
 .user-management {
-  margin-top: 20px;
+  margin-top: 12px;
+  min-height: 50vh;
 
   .header-section {
     display: flex;
@@ -481,7 +482,7 @@ onMounted(() => {
 
       .description {
         font-size: 14px;
-        color: #8c8c8c;
+        color: var(--gray-600);
         margin: 0;
         line-height: 1.4;
         margin-bottom: 16px;
@@ -505,7 +506,7 @@ onMounted(() => {
 
       .user-cards-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
         gap: 16px;
         // padding: 16px;
 
@@ -645,8 +646,8 @@ onMounted(() => {
 
               &.ant-btn-dangerous:hover {
                 background: var(--gray-25);
-                border-color: var(--color-error);
-                color: var(--color-error);
+                border-color: var(--color-error-500);
+                color: var(--color-error-500);
               }
             }
           }
@@ -670,12 +671,12 @@ onMounted(() => {
 .user-modal {
   :deep(.ant-modal-header) {
     padding: 20px 24px;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid var(--gray-150);
 
     .ant-modal-title {
       font-size: 16px;
       font-weight: 600;
-      color: #262626;
+      color: var(--gray-900);
     }
   }
 
@@ -692,20 +693,20 @@ onMounted(() => {
 
         label {
           font-weight: 500;
-          color: #262626;
+          color: var(--gray-900);
         }
       }
     }
 
     .error-text {
-      color: #ff4d4f;
+      color: var(--color-error-500);
       font-size: 12px;
       margin-top: 4px;
       line-height: 1.3;
     }
 
     .help-text {
-      color: #8c8c8c;
+      color: var(--gray-600);
       font-size: 12px;
       margin-top: 4px;
       line-height: 1.3;
@@ -716,7 +717,7 @@ onMounted(() => {
 
       :deep(.ant-checkbox-wrapper) {
         font-weight: 500;
-        color: #495057;
+        color: var(--gray-600);
       }
     }
   }

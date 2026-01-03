@@ -1,5 +1,5 @@
 import os
-from collections import deque
+import aiofiles
 from pathlib import Path
 
 import yaml
@@ -30,7 +30,7 @@ async def health_check():
 
 
 @system.get("/config")
-def get_config(current_user: User = Depends(get_admin_user)):
+async def get_config(current_user: User = Depends(get_admin_user)):
     """获取系统配置"""
     return config.dump_config()
 
@@ -52,15 +52,41 @@ async def update_config_batch(items: dict = Body(...), current_user: User = Depe
 
 
 @system.get("/logs")
-def get_system_logs(current_user: User = Depends(get_admin_user)):
-    """获取系统日志"""
+async def get_system_logs(levels: str | None = None, current_user: User = Depends(get_admin_user)):
+    """获取系统日志
+
+    Args:
+        levels: 可选的日志级别过滤，多个级别用逗号分隔，如 "INFO,ERROR,DEBUG,WARNING"
+    """
     try:
         from src.utils.logging_config import LOG_FILE
 
-        with open(LOG_FILE) as f:
-            last_lines = deque(f, maxlen=1000)
+        # 解析日志级别过滤条件
+        level_filter = None
+        if levels:
+            level_filter = set(level.strip().upper() for level in levels.split(",") if level.strip())
 
-        log = "".join(last_lines)
+        async with aiofiles.open(LOG_FILE) as f:
+            # 读取最后1000行
+            lines = []
+            async for line in f:
+                filtered_line = line.rstrip("\n\r")
+                # 如果指定了日志级别过滤，则按级别过滤
+                if level_filter:
+                    # 日志格式: 2025-03-10 08:26:37,269 - INFO - module - message
+                    # 提取日志级别
+                    parts = filtered_line.split(" - ")
+                    if len(parts) >= 2 and parts[1].strip() in level_filter:
+                        lines.append(filtered_line + "\n")
+                    # 继续读取以保持行数统计准确
+                    if len(lines) > 1000:
+                        lines.pop(0)
+                else:
+                    lines.append(filtered_line + "\n")
+                    if len(lines) > 1000:
+                        lines.pop(0)
+
+        log = "".join(lines)
         return {"log": log, "message": "success", "log_file": LOG_FILE}
     except Exception as e:
         logger.error(f"获取系统日志失败: {e}")
@@ -72,7 +98,7 @@ def get_system_logs(current_user: User = Depends(get_admin_user)):
 # =============================================================================
 
 
-def load_info_config():
+async def load_info_config():
     """加载信息配置文件"""
     try:
         # 配置文件路径
@@ -84,9 +110,10 @@ def load_info_config():
             logger.debug(f"The config file {config_path} does not exist, using default config")
             config_path = Path("src/config/static/info.template.yaml")
 
-        # 读取配置文件
-        with open(config_path, encoding="utf-8") as file:
-            config = yaml.safe_load(file)
+        # 异步读取配置文件
+        async with aiofiles.open(config_path, encoding="utf-8") as file:
+            content = await file.read()
+            config = yaml.safe_load(content)
 
         return config
 
@@ -99,7 +126,7 @@ def load_info_config():
 async def get_info_config():
     """获取系统信息配置（公开接口，无需认证）"""
     try:
-        config = load_info_config()
+        config = await load_info_config()
         return {"success": True, "data": config}
     except Exception as e:
         logger.error(f"获取信息配置失败: {e}")
@@ -110,7 +137,7 @@ async def get_info_config():
 async def reload_info_config(current_user: User = Depends(get_admin_user)):
     """重新加载信息配置"""
     try:
-        config = load_info_config()
+        config = await load_info_config()
         return {"success": True, "message": "配置重新加载成功", "data": config}
     except Exception as e:
         logger.error(f"重新加载信息配置失败: {e}")
@@ -210,3 +237,100 @@ async def get_all_chat_models_status(current_user: User = Depends(get_admin_user
     except Exception as e:
         logger.error(f"获取所有聊天模型状态失败: {e}")
         return {"message": f"获取所有聊天模型状态失败: {e}", "status": {"models": {}, "total": 0, "available": 0}}
+
+
+# =============================================================================
+# === 自定义供应商管理分组 ===
+# =============================================================================
+
+
+@system.get("/custom-providers")
+async def get_custom_providers(current_user: User = Depends(get_admin_user)):
+    """获取所有自定义供应商"""
+    try:
+        custom_providers = config.get_custom_providers()
+        return {
+            "providers": {provider: info.model_dump() for provider, info in custom_providers.items()},
+            "message": "success",
+        }
+    except Exception as e:
+        logger.error(f"获取自定义供应商失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取自定义供应商失败: {str(e)}")
+
+
+@system.post("/custom-providers")
+async def add_custom_provider(
+    provider_id: str = Body(..., description="供应商ID"),
+    provider_data: dict = Body(..., description="供应商配置数据"),
+    current_user: User = Depends(get_admin_user),
+):
+    """添加自定义供应商"""
+    try:
+        success = config.add_custom_provider(provider_id, provider_data)
+        if success:
+            return {"message": f"自定义供应商 {provider_id} 添加成功"}
+        else:
+            raise HTTPException(status_code=400, detail=f"供应商ID {provider_id} 已存在，请使用其他ID")
+    except Exception as e:
+        logger.error(f"添加自定义供应商失败 {provider_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"添加自定义供应商失败: {str(e)}")
+
+
+@system.put("/custom-providers/{provider_id}")
+async def update_custom_provider(
+    provider_id: str,
+    provider_data: dict = Body(..., description="供应商配置数据"),
+    current_user: User = Depends(get_admin_user),
+):
+    """更新自定义供应商"""
+    try:
+        success = config.update_custom_provider(provider_id, provider_data)
+        if success:
+            return {"message": f"自定义供应商 {provider_id} 更新成功"}
+        else:
+            raise HTTPException(status_code=404, detail=f"自定义供应商 {provider_id} 不存在或更新失败")
+    except Exception as e:
+        logger.error(f"更新自定义供应商失败 {provider_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"更新自定义供应商失败: {str(e)}")
+
+
+@system.delete("/custom-providers/{provider_id}")
+async def delete_custom_provider(provider_id: str, current_user: User = Depends(get_admin_user)):
+    """删除自定义供应商"""
+    try:
+        success = config.delete_custom_provider(provider_id)
+        if success:
+            return {"message": f"自定义供应商 {provider_id} 删除成功"}
+        else:
+            raise HTTPException(status_code=404, detail=f"自定义供应商 {provider_id} 不存在或删除失败")
+    except Exception as e:
+        logger.error(f"删除自定义供应商失败 {provider_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"删除自定义供应商失败: {str(e)}")
+
+
+@system.post("/custom-providers/{provider_id}/test")
+async def test_custom_provider(
+    provider_id: str, request: dict = Body(..., description="测试请求"), current_user: User = Depends(get_admin_user)
+):
+    """测试自定义供应商连接"""
+    try:
+        # 从请求中获取model_name
+        model_name = request.get("model_name")
+        if not model_name:
+            raise HTTPException(status_code=400, detail="缺少model_name参数")
+
+        # 检查供应商是否存在
+        if provider_id not in config.model_names:
+            raise HTTPException(status_code=404, detail=f"供应商 {provider_id} 不存在")
+
+        # 测试模型状态
+        status = await test_chat_model_status(provider_id, model_name)
+        return {"status": status, "message": "测试完成"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"测试自定义供应商失败 {provider_id}/{model_name}: {e}")
+        return {
+            "message": f"测试自定义供应商失败: {e}",
+            "status": {"provider": provider_id, "model_name": model_name, "status": "error", "message": str(e)},
+        }

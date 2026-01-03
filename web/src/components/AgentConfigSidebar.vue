@@ -22,7 +22,7 @@
           <p class="agent-description">{{ selectedAgent.description }}</p>
         </div>
 
-        <a-divider />
+        <!-- <a-divider /> -->
 
         <div v-if="selectedAgentId && configurableItems" class="config-form-content">
           <!-- 配置表单 -->
@@ -55,7 +55,7 @@
                 <!-- 模型选择 -->
                 <div v-if="value.template_metadata.kind === 'llm'" class="model-selector">
                   <ModelSelectorComponent
-                    @select-model="handleModelChange"
+                    @select-model="(spec) => handleModelChange(key, spec)"
                     :model_spec="agentConfig[key] || ''"
                   />
                 </div>
@@ -152,6 +152,7 @@
                     <a-button
                       type="link"
                       size="small"
+                      class="clear-btn"
                       @click="clearSelection(key)"
                       v-if="getSelectedCount(key) > 0"
                     >
@@ -219,12 +220,8 @@
       <div class="sidebar-footer" v-if="!isEmptyConfig">
         <div class="form-actions">
           <a-button @click="saveConfig" class="save-btn" :class="{'changed': agentStore.hasConfigChanges}">
-            保存配置
+            保存配置并重新加载
           </a-button>
-          <!-- TODO：BUG 目前有 bug 暂时不展示 -->
-          <!-- <a-button @click="resetConfig" class="reset-btn">
-            重置
-          </a-button> -->
         </div>
       </div>
     </div>
@@ -357,7 +354,8 @@ const closeSidebar = () => {
 const getConfigLabel = (key, value) => {
   // console.log(configurableItems)
   if (value.description && value.name !== key) {
-    return `${value.name}（${key}）`;
+    return `${value.name}`;
+    // return `${value.name}（${key}）`;
   }
   return key;
 };
@@ -366,10 +364,10 @@ const getPlaceholder = (key, value) => {
   return `（默认: ${value.default}）`;
 };
 
-const handleModelChange = (spec) => {
+const handleModelChange = (key, spec) => {
   if (typeof spec !== 'string' || !spec) return;
   agentStore.updateAgentConfig({
-    model: spec
+    [key]: spec
   });
 };
 
@@ -420,17 +418,13 @@ const getToolNameById = (toolId) => {
   return tool ? tool.name : toolId;
 };
 
-const loadAvailableTools = async () => {
-  try {
-    await agentStore.fetchTools();
-  } catch (error) {
-    console.error('加载工具列表失败:', error);
-  }
-};
-
 const openToolsModal = async () => {
+  console.log("availableTools.value", availableTools.value)
   try {
-    await loadAvailableTools();
+    // 强制刷新智能体详情以获取最新工具列表
+    if (selectedAgentId.value) {
+      await agentStore.fetchAgentDetail(selectedAgentId.value, true);
+    }
     selectedTools.value = [...(agentConfig.value?.tools || [])];
     toolsModalOpen.value = true;
   } catch (error) {
@@ -558,13 +552,6 @@ const resetConfig = async () => {
     message.error('重置配置失败');
   }
 };
-
-// 监听器
-watch(() => props.isOpen, (newVal) => {
-  if (newVal && (!availableTools.value || Object.keys(availableTools.value).length === 0)) {
-    loadAvailableTools();
-  }
-});
 </script>
 
 <style lang="less" scoped>
@@ -574,8 +561,8 @@ watch(() => props.isOpen, (newVal) => {
   position: relative;
   width: 0;
   height: 100vh;
-  background: white;
-  border-left: 1px solid #e8e8e8;
+  background: var(--gray-0);
+  border-left: 1px solid var(--gray-200);
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
   display: flex;
@@ -592,7 +579,7 @@ watch(() => props.isOpen, (newVal) => {
     align-items: center;
     padding: 10px 20px;
     border-bottom: 1px solid var(--gray-200);
-    background: #fff;
+    background: var(--gray-0);
     flex-shrink: 0;
     min-width: 400px;
 
@@ -645,7 +632,7 @@ watch(() => props.isOpen, (newVal) => {
       bottom: 0px;
       padding: 12px 0;
       border-top: 1px solid var(--gray-100);
-      background: #fff;
+      background: var(--gray-0);
       // min-width: 400px;
       z-index: 10;
 
@@ -664,7 +651,7 @@ watch(() => props.isOpen, (newVal) => {
 
           &.changed {
             background-color: var(--main-color);
-            color: #fff;
+            color: var(--gray-0);
           }
 
           &:hover {
@@ -695,7 +682,15 @@ watch(() => props.isOpen, (newVal) => {
         }
 
         .config-item {
-          margin: 30px 0;
+          background-color: var(--gray-25);
+          padding: 12px;
+          border-radius: 8px;
+          border: 1px solid var(--gray-100);
+          // box-shadow: 0px 0px 2px var(--shadow-3);
+
+          :deep(label.form_item_model) {
+            font-weight: 600;
+          }
 
           .config-description {
             margin: 4px 0 8px 0;
@@ -726,9 +721,9 @@ watch(() => props.isOpen, (newVal) => {
           .system-prompt-display {
             min-height: 60px;
             background: var(--gray-50);
-            border: 1px solid var(--gray-200);
+            border: 1px dashed var(--gray-200);
             border-radius: 6px;
-            padding: 8px 12px;
+            padding: 6px;
             cursor: pointer;
             position: relative;
             transition: all 0.2s ease;
@@ -766,10 +761,10 @@ watch(() => props.isOpen, (newVal) => {
               top: 8px;
               right: 12px;
               font-size: 12px;
-              color: var(--gray-400);
+              color: var(--gray-800);
               opacity: 0;
               transition: opacity 0.2s ease;
-              background: rgba(255, 255, 255, 0.9);
+              background: var(--gray-0);
               padding: 2px 6px;
               border-radius: 4px;
             }
@@ -813,12 +808,6 @@ watch(() => props.isOpen, (newVal) => {
       .tools-count {
         color: var(--gray-900);
         font-weight: 500;
-      }
-
-      .clear-btn {
-        padding: 0;
-        height: auto;
-        font-size: 12px;
       }
     }
 
@@ -882,11 +871,11 @@ watch(() => props.isOpen, (newVal) => {
 
   .option-card {
     border: 1px solid var(--gray-300);
-    border-radius: 6px;
-    padding: 10px 12px;
+    border-radius: 8px;
+    padding: 8px 12px;
     cursor: pointer;
     transition: all 0.2s ease;
-    background: white;
+    background: var(--gray-0);
 
     &:hover {
       border-color: var(--main-color);
@@ -938,30 +927,6 @@ watch(() => props.isOpen, (newVal) => {
 
 // 工具选择弹窗样式
 .tools-modal {
-  :deep(.ant-modal-content) {
-    border-radius: 8px;
-    overflow: hidden;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    border: 1px solid var(--gray-200);
-  }
-
-  :deep(.ant-modal-header) {
-    background: white;
-    border-bottom: 1px solid var(--gray-200);
-    padding: 16px 20px;
-
-    .ant-modal-title {
-      font-size: 16px;
-      font-weight: 600;
-      color: var(--gray-900);
-    }
-  }
-
-  :deep(.ant-modal-body) {
-    padding: 20px;
-    background: white;
-  }
-
   .tools-modal-content {
     .tools-search {
       margin-bottom: 16px;
@@ -972,7 +937,7 @@ watch(() => props.isOpen, (newVal) => {
         height: 36px;
         font-size: 14px;
         transition: all 0.2s ease;
-        background: white;
+        background: var(--gray-0);
 
         .search-icon {
           color: var(--gray-500);
@@ -1002,7 +967,6 @@ watch(() => props.isOpen, (newVal) => {
       overflow-y: auto;
       border-radius: 8px;
       margin-bottom: 16px;
-      background: white;
 
       // 在小屏幕下调整为单列布局
       @media (max-width: 480px) {
@@ -1034,7 +998,7 @@ watch(() => props.isOpen, (newVal) => {
         transition: all 0.2s ease;
         border-radius: 8px;
         margin-bottom: 4px;
-        background: white;
+        background: var(--gray-0);
         border: 1px solid var(--gray-200);
 
         &:hover {
@@ -1077,19 +1041,19 @@ watch(() => props.isOpen, (newVal) => {
         }
 
         &.selected {
-          background: var(--main-30);
-          // border-color: var(--main-color);
+          background: var(--main-50);
+          border-color: var(--main-200);
 
           .tool-content {
             .tool-name {
-              color: var(--main-color);
+              color: var(--main-800);
             }
             .tool-indicator {
-              color: var(--main-color);
+              color: var(--main-800);
             }
           }
           .tool-description {
-            color: var(--gray-700);
+            color: var(--gray-900);
           }
 
         }
@@ -1129,7 +1093,7 @@ watch(() => props.isOpen, (newVal) => {
           &.ant-btn-default {
             border: 1px solid var(--gray-300);
             color: var(--gray-700);
-            background: white;
+            background: var(--gray-0);
 
             &:hover {
               border-color: var(--main-color);
@@ -1140,7 +1104,7 @@ watch(() => props.isOpen, (newVal) => {
           &.ant-btn-primary {
             background: var(--main-color);
             border: none;
-            color: white;
+            color: var(--gray-0);
 
             &:hover {
               background: var(--main-color);
@@ -1150,6 +1114,19 @@ watch(() => props.isOpen, (newVal) => {
         }
       }
     }
+  }
+}
+
+
+.clear-btn {
+  padding: 0;
+  height: auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--main-700);
+
+  &:hover {
+    color: var(--main-800);
   }
 }
 

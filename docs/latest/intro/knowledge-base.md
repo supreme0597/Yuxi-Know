@@ -8,7 +8,6 @@
 
 | 存储类型 | 特点 | 适用场景 |
 |----------|------|----------|
-| **Chroma** | 轻量级向量数据库 | 小型项目、快速原型、维护方便 |
 | **Milvus** | 高性能向量数据库 | 大规模生产环境、高性能查询 |
 | **LightRAG** | 图增强检索 | 复杂知识关系，构建成本较高 |
 
@@ -19,27 +18,23 @@
 
 ### LightRAG 知识库说明
 
-在本项目中，系统支持基于 [LightRAG](https://github.com/HKUDS/LightRAG) 的知识图谱自动构建，能够从文档中自动提取实体和关系，构建结构化知识图谱。但是 LightRAG 所构建的知识图谱不作为全局的知识图谱来使用。只是将 LightRAG 作为知识的组织和检索形式。一方面是因为 LightRAG 构建的图谱的质量比较差，另一方面是不希望与全局的知识图谱弄混。
+在本项目中，系统支持基于 [LightRAG](https://github.com/HKUDS/LightRAG) 的知识图谱自动构建，能够从文档中自动提取实体和关系，构建结构化知识图谱。
 
-LightRAG 知识库可在知识库详情中可视化，但不支持在侧边栏图谱中直接检索，图谱检索工具不支持 LightRAG 知识库，查询需要使用对应的知识库作为工具。
+**LightRAG 图谱 vs 全局知识图谱的区别：**
 
-在 Neo4j 的检索中可以看到，实际上 LightRAG 的节点和边依然是和知识图谱本身构建在了同一个 Neo4j 数据库中，但是使用了特殊的 tag 做区分。这点在后面介绍知识图谱的时候也会额外说明。
+- **LightRAG 图谱**（知识库专属）：针对单个知识库由 LightRAG 自动抽取实体/关系，用于该库内的图增强检索与可视化。通过特殊的 label（知识库ID）与全局图谱区分，不会混入全局数据。
 
+- **全局知识图谱**（系统级）：通过三元组文件上传的图谱数据，提供系统级的知识图谱查询和可视化能力，会作为工具供 LLM 使用。
 
-系统默认使用 `siliconflow` 的 `Qwen/Qwen3-30B-A3B-Instruct-2507` 模型进行图谱构建。可通过环境变量自定义图谱构建模型：
+两者共享同一个 Neo4j 实例，但完全隔离，互不影响。
 
-<<< @/../.env.template#lightrag{bash}
+LightRAG 知识库可在知识库详情、知识图谱中可视化。由于免费版的 neo4j 智能创建一个图数据库，因此实际上 LightRAG 的节点和边依然是和知识图谱本身构建在了同一个 Neo4j 数据库中，但是使用了特殊的 label `{知识库ID}` 做区分。
 
+同时项目支持原 LightRAG 的所有环境变量，只需要在项目的 `.env` 文件中配置即可。比如当本地计算资源有限时，可以配置 `EMBEDDING_TIMEOUT=60`, `LLM_TIMEOUT=180` 增加超时时间。
 
 ## 文档管理
 
-本系统的“上传 → 解析入库 → 检索/可视化”流程既可通过 Web 界面完成，也可使用 API/脚本批量处理。
-
-**支持的文件类型**
-
-- 文本与文档：`.txt`、`.md`、`.doc`、`.docx`、`.pdf`
-- 网页与数据：`.html`、`.htm`、`.json`、`.csv`、`.xls`、`.xlsx`
-- 图片：`.jpg`、`.jpeg`、`.png`、`.bmp`、`.tiff`、`.tif`
+本系统的“上传 → 解析入库 → 检索/可视化”流程既可通过 Web 界面完成，也可使用 API/脚本批量处理。详见[文档解析](../advanced/document-processing.md)
 
 接口查询：`GET /api/knowledge/files/supported-types`
 
@@ -55,60 +50,42 @@ LightRAG 知识库可在知识库详情中可视化，但不支持在侧边栏�
 
 去重策略：系统按“内容哈希”判断是否已存在相同文件，避免重复入库。
 
-### 批量脚本
-
-- 上传并入库：参见 `scripts/batch_upload.py upload`
-
 ## 知识图谱
 
 本项目存在两类“图谱相关”能力：
 
-- 全局知识图谱（Neo4j）：用于智能体工具 `query_knowledge_graph` 的图实体查询；统一保存在 Neo4j 中，提供三元组检索和系统级可视化。
-- LightRAG 知识库内图谱：针对某个知识库由 LightRAG 自动抽取实体/关系，用于该库内的图增强检索与可视化；与全局图共享同一 Neo4j 实例，但通过特殊 tag 区分，不作为全局图谱使用。
-
-选择建议：
-- 更结构化的库内检索/可视化：优先使用 LightRAG（注意构建质量与成本）。
-- 统一的图查询/工具调用：依赖全局 Neo4j 图谱与工具 `query_knowledge_graph`。
-
-因此，侧边栏知识图谱页面展示的是 Neo4j 图数据库中符合以下规则的知识图谱信息。
-
-具体展示内容包括：
-
-- 带有 Entity 标签的节点
-- 带有 RELATION 类型的关系边
-
-注意：
-
-这里仅展示用户上传的实体和关系，不包含知识库中自动创建的图谱。
-查询逻辑基于 `graphbase.py` 中的 `get_sample_nodes` 方法实现：
-
-```SQL
-MATCH (n:Entity)-[r]->(m:Entity)
-RETURN
-    {id: elementId(n), name: n.name} AS h,
-    {type: r.type, source_id: elementId(n), target_id: elementId(m)} AS r,
-    {id: elementId(m), name: m.name} AS t
-LIMIT $num
-```
-
-如需查看完整的 Neo4j 数据库内容，请使用 "Neo4j 浏览器" 按钮访问 Neo4j 原生界面。
-
-通过网页上传的 `jsonl` 文件的图谱默认会符合上述条件。
-
+- 上传的知识图谱（Neo4j）：提供三元组检索和系统级可视化。会作为工具供 LLM 使用。
+- LightRAG 知识库内图谱：针对某个知识库由 LightRAG 自动抽取实体/关系，用于该库内的图增强检索与可视化；与上传的图谱共享同一 Neo4j 实例，但通过特殊 label 区分，不作为全局图谱使用。
 
 
 ### 1. 以三元组形式导入
 
+系统支持通过网页导入 `jsonl` 格式的知识图谱数据，支持**简单三元组**和**带属性三元组**两种格式。
 
-系统支持通过网页导入 `jsonl` 格式的知识图谱数据：
+**简单格式（兼容旧版）**：
 
 ```jsonl
 {"h": "北京", "t": "中国", "r": "首都"}
 {"h": "上海", "t": "中国", "r": "直辖市"}
-{"h": "深圳", "t": "广东", "r": "省会"}
 ```
 
-**格式说明**，每行一个三元组，系统自动验证数据格式，并自动导入到 Neo4j 数据库，添加 `Upload`、`Entity`、`Relation` 标签，会自动处理重复的三元组。
+**扩展格式（支持属性）**：
+
+支持 `h`（头节点）、`t`（尾节点）和 `r`（关系）为对象结构，其中：
+- 节点对象必须包含 `name` 字段。
+- 关系对象必须包含 `type` 字段。
+- 其他字段将作为**属性**存储在 Neo4j 中。
+
+```jsonl
+{"h": {"name": "孙悟空", "title": "齐天大圣", "weapon": "如意金箍棒"}, "t": {"name": "唐僧", "species": "人"}, "r": {"type": "徒弟", "order": 1}}
+{"h": "猪八戒", "t": {"name": "唐僧"}, "r": {"type": "徒弟", "order": 2}}
+```
+
+**格式说明**：
+- 每行一个数据项。
+- 系统自动验证数据格式，并自动导入到 Neo4j 数据库。
+- 自动添加 `Upload`、`Entity` 标签（节点）和 `RELATION` 类型（关系）。
+- 自动处理重复实体和关系，并合并属性。
 
 Neo4j 访问信息可以参考 `docker-compose.yml` 中配置对应的环境变量来覆盖。
 
@@ -118,7 +95,9 @@ Neo4j 访问信息可以参考 `docker-compose.yml` 中配置对应的环境变�
 - **连接地址**: bolt://localhost:7687
 
 ::: tip 测试数据
-可以使用 `test/data/A_Dream_of_Red_Mansions_tiny.jsonl` 文件进行测试导入。
+可以使用以下文件进行测试导入：
+- 简单格式：`test/data/A_Dream_of_Red_Mansions_tiny.jsonl`
+- 扩展属性格式：`test/data/complex_graph_test.jsonl`
 :::
 
 ### 2. 接入已有 Neo4j 实例
@@ -133,5 +112,5 @@ Neo4j 访问信息可以参考 `docker-compose.yml` 中配置对应的环境变�
 
 
 ::: warning 注意事项
-确保每个节点都有 `Entity` 标签，每个关系都有 `RELATION` 类型，否则会影响图的检索与构建功能。
+确保每个节点都有 `Entity` 标签和 `name` 属性，每个关系都有 `RELATION` 类型和 `type` 属性，否则会影响图的检索与构建功能。
 :::

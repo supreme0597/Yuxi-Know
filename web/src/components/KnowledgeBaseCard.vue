@@ -5,6 +5,7 @@
       <div class="header-left">
         <a-button
           @click="backToDatabase"
+          class="back-button"
           shape="circle"
           :icon="h(LeftOutlined)"
           type="text"
@@ -17,24 +18,30 @@
         <a-button
           type="text"
           size="small"
-          :icon="h(CopyOutlined)"
           @click="copyDatabaseId"
           title="复制知识库ID"
-        />
+        >
+          <template #icon>
+            <Copy :size="14" />
+          </template>
+        </a-button>
         <a-button
           @click="showEditModal"
           type="text"
           size="small"
-          :icon="h(EditOutlined)"
-        />
+        >
+          <template #icon>
+            <Pencil :size="14" />
+          </template>
+        </a-button>
       </div>
     </div>
 
     <!-- 卡片内容 -->
     <div class="card-content">
       <!-- 描述文本 -->
-      <div class="description" v-if="database.description">
-        <p class="description-text">{{ database.description }}</p>
+      <div class="description">
+        <p class="description-text">{{ database.description || '暂无描述' }}</p>
       </div>
 
       <!-- Tags -->
@@ -54,7 +61,10 @@
   <a-modal v-model:open="editModalVisible" title="编辑知识库信息">
     <template #footer>
       <a-button danger @click="deleteDatabase" style="margin-right: auto; margin-left: 0;">
-        <DeleteOutlined /> 删除数据库
+        <template #icon>
+          <Trash2 :size="16" style="vertical-align: -3px; margin-right: 4px;" />
+        </template>
+        删除数据库
       </a-button>
       <a-button key="back" @click="editModalVisible = false">取消</a-button>
       <a-button key="submit" type="primary" @click="handleEditSubmit">确定</a-button>
@@ -64,8 +74,20 @@
         <a-input v-model:value="editForm.name" placeholder="请输入知识库名称" />
       </a-form-item>
       <a-form-item label="知识库描述" name="description">
-        <a-textarea v-model:value="editForm.description" placeholder="请输入知识库描述" :rows="4" />
+        <AiTextarea
+          v-model="editForm.description"
+          :name="editForm.name"
+          :files="fileList"
+          placeholder="请输入知识库描述"
+          :rows="4"
+        />
       </a-form-item>
+
+      <a-form-item label="自动生成问题" name="auto_generate_questions">
+        <a-switch v-model:checked="editForm.auto_generate_questions" checked-children="开启" un-checked-children="关闭" />
+        <span style="margin-left: 8px; font-size: 12px; color: var(--gray-500);">上传文件后自动生成测试问题</span>
+      </a-form-item>
+
       <!-- 仅对 LightRAG 类型显示 LLM 配置 -->
       <a-form-item v-if="database.kb_type === 'lightrag'" label="语言模型 (LLM)" name="llm_info">
         <ModelSelectorComponent
@@ -85,18 +107,24 @@ import { useRouter } from 'vue-router';
 import { useDatabaseStore } from '@/stores/database';
 import { getKbTypeLabel, getKbTypeColor } from '@/utils/kb_utils';
 import { message } from 'ant-design-vue';
+import { LeftOutlined } from '@ant-design/icons-vue';
 import {
-  LeftOutlined,
-  EditOutlined,
-  DeleteOutlined,
-  CopyOutlined,
-} from '@ant-design/icons-vue';
+  Pencil,
+  Trash2,
+  Copy,
+} from 'lucide-vue-next';
 import ModelSelectorComponent from '@/components/ModelSelectorComponent.vue';
+import AiTextarea from '@/components/AiTextarea.vue';
 
 const router = useRouter();
 const store = useDatabaseStore();
 
 const database = computed(() => store.database);
+
+const fileList = computed(() => {
+  if (!database.value?.files) return [];
+  return Object.values(database.value.files).map(f => f.filename).filter(Boolean);
+});
 
 // 复制数据库ID
 const copyDatabaseId = async () => {
@@ -144,6 +172,7 @@ const editFormRef = ref(null);
 const editForm = reactive({
   name: '',
   description: '',
+  auto_generate_questions: false,
   llm_info: {
     provider: '',
     model_name: ''
@@ -157,6 +186,8 @@ const rules = {
 const showEditModal = () => {
   editForm.name = database.value.name || '';
   editForm.description = database.value.description || '';
+  editForm.auto_generate_questions = database.value.additional_params?.auto_generate_questions || false;
+
   // 如果是 LightRAG 类型，加载当前的 LLM 配置
   if (database.value.kb_type === 'lightrag') {
     const llmInfo = database.value.llm_info || {};
@@ -170,7 +201,10 @@ const handleEditSubmit = () => {
   editFormRef.value.validate().then(async () => {
     const updateData = {
       name: editForm.name,
-      description: editForm.description
+      description: editForm.description,
+      additional_params: {
+        auto_generate_questions: editForm.auto_generate_questions
+      }
     };
 
     // 如果是 LightRAG 类型，包含 llm_info
@@ -217,7 +251,7 @@ const deleteDatabase = () => {
 
 <style lang="less" scoped>
 .knowledge-base-card {
-  background: linear-gradient(120deg, var(--main-30) 0%, #fff 100%);
+  background: linear-gradient(120deg, var(--main-30) 0%, var(--gray-0) 100%);
   border-radius: 12px;
   border: 1px solid var(--gray-200);
   margin-bottom: 8px;
@@ -232,9 +266,14 @@ const deleteDatabase = () => {
   .header-left {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 4px;
     flex: 1;
     min-width: 0;
+
+    button.back-button {
+      margin-left: -5px;
+      font-size: 10px;
+    }
   }
 
   .card-title {
@@ -255,10 +294,12 @@ const deleteDatabase = () => {
     flex-shrink: 0;
 
     button {
+      color: var(--gray-500);
       height: 100%;
     }
 
     button:hover {
+      color: var(--gray-700);
       background-color: var(--gray-100);
     }
   }

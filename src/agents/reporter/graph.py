@@ -1,17 +1,10 @@
 from langchain.agents import create_agent
 
-from src import config
 from src.agents.common import BaseAgent, get_mcp_tools, load_chat_model
-from src.agents.common.middlewares import context_aware_prompt, context_based_model
 from src.agents.common.toolkits.mysql import get_mysql_tools
 from src.utils import logger
 
-_mcp_servers = {
-    "mcp-server-chart": {
-        "url": "https://mcp.api-inference.modelscope.net/9993ae42524c4c/mcp",
-        "transport": "streamable_http",
-    },
-}
+_mcp_servers = {"mcp-server-chart": {"command": "npx", "args": ["-y", "@antv/mcp-server-chart"], "transport": "stdio"}}
 
 
 class SqlReporterAgent(BaseAgent):
@@ -30,11 +23,13 @@ class SqlReporterAgent(BaseAgent):
         if self.graph:
             return self.graph
 
+        context = self.context_schema.from_file(module_name=self.module_name)
+
         # 创建 SqlReporterAgent
         graph = create_agent(
-            model=load_chat_model(config.default_model),  # 默认模型，会被 middleware 覆盖
+            model=load_chat_model(context.model),  # 使用 context 中的模型配置
+            system_prompt=context.system_prompt,
             tools=await self.get_tools(),
-            middleware=[context_aware_prompt, context_based_model],
             checkpointer=await self._get_checkpointer(),
         )
 

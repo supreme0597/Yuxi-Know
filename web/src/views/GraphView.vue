@@ -3,7 +3,7 @@
     <a-empty>
       <template #description>
         <span>
-          前往 <router-link to="/setting" style="color: var(--main-color); font-weight: bold;">设置</router-link> 页面启用知识图谱。
+          点击右上角用户头像中的"系统设置"来启用知识图谱。
         </span>
       </template>
     </a-empty>
@@ -13,14 +13,33 @@
       title="图数据库"
     >
       <template #actions>
+        <div class="db-selector">
         <div class="status-wrapper">
           <div class="status-indicator" :class="graphStatusClass"></div>
           <span class="status-text">{{ graphStatusText }}</span>
         </div>
-        <a-button type="default" @click="openLink('http://localhost:7474/')" :icon="h(GlobalOutlined)">
+          <span class="label">知识库: </span>
+          <a-select
+            v-model:value="state.selectedDbId"
+            style="width: 200px"
+            :options="state.dbOptions"
+            @change="handleDbChange"
+            :loading="state.loadingDatabases"
+            mode="combobox"
+            placeholder="选择或输入KB ID"
+          />
+        </div>
+        <!-- <a-button type="default" @click="openLink('http://localhost:7474/')" :icon="h(GlobalOutlined)">
           Neo4j 浏览器
-        </a-button>
-        <a-button type="primary" @click="state.showModal = true" ><UploadOutlined/> 上传文件</a-button>
+        </a-button> -->
+        <a-button
+          v-if="isNeo4j"
+          type="primary"
+          @click="state.showModal = true" ><UploadOutlined/> 上传文件</a-button>
+        <a-button
+          v-else
+          type="primary"
+          @click="state.showUploadTipModal = true" ><UploadOutlined/> 上传文件</a-button>
         <a-button v-if="unindexedCount > 0" type="primary" @click="indexNodes" :loading="state.indexing">
           <SyncOutlined v-if="!state.indexing"/> 为{{ unindexedCount }}个节点添加索引
         </a-button>
@@ -30,15 +49,19 @@
     <div class="container-outter">
       <GraphCanvas
         ref="graphRef"
-        :graph-data="graphData"
+        :graph-data="graph.graphData"
+        :graph-info="formattedGraphInfo"
         :highlight-keywords="[state.searchInput]"
+        @node-click="graph.handleNodeClick"
+        @edge-click="graph.handleEdgeClick"
+        @canvas-click="graph.handleCanvasClick"
       >
         <template #top>
           <div class="actions">
             <div class="actions-left">
               <a-input
                 v-model:value="state.searchInput"
-                placeholder="输入要查询的实体"
+                placeholder="输入要查询的实体 (*为全部)"
                 style="width: 300px"
                 @keydown.enter="onSearch"
                 allow-clear
@@ -47,47 +70,79 @@
                   <component :is="state.searchLoading ? LoadingOutlined : SearchOutlined" @click="onSearch" />
                 </template>
               </a-input>
-            </div>
-            <div class="actions-right">
-              <a-button type="default" @click="state.showInfoModal = true" :icon="h(InfoCircleOutlined)">
-                说明
-              </a-button>
               <a-input
                 v-model:value="sampleNodeCount"
-                placeholder="查询三元组数量"
+                placeholder="查询数量"
                 style="width: 100px"
                 @keydown.enter="loadSampleNodes"
-                :loading="state.fetching"
+                :loading="graph.fetching"
               >
                 <template #suffix>
-                  <component :is="state.fetching ? LoadingOutlined : ReloadOutlined" @click="loadSampleNodes" />
+                  <component :is="graph.fetching ? LoadingOutlined : ReloadOutlined" @click="loadSampleNodes" />
                 </template>
               </a-input>
+            </div>
+            <div class="actions-right">
+              <a-button type="default" @click="exportGraphData" :icon="h(ExportOutlined)">
+                导出数据
+              </a-button>
             </div>
           </div>
         </template>
         <template #content>
-          <a-empty v-show="graphData.nodes.length === 0" style="padding: 4rem 0;"/>
+          <a-empty v-show="graph.graphData.nodes.length === 0" style="padding: 4rem 0;"/>
         </template>
-        <template #bottom>
-          <div class="footer">
-            <div class="tags">
-              <a-tag :bordered="false" v-for="tag in graphTags" :key="tag.key" :color="tag.type">{{ tag.text }}</a-tag>
-            </div>
-          </div>
-        </template>
-      </GraphCanvas>
-    </div>
+        </GraphCanvas>
+        <!-- 详情浮动卡片 -->
+        <GraphDetailPanel
+          :visible="graph.showDetailDrawer"
+          :item="graph.selectedItem"
+          :type="graph.selectedItemType"
+          :nodes="graph.graphData.nodes"
+          @close="graph.handleCanvasClick"
+          style="width: 380px;"
+        />
+      </div>
 
-    <a-modal
-      :open="state.showModal" title="上传文件"
-      @ok="addDocumentByFile"
-      @cancel="() => state.showModal = false"
-      ok-text="添加到图数据库" cancel-text="取消"
-      :confirm-loading="state.processing">
+      <a-modal
+        :open="state.showModal" title="上传文件"
+        @ok="addDocumentByFile"
+        @cancel="handleModalCancel"
+        ok-text="添加到图数据库" cancel-text="取消"
+        :confirm-loading="state.processing"
+        :ok-button-props="{ disabled: !hasValidFile }">
       <div class="upload">
         <div class="note">
           <p>上传的文件内容参考 test/data/A_Dream_of_Red_Mansions_tiny.jsonl 中的格式：</p>
+        </div>
+        <div class="upload-config">
+          <div class="config-row">
+            <label class="config-label">嵌入模型</label>
+            <div class="config-field">
+              <EmbeddingModelSelector
+                v-model:value="state.embedModelName"
+                :disabled="!embedModelConfigurable"
+                :style="{ width: '100%' }"
+              />
+            </div>
+          </div>
+          <div v-if="!embedModelConfigurable" class="config-hint-row">
+            * 图数据库已有数据或已设定模型，不可更改
+          </div>
+          <div class="config-row">
+            <label class="config-label">批处理大小</label>
+            <div class="config-field">
+              <a-input-number
+                v-model:value="state.batchSize"
+                :min="1"
+                :max="1000"
+                style="width: 100%"
+              />
+            </div>
+          </div>
+          <div class="config-hint-row">
+            默认值: 40，范围: 1-1000
+          </div>
         </div>
         <a-upload-dragger
           class="upload-dragger"
@@ -109,33 +164,29 @@
       </div>
     </a-modal>
 
-    <!-- 说明弹窗 -->
+    <!-- 上传提示弹窗 -->
     <a-modal
-      :open="state.showInfoModal"
-      title="图数据库说明"
-      @cancel="() => state.showInfoModal = false"
+      :open="state.showUploadTipModal"
+      title="文件上传说明"
+      @cancel="() => state.showUploadTipModal = false"
       :footer="null"
-      width="600px"
+      width="500px"
     >
-      <div class="info-content">
-        <p>本页面展示的是 Neo4j 图数据库中的知识图谱信息。</p>
-        <p>具体展示内容包括：</p>
-        <ul>
-          <li>带有 <code>Entity</code> 标签的节点</li>
-          <li>带有 <code>RELATION</code> 类型的关系边</li>
-        </ul>
-        <p>注意：</p>
-        <ul>
-          <li>这里仅展示用户上传的实体和关系，不包含知识库中自动创建的图谱。</li>
-          <li>查询逻辑基于 <code>graphbase.py</code> 中的 <code>get_sample_nodes</code> 方法实现：</li>
-        </ul>
-        <pre><code>MATCH (n:Entity)-[r]-&gt;(m:Entity)
-RETURN
-    {id: elementId(n), name: n.name} AS h,
-    {type: r.type, source_id: elementId(n), target_id: elementId(m)} AS r,
-    {id: elementId(m), name: m.name} AS t
-LIMIT $num</code></pre>
-        <p>如需查看完整的 Neo4j 数据库内容，请使用 "Neo4j 浏览器" 按钮访问原生界面。</p>
+      <div class="upload-tip-content">
+        <a-alert
+          :message="getUploadTipMessage()"
+          type="info"
+          show-icon
+          style="margin-bottom: 16px;"
+        />
+        <div v-if="!isNeo4j" class="upload-tip-actions">
+          <p>如需上传文档到当前选中的知识库，请前往对应的知识库详情页面进行操作：</p>
+          <div class="action-buttons">
+            <a-button type="primary" @click="goToDatabasePage">
+              <DatabaseOutlined/> 前往知识库详情页
+            </a-button>
+          </div>
+        </div>
       </div>
     </a-modal>
   </div>
@@ -143,43 +194,127 @@ LIMIT $num</code></pre>
 
 <script setup>
 import { computed, onMounted, reactive, ref, h } from 'vue';
+import { useRouter } from 'vue-router';
 import { message } from 'ant-design-vue';
 import { useConfigStore } from '@/stores/config';
-import { UploadOutlined, SyncOutlined, GlobalOutlined, InfoCircleOutlined, SearchOutlined, ReloadOutlined, LoadingOutlined, HighlightOutlined } from '@ant-design/icons-vue';
+import { UploadOutlined, SyncOutlined, GlobalOutlined, InfoCircleOutlined, SearchOutlined, ReloadOutlined, LoadingOutlined, HighlightOutlined, DatabaseOutlined, ExportOutlined } from '@ant-design/icons-vue';
 import HeaderComponent from '@/components/HeaderComponent.vue';
-import { neo4jApi } from '@/apis/graph_api';
+import { neo4jApi, unifiedApi } from '@/apis/graph_api';
 import { useUserStore } from '@/stores/user';
 import GraphCanvas from '@/components/GraphCanvas.vue';
+import GraphDetailPanel from '@/components/GraphDetailPanel.vue';
+import EmbeddingModelSelector from '@/components/EmbeddingModelSelector.vue';
+import { useGraph } from '@/composables/useGraph';
 
 const configStore = useConfigStore();
 const cur_embed_model = computed(() => configStore.config?.embed_model);
 const modelMatched = computed(() => !graphInfo?.value?.embed_model_name || graphInfo.value.embed_model_name === cur_embed_model.value)
 
+const router = useRouter();
 const graphRef = ref(null)
 const graphInfo = ref(null)
 const fileList = ref([]);
 const sampleNodeCount = ref(100);
-const graphData = reactive({
-  nodes: [],
-  edges: [],
-});
+
+const graph = reactive(useGraph(graphRef));
 
 const state = reactive({
-  fetching: false,
   loadingGraphInfo: false,
+  loadingDatabases: false,
   searchInput: '',
   searchLoading: false,
   showModal: false,
   showInfoModal: false,
+  showUploadTipModal: false,
   processing: false,
   indexing: false,
   showPage: true,
+  selectedDbId: 'neo4j',
+  dbOptions: [],
+  lightragStats: null,
+  embedModelName: '',
+  batchSize: 40,
 })
+
+const isNeo4j = computed(() => {
+  return state.selectedDbId === 'neo4j';
+});
+
+const embedModelConfigurable = computed(() => {
+  return graphInfo.value?.embed_model_configurable ?? true
+})
+
+// 检查是否有有效的已上传文件
+const hasValidFile = computed(() => {
+  return fileList.value.some(file => file.status === 'done' && file.response?.file_path);
+});
 
 // 计算未索引节点数量
 const unindexedCount = computed(() => {
   return graphInfo.value?.unindexed_node_count || 0;
 });
+
+const formattedGraphInfo = computed(() => {
+  if (isNeo4j.value) {
+    return {
+      node_count: graphInfo.value?.entity_count || 0,
+      edge_count: graphInfo.value?.relationship_count || 0
+    }
+  } else {
+    return {
+      node_count: state.lightragStats?.total_nodes || 0,
+      edge_count: state.lightragStats?.total_edges || 0
+    }
+  }
+})
+
+const loadDatabases = async () => {
+  state.loadingDatabases = true;
+  try {
+    const res = await unifiedApi.getGraphs();
+    if (res.success && res.data) {
+      state.dbOptions = res.data.map(db => ({
+        label: `${db.name} (${db.type})`,
+        value: db.id,
+        type: db.type
+      }));
+
+      // If no selection or invalid selection, select first
+      if (!state.selectedDbId || !state.dbOptions.find(o => o.value === state.selectedDbId)) {
+        if (state.dbOptions.length > 0) {
+          state.selectedDbId = state.dbOptions[0].value;
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load databases:', error);
+  } finally {
+    state.loadingDatabases = false;
+  }
+};
+
+const handleDbChange = () => {
+  // Clear current data
+  graph.clearGraph();
+  state.searchInput = '';
+  state.lightragStats = null;
+
+  if (isNeo4j.value) {
+    loadGraphInfo();
+  } else {
+    // Also load stats for LightRAG or KB
+    loadLightRAGStats();
+  }
+  loadSampleNodes();
+};
+
+const loadLightRAGStats = () => {
+  unifiedApi.getStats(state.selectedDbId).then(res => {
+    if(res.success) {
+      state.lightragStats = res.data;
+    }
+  }).catch(e => console.error(e));
+};
 
 const loadGraphInfo = () => {
   state.loadingGraphInfo = true
@@ -187,6 +322,12 @@ const loadGraphInfo = () => {
     .then(data => {
       console.log(data)
       graphInfo.value = data.data
+      if (graphInfo.value?.embed_model_name) {
+        state.embedModelName = graphInfo.value.embed_model_name
+      } else {
+         // Default if not set (though backend usually sends default)
+         state.embedModelName = cur_embed_model.value
+      }
       state.loadingGraphInfo = false
     })
     .catch(error => {
@@ -197,13 +338,42 @@ const loadGraphInfo = () => {
 }
 
 const addDocumentByFile = () => {
+  // 使用计算属性验证文件
+  if (!hasValidFile.value) {
+    message.error('请先等待文件上传完成')
+    return
+  }
+
+  if (!state.embedModelName) {
+     message.error('请选择嵌入模型')
+     return
+  }
+
   state.processing = true
-  const files = fileList.value.filter(file => file.status === 'done').map(file => file.response.file_path)
-  neo4jApi.addEntities(files[0])
+
+  // 获取已上传的文件路径
+  const uploadedFile = fileList.value.find(file => file.status === 'done' && file.response?.file_path);
+  const filePath = uploadedFile?.response?.file_path;
+
+  // 再次验证文件路径
+  if (!filePath) {
+    message.error('文件路径获取失败，请重新上传文件')
+    state.processing = false
+    return
+  }
+
+  neo4jApi.addEntities(filePath, 'neo4j', state.embedModelName, state.batchSize)
     .then((data) => {
       if (data.status === 'success') {
         message.success(data.message);
         state.showModal = false;
+        // 清空文件列表
+        fileList.value = [];
+        // 刷新图谱数据
+        setTimeout(() => {
+          loadGraphInfo();
+          loadSampleNodes();
+        }, 500);
       } else {
         throw new Error(data.message);
       }
@@ -216,20 +386,24 @@ const addDocumentByFile = () => {
 };
 
 const loadSampleNodes = () => {
-  state.fetching = true
-  neo4jApi.getSampleNodes('neo4j', sampleNodeCount.value)
+  graph.fetching = true
+
+  unifiedApi.getSubgraph({
+    db_id: state.selectedDbId,
+    node_label: '*',
+    max_nodes: sampleNodeCount.value
+  })
     .then((data) => {
-      graphData.nodes = data.result.nodes
-      graphData.edges = data.result.edges
-      console.log(graphData)
-      // 初次加载后兜底刷新一次，避免容器初次可见尺寸未稳定
-      setTimeout(() => graphRef.value?.refreshGraph?.(), 500)
+      // Normalize data structure if needed
+      const result = data.data;
+      graph.updateGraphData(result.nodes, result.edges);
+      console.log(graph.graphData)
     })
     .catch((error) => {
       console.error(error)
       message.error(error.message || '加载节点失败');
     })
-    .finally(() => state.fetching = false)
+    .finally(() => graph.fetching = false)
 }
 
 const onSearch = () => {
@@ -238,29 +412,28 @@ const onSearch = () => {
     return
   }
 
-  if (graphInfo?.value?.embed_model_name !== cur_embed_model.value) {
+  if (isNeo4j.value && graphInfo?.value?.embed_model_name !== cur_embed_model.value) {
     // 可选：提示模型不一致
   }
 
-  if (!state.searchInput) {
-    message.error('请输入要查询的实体')
-    return
-  }
-
   state.searchLoading = true
-  neo4jApi.queryNode(state.searchInput)
+
+  unifiedApi.getSubgraph({
+    db_id: state.selectedDbId,
+    node_label: state.searchInput || '*',
+    max_nodes: sampleNodeCount.value
+  })
     .then((data) => {
-      if (!data.result || !data.result.nodes || !data.result.edges) {
+      const result = data.data;
+      if (!result || !result.nodes || !result.edges) {
         throw new Error('返回数据格式不正确');
       }
-      graphData.nodes = data.result.nodes
-      graphData.edges = data.result.edges
-      if (graphData.nodes.length === 0) {
+      graph.updateGraphData(result.nodes, result.edges);
+      if (graph.graphData.nodes.length === 0) {
         message.info('未找到相关实体')
       }
       console.log(data)
-      console.log(graphData)
-      graphRef.value?.refreshGraph?.()
+      console.log(graph.graphData)
     })
     .catch((error) => {
       console.error('查询错误:', error);
@@ -269,20 +442,40 @@ const onSearch = () => {
     .finally(() => state.searchLoading = false)
 };
 
-onMounted(() => {
-  loadGraphInfo();
+onMounted(async () => {
+  await loadDatabases();
+  loadGraphInfo(); // Load default (Neo4j) info
   loadSampleNodes();
 });
 
-const handleFileUpload = (event) => {
-  console.log(event)
-  console.log(fileList.value)
+const handleFileUpload = ({ file, fileList: newFileList }) => {
+  // 更新文件列表
+  fileList.value = newFileList;
+
+  // 如果上传失败，显示错误信息
+  if (file.status === 'error') {
+    message.error(`文件上传失败: ${file.name}`);
+  }
+
+  // 如果上传成功，显示成功信息
+  if (file.status === 'done' && file.response?.file_path) {
+    message.success(`文件上传成功: ${file.name}`);
+  }
+
+  console.log('File upload status:', file.status, file.name);
+  console.log('File list:', fileList.value);
 }
 
 const handleDrop = (event) => {
   console.log(event)
   console.log(fileList.value)
 }
+
+const handleModalCancel = () => {
+  state.showModal = false;
+  // 重置文件列表
+  fileList.value = [];
+};
 
 const graphStatusClass = computed(() => {
   if (state.loadingGraphInfo) return 'loading';
@@ -294,20 +487,6 @@ const graphStatusText = computed(() => {
   return graphInfo.value?.status === 'open' ? '已连接' : '已关闭';
 });
 
-// 新增：将图谱信息拆分为多条标签用于展示
-const graphTags = computed(() => {
-  const tags = [];
-  const dbName = graphInfo.value?.graph_name;
-  const entityCount = graphInfo.value?.entity_count;
-  const relationCount = graphInfo.value?.relationship_count;
-
-  if (dbName) tags.push({ key: 'name', text: `图谱 ${dbName}`, type: 'blue' });
-  if (typeof entityCount === 'number') tags.push({ key: 'entities', text: `实体 ${graphData.nodes.length} of ${entityCount}`, type: 'success' });
-  if (typeof relationCount === 'number') tags.push({ key: 'relations', text: `关系 ${graphData.edges.length} of ${relationCount}`, type: 'purple' });
-  if (unindexedCount.value > 0) tags.push({ key: 'unindexed', text: `未索引 ${unindexedCount.value}`, type: 'warning' });
-
-  return tags;
-});
 
 // 为未索引节点添加索引
 const indexNodes = () => {
@@ -338,6 +517,28 @@ const indexNodes = () => {
     });
 };
 
+const exportGraphData = () => {
+  const dataStr = JSON.stringify({
+    nodes: graph.graphData.nodes,
+    edges: graph.graphData.edges,
+    graphInfo: isNeo4j.value ? graphInfo.value : state.lightragStats,
+    source: state.selectedDbId,
+    exportTime: new Date().toISOString()
+  }, null, 2);
+
+  const dataBlob = new Blob([dataStr], { type: 'application/json' });
+  const url = URL.createObjectURL(dataBlob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `graph-data-${state.selectedDbId}-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+
+  message.success('图谱数据已导出');
+};
+
 const getAuthHeaders = () => {
   const userStore = useUserStore();
   return userStore.getAuthHeaders();
@@ -347,6 +548,38 @@ const openLink = (url) => {
   window.open(url, '_blank')
 }
 
+const getDatabaseName = () => {
+  const selectedDb = state.dbOptions.find(db => db.value === state.selectedDbId);
+  return selectedDb ? selectedDb.label : state.selectedDbId;
+};
+
+const getUploadTipMessage = () => {
+  if (isNeo4j.value) {
+    return 'Neo4j 图数据库支持通过上传 JSONL 格式文件直接导入实体和关系数据。';
+  } else {
+    const selectedDb = state.dbOptions.find(db => db.value === state.selectedDbId);
+    const dbType = selectedDb?.type || '未知';
+    const dbName = selectedDb?.label || getDatabaseName();
+    return `当前选择的是 ${dbType.toUpperCase()} 类型的知识库"${dbName}"，该类型知识库需要在文档知识库页面上传文档，系统会自动从中提取知识图谱。`;
+  }
+};
+
+const goToDatabasePage = () => {
+  state.showUploadTipModal = false;
+
+  // 如果不是 Neo4j，需要找到对应的知识库 ID 并跳转
+  if (!isNeo4j.value) {
+    const selectedDb = state.dbOptions.find(db => db.value === state.selectedDbId);
+    if (selectedDb && selectedDb.type !== 'neo4j') {
+      // 跳转到对应的知识库详情页面
+      router.push(`/database/${state.selectedDbId}`);
+    } else {
+      // 如果找不到对应的数据库，跳转到数据库列表页面
+      router.push('/database');
+    }
+  }
+};
+
 </script>
 
 <style lang="less" scoped>
@@ -354,9 +587,21 @@ const openLink = (url) => {
 
 .graph-container {
   padding: 0;
+  background-color: var(--gray-0);
 
   .header-container {
     height: @graph-header-height;
+  }
+}
+
+.db-selector {
+  display: flex;
+  align-items: center;
+  margin-right: 20px;
+
+  .label {
+    font-size: 14px;
+    margin-right: 8px;
   }
 }
 
@@ -365,7 +610,7 @@ const openLink = (url) => {
   align-items: center;
   margin-right: 16px;
   font-size: 14px;
-  color: rgba(0, 0, 0, 0.65);
+  color: var(--color-text-secondary);
 }
 
 .status-text {
@@ -379,16 +624,16 @@ const openLink = (url) => {
   display: inline-block;
 
   &.loading {
-    background-color: #faad14;
+    background-color: var(--color-warning-500);
     animation: pulse 1.5s infinite ease-in-out;
   }
 
   &.open {
-    background-color: #52c41a;
+    background-color: var(--color-success-500);
   }
 
   &.closed {
-    background-color: #f5222d;
+    background-color: var(--color-error-500);
   }
 }
 
@@ -414,6 +659,49 @@ const openLink = (url) => {
   .upload-dragger {
     margin: 0px;
   }
+
+  .upload-config {
+    margin: 24px 0;
+    padding: 16px;
+    background-color: var(--gray-0);
+    border-radius: 4px;
+
+    .config-row {
+      display: flex;
+      align-items: center;
+      margin-bottom: 16px;
+
+      &:last-of-type {
+        margin-bottom: 0;
+      }
+
+      .config-label {
+        width: 100px;
+        flex-shrink: 0;
+        font-size: 14px;
+        color: var(--color-text);
+        text-align: right;
+        margin-right: 16px;
+      }
+
+      .config-field {
+        flex: 1;
+        min-width: 0;
+      }
+    }
+
+    .config-hint-row {
+      margin-bottom: 16px;
+      padding-left: 116px;
+      font-size: 12px;
+      color: var(--color-text-secondary);
+      line-height: 1.5;
+
+      &:last-child {
+        margin-bottom: 0;
+      }
+    }
+  }
 }
 
 .container-outter {
@@ -422,13 +710,17 @@ const openLink = (url) => {
   overflow: hidden;
   background: var(--gray-10);
 
-  .actions,
-  .footer {
+  .actions {
     display: flex;
     justify-content: space-between;
     margin: 20px 0;
     padding: 0 24px;
     width: 100%;
+  }
+
+  .tags {
+    display: flex;
+    gap: 8px;
   }
 }
 
@@ -448,6 +740,21 @@ const openLink = (url) => {
   button {
     height: 37px;
     box-shadow: none;
+  }
+}
+
+.upload-tip-content {
+  .upload-tip-actions {
+    p {
+      margin-bottom: 16px;
+      color: var(--color-text-secondary);
+    }
+  }
+
+  .action-buttons {
+    display: flex;
+    justify-content: center;
+    margin-top: 20px;
   }
 }
 </style>

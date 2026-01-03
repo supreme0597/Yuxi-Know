@@ -30,15 +30,17 @@ def get_connection_manager() -> MySQLConnectionManager:
             "user": os.getenv("MYSQL_USER"),
             "password": os.getenv("MYSQL_PASSWORD"),
             "database": os.getenv("MYSQL_DATABASE"),
-            "port": int(os.getenv("MYSQL_PORT", "3306")),
+            "port": int(os.getenv("MYSQL_PORT") or "3306"),
             "charset": "utf8mb4",
-            "description": os.getenv("MYSQL_DATABASE_DESCRIPTION", "默认 MySQL 数据库"),
+            "description": os.getenv("MYSQL_DATABASE_DESCRIPTION") or "默认 MySQL 数据库",
         }
         # 验证配置完整性
         required_keys = ["host", "user", "password", "database"]
         for key in required_keys:
             if not mysql_config[key]:
-                raise MySQLConnectionError(f"MySQL configuration missing required key: {key}")
+                raise MySQLConnectionError(
+                    f"MySQL configuration missing required key: {key}, please check your environment variables."
+                )
 
         _connection_manager = MySQLConnectionManager(mysql_config)
     return _connection_manager

@@ -7,13 +7,13 @@ from typing import Any
 
 from pymilvus import Collection, CollectionSchema, DataType, FieldSchema, connections, db, utility
 
+from src import config
 from src.knowledge.base import KnowledgeBase
-from src.knowledge.indexing import process_file_to_markdown, process_url_to_markdown
+from src.knowledge.indexing import process_file_to_markdown
 from src.knowledge.utils.kb_utils import (
     get_embedding_config,
     prepare_item_metadata,
     split_text_into_chunks,
-    split_text_into_qa_chunks,
 )
 from src.models.embed import OtherEmbedding
 from src.utils import hashstr, logger
@@ -40,9 +40,9 @@ class MilvusKB(KnowledgeBase):
         # Milvus 配置
         # self.milvus_host = kwargs.get('milvus_host', os.getenv('MILVUS_HOST', 'localhost'))
         # self.milvus_port = kwargs.get('milvus_port', int(os.getenv('MILVUS_PORT', '19530')))
-        self.milvus_token = kwargs.get("milvus_token", os.getenv("MILVUS_TOKEN", ""))
-        self.milvus_uri = kwargs.get("milvus_uri", os.getenv("MILVUS_URI", "http://localhost:19530"))
-        self.milvus_db = kwargs.get("milvus_db", "yuxi_know")
+        self.milvus_token = kwargs.get("milvus_token", os.getenv("MILVUS_TOKEN") or "")
+        self.milvus_uri = kwargs.get("milvus_uri", os.getenv("MILVUS_URI") or "http://localhost:19530")
+        self.milvus_db = kwargs.get("milvus_db") or "yuxi_know"
 
         # 连接名称
         self.connection_alias = f"milvus_{hashstr(work_dir, 6)}"
@@ -91,10 +91,14 @@ class MilvusKB(KnowledgeBase):
         """创建 Milvus 集合"""
         logger.info(f"Creating Milvus collection for {db_id}")
 
-        if db_id not in self.databases_meta:
+        if not (metadata := self.databases_meta.get(db_id)):
             raise ValueError(f"Database {db_id} not found")
 
-        embed_info = self.databases_meta[db_id].get("embed_info", {})
+        # 获取嵌入模型信息
+        if not (embed_info := metadata.get("embed_info")):
+            logger.error(f"Embedding info not found for database {db_id}, using default model")
+            embed_info = config.embed_model_names[config.embed_model]
+
         collection_name = db_id
 
         try:
@@ -104,45 +108,58 @@ class MilvusKB(KnowledgeBase):
 
                 # 检查嵌入模型是否匹配
                 description = collection.description
-                expected_model = getattr(embed_info, "name", "default") if embed_info else "default"
+                expected_model = embed_info["name"] if embed_info else "default"
 
                 if expected_model not in description:
-                    logger.warning(f"Collection {collection_name} model mismatch, recreating...")
+                    logger.warning(
+                        f"Collection {collection_name} model mismatch: "
+                        f"expected='{expected_model}', found_in_description='{description}'"
+                    )
                     utility.drop_collection(collection_name, using=self.connection_alias)
-                    raise Exception("Model mismatch, recreating collection")
+                    return self._create_new_collection(collection_name, embed_info, db_id)
 
                 logger.info(f"Retrieved existing collection: {collection_name}")
+                return collection
             else:
-                raise Exception("Collection not found, creating new one")
+                logger.info(f"Collection {collection_name} not found, creating new one")
+                return self._create_new_collection(collection_name, embed_info, db_id)
 
-        except Exception:
-            # 创建新集合
-            embedding_dim = getattr(embed_info, "dimension", 1024) if embed_info else 1024
-            model_name = getattr(embed_info, "name", "default") if embed_info else "default"
+        except (connections.MilvusException, RuntimeError) as e:
+            logger.error(f"Error checking collection {collection_name}: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error while managing collection {collection_name}: {e}")
+            logger.debug(f"Traceback: {traceback.format_exc()}")
+            raise
 
-            # 定义集合Schema
-            fields = [
-                FieldSchema(name="id", dtype=DataType.VARCHAR, max_length=100, is_primary=True),
-                FieldSchema(name="content", dtype=DataType.VARCHAR, max_length=65535),
-                FieldSchema(name="source", dtype=DataType.VARCHAR, max_length=500),
-                FieldSchema(name="chunk_id", dtype=DataType.VARCHAR, max_length=100),
-                FieldSchema(name="file_id", dtype=DataType.VARCHAR, max_length=100),
-                FieldSchema(name="chunk_index", dtype=DataType.INT64),
-                FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=embedding_dim),
-            ]
+    def _create_new_collection(self, collection_name: str, embed_info: Any, db_id: str) -> Collection:
+        """创建新的 Milvus 集合"""
+        embedding_dim = embed_info.get("dimension", 1024)
+        model_name = embed_info.get("name", "default")
 
-            schema = CollectionSchema(
-                fields=fields, description=f"Knowledge base collection for {db_id} using {model_name}"
-            )
+        # 定义集合Schema
+        fields = [
+            FieldSchema(name="id", dtype=DataType.VARCHAR, max_length=100, is_primary=True),
+            FieldSchema(name="content", dtype=DataType.VARCHAR, max_length=65535),
+            FieldSchema(name="source", dtype=DataType.VARCHAR, max_length=500),
+            FieldSchema(name="chunk_id", dtype=DataType.VARCHAR, max_length=100),
+            FieldSchema(name="file_id", dtype=DataType.VARCHAR, max_length=100),
+            FieldSchema(name="chunk_index", dtype=DataType.INT64),
+            FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=embedding_dim),
+        ]
 
-            # 创建集合
-            collection = Collection(name=collection_name, schema=schema, using=self.connection_alias)
+        schema = CollectionSchema(
+            fields=fields, description=f"Knowledge base collection for {db_id} using {model_name}"
+        )
 
-            # 创建索引
-            index_params = {"metric_type": "COSINE", "index_type": "IVF_FLAT", "params": {"nlist": 1024}}
-            collection.create_index("embedding", index_params)
+        # 创建集合
+        collection = Collection(name=collection_name, schema=schema, using=self.connection_alias)
 
-            logger.info(f"Created new Milvus collection: {collection_name}")
+        # 创建索引
+        index_params = {"metric_type": "COSINE", "index_type": "IVF_FLAT", "params": {"nlist": 1024}}
+        collection.create_index("embedding", index_params)
+
+        logger.info(f"Created new Milvus collection: {collection_name} '{model_name=}', {embedding_dim=}")
 
         return collection
 
@@ -154,25 +171,30 @@ class MilvusKB(KnowledgeBase):
         except Exception as e:
             logger.warning(f"Failed to load collection into memory: {e}")
 
-    def _get_async_embedding_function(self, embed_info: dict):
+    def _get_async_embedding(self, embed_info: dict):
         """获取 embedding 函数"""
+        # 检查是否有 model_id 字段，优先使用 select_embedding_model
+        if embed_info and "model_id" in embed_info:
+            from src.models.embed import select_embedding_model
+
+            return select_embedding_model(embed_info["model_id"])
+
+        # 使用原有的逻辑（兼容模式））
         config_dict = get_embedding_config(embed_info)
-        embedding_model = OtherEmbedding(
+        return OtherEmbedding(
             model=config_dict.get("model"),
             base_url=config_dict.get("base_url"),
             api_key=config_dict.get("api_key"),
         )
 
+    def _get_async_embedding_function(self, embed_info: dict):
+        """获取 embedding 函数"""
+        embedding_model = self._get_async_embedding(embed_info)
         return partial(embedding_model.abatch_encode, batch_size=40)
 
     def _get_embedding_function(self, embed_info: dict):
         """获取 embedding 函数"""
-        config_dict = get_embedding_config(embed_info)
-        embedding_model = OtherEmbedding(
-            model=config_dict.get("model"),
-            base_url=config_dict.get("base_url"),
-            api_key=config_dict.get("api_key"),
-        )
+        embedding_model = self._get_async_embedding(embed_info)
 
         return partial(embedding_model.batch_encode, batch_size=40)
 
@@ -199,16 +221,7 @@ class MilvusKB(KnowledgeBase):
 
     def _split_text_into_chunks(self, text: str, file_id: str, filename: str, params: dict) -> list[dict]:
         """将文本分割成块"""
-        # 检查是否使用QA分割模式
-        use_qa_split = params.get("use_qa_split", False)
-
-        if use_qa_split:
-            # 使用QA分割模式
-            qa_separator = params.get("qa_separator", "\n\n\n")
-            return split_text_into_qa_chunks(text, file_id, filename, qa_separator, params)
-        else:
-            # 使用传统分割模式
-            return split_text_into_chunks(text, file_id, filename, params)
+        return split_text_into_chunks(text, file_id, filename, params)
 
     async def add_content(self, db_id: str, items: list[str], params: dict | None = {}) -> list[dict]:
         """添加内容（文件/URL）"""
@@ -226,7 +239,7 @@ class MilvusKB(KnowledgeBase):
         processed_items_info = []
 
         for item in items:
-            metadata = prepare_item_metadata(item, content_type, db_id, params=params)
+            metadata = await prepare_item_metadata(item, content_type, db_id, params=params)
             file_id = metadata["file_id"]
             filename = metadata["filename"]
 
@@ -242,10 +255,14 @@ class MilvusKB(KnowledgeBase):
             self._add_to_processing_queue(file_id)
 
             try:
-                if content_type == "file":
-                    markdown_content = await process_file_to_markdown(item, params=params)
-                else:
-                    markdown_content = await process_url_to_markdown(item, params=params)
+                # 确保params中包含db_id（ZIP文件处理需要）
+                if params is None:
+                    params = {}
+                params["db_id"] = db_id
+
+                if content_type != "file":
+                    raise ValueError("URL 内容解析已禁用")
+                markdown_content = await process_file_to_markdown(item, params=params)
 
                 chunks = self._split_text_into_chunks(markdown_content, file_id, filename, params)
                 logger.info(f"Split {filename} into {len(chunks)} chunks")
@@ -337,10 +354,9 @@ class MilvusKB(KnowledgeBase):
                     self._save_metadata()
 
                 # 重新解析文件为 markdown
-                if content_type == "file":
-                    markdown_content = await process_file_to_markdown(file_path, params=params)
-                else:
-                    markdown_content = await process_url_to_markdown(file_path, params=params)
+                if content_type != "file":
+                    raise ValueError("URL 内容解析已禁用")
+                markdown_content = await process_file_to_markdown(file_path, params=params)
 
                 # 先删除现有的 Milvus 数据（仅删除chunks，保留元数据）
                 await self.delete_file_chunks_only(db_id, file_id)
@@ -432,11 +448,26 @@ class MilvusKB(KnowledgeBase):
             query_embedding = embedding_function([query_text])
 
             search_params = {"metric_type": metric_type, "params": {"nprobe": 10}}
+
+            # 构建过滤表达式
+            expr = None
+            if file_name := kwargs.get("file_name"):
+                # 使用 like 支持模糊匹配
+                # 注意：需要转义双引号以防止注入
+                safe_file_name = file_name.replace('"', '\\"')
+                # 如果没有提供通配符，默认前后添加 %
+                if "%" not in safe_file_name:
+                    expr = f'source like "%{safe_file_name}%"'
+                else:
+                    expr = f'source like "{safe_file_name}"'
+                logger.debug(f"Using filter expression: {expr}")
+
             results = collection.search(
                 data=query_embedding,
                 anns_field="embedding",
                 param=search_params,
                 limit=recall_top_k,
+                expr=expr,
                 output_fields=["content", "source", "chunk_id", "file_id", "chunk_index"],
             )
 

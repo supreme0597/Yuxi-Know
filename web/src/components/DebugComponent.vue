@@ -196,7 +196,6 @@ const processedLogs = computed(() => {
   return state.rawLogs
     .map(parseLogLine)
     .filter(log => log !== null)
-    .filter(log => state.selectedLevels.includes(log.level))
     .filter(log => {
       if (!state.searchText) return true;
       return log.raw.toLowerCase().includes(state.searchText.toLowerCase());
@@ -210,7 +209,9 @@ const fetchLogs = async () => {
   state.fetching = true;
   try {
     error.value = '';
-    const logData = await configApi.getLogs();
+    // 将选中的日志级别转换为逗号分隔的字符串传递给后端
+    const levelsParam = state.selectedLevels.join(',');
+    const logData = await configApi.getLogs(levelsParam);
     state.rawLogs = logData.log.split('\n').filter(line => line.trim());
 
     await nextTick();
@@ -248,12 +249,18 @@ const toggleLogLevel = (level) => {
   const index = currentLevels.indexOf(level);
 
   if (index > -1) {
+    // 如果取消选中后没有选中的级别，默认全选
+    if (currentLevels.length === 1) {
+      return;
+    }
     currentLevels.splice(index, 1);
   } else {
     currentLevels.push(level);
   }
 
   state.selectedLevels = currentLevels;
+  // 切换日志级别后重新获取数据
+  fetchLogs();
 };
 
 // 自动刷新
@@ -452,9 +459,10 @@ const printAgentConfig = async () => {
     }
 
     // 工具信息
+    const toolsList = agentStore.availableTools ? Object.values(agentStore.availableTools) : [];
     console.log('可用工具:', {
-      count: agentStore.availableTools.length,
-      tools: toRaw(agentStore.availableTools)
+      count: toolsList.length,
+      tools: toolsList
     });
 
     // 配置项信息（管理员可见）
@@ -470,10 +478,6 @@ const printAgentConfig = async () => {
 </script>
 
 <style scoped>
-.log-viewer {
-  background: white;
-}
-
 .log-viewer.fullscreen {
   padding: 16px;
 }
@@ -509,13 +513,13 @@ const printAgentConfig = async () => {
     &.ant-btn-primary {
       background-color: var(--main-color);
       border-color: var(--main-color);
-      color: #fff;
+      color: var(--gray-0);
 
       &:hover,
       &:focus {
         background-color: var(--main-color);
         border-color: var(--main-color);
-        color: #fff;
+        color: var(--gray-0);
       }
     }
 
@@ -531,7 +535,7 @@ const printAgentConfig = async () => {
   }
 
   .auto-refresh-button {
-    color: white;
+    color: var(--gray-0);
   }
 }
 
@@ -549,17 +553,17 @@ const printAgentConfig = async () => {
 }
 
 .error {
-  color: var(--error-color);
+  color: var(--color-error-500);
 }
 
 .log-container {
   height: calc(80vh - 200px);
   overflow-y: auto;
-  background: #0C0C0C;
-  color: #D1D1D1;
+  background: var(--gray-0);
+  color: var(--gray-1000);
   border-radius: 5px;
   font-family: 'Consolas', 'Monaco', monospace;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .log-lines {
@@ -578,7 +582,7 @@ const printAgentConfig = async () => {
 }
 
 .timestamp {
-  color: #6A9955;
+  color: var(--color-success-500);
   min-width: 80px;
 }
 
@@ -588,7 +592,7 @@ const printAgentConfig = async () => {
 }
 
 .module {
-  color: #569CD6;
+  color: var(--color-info-500);
   min-width: 30px;
 }
 
@@ -599,30 +603,30 @@ const printAgentConfig = async () => {
 }
 
 .level-info {
-  .level { color: #4EC9B0; }
+  .level { color: var(--color-success-500); }
 }
 
 .level-error {
-  .level { color: #F14C4C; }
+  .level { color: var(--color-error-500); }
 }
 
 .level-debug {
-  .level { color: #9CDCFE; }
+  .level { color: var(--color-info-500); }
 }
 
 .level-warning {
-  .level { color: #DCD900; }
+  .level { color: var(--color-warning-500); }
 }
 
 .empty-logs {
   padding: 16px;
   text-align: center;
-  color: #666;
+  color: var(--gray-500);
 }
 
 @media (prefers-color-scheme: dark) {
   .log-container {
-    background: #1E1E1E;
+    background: var(--gray-900);
   }
 }
 

@@ -4,6 +4,10 @@
   </div>
   <div class="message-box" :class="[message.type, customClasses]">
     <!-- 用户消息 -->
+    <div v-if="message.type === 'human'" class="message-copy-btn human-copy" @click="copyToClipboard(message.content)" :class="{ 'is-copied': isCopied }">
+      <Check v-if="isCopied" size="14" />
+      <Copy v-else size="14" />
+    </div>
     <p v-if="message.type === 'human'" class="message-text">{{ message.content }}</p>
 
     <p v-else-if="message.type === 'system'" class="message-text-system">{{ message.content }}</p>
@@ -24,6 +28,7 @@
       <!-- 消息内容 -->
       <MdPreview v-if="parsedData.content" ref="editorRef"
         editorId="preview-only"
+        :theme="theme"
         previewTheme="github"
         :showCodeRowNumber="false"
         :modelValue="parsedData.content"
@@ -33,43 +38,17 @@
       <div v-else-if="parsedData.reasoning_content"  class="empty-block"></div>
 
       <!-- 错误提示块 -->
-      <div v-if="message.error_type" class="error-hint">
-        <span v-if="message.error_type === 'interrupted'">回答生成已中断</span>
+      <div v-if="displayError" class="error-hint">
+        <span v-if="getErrorMessage">{{ getErrorMessage }}</span>
+        <span v-else-if="message.error_type === 'interrupted'">回答生成已中断</span>
         <span v-else-if="message.error_type === 'unexpect'">生成过程中出现异常</span>
         <span v-else-if="message.error_type === 'content_guard_blocked'">检测到敏感内容，已中断输出</span>
+        <span v-else>{{ message.error_type || '未知错误' }}</span>
       </div>
 
       <div v-if="validToolCalls && validToolCalls.length > 0" class="tool-calls-container">
         <div v-for="(toolCall, index) in validToolCalls" :key="toolCall.id || index" class="tool-call-container">
-          <div v-if="toolCall" class="tool-call-display" :class="{ 'is-collapsed': !expandedToolCalls.has(toolCall.id) }">
-            <div class="tool-header" @click="toggleToolCall(toolCall.id)">
-              <span v-if="!toolCall.tool_call_result">
-                <span><Loader size="16" class="tool-loader rotate tool-loading" /></span> &nbsp;
-                <span>正在调用工具: </span>
-                <span class="tool-name">{{ getToolNameByToolCall(toolCall) }}</span>
-              </span>
-              <span v-else>
-                <span><CircleCheckBig size="16" class="tool-loader tool-success" /></span> &nbsp; 工具 <span class="tool-name">{{ getToolNameByToolCall(toolCall) }}</span> 执行完成
-              </span>
-            </div>
-            <div class="tool-content" v-show="expandedToolCalls.has(toolCall.id)">
-              <div class="tool-params" v-if="toolCall.args || toolCall.function?.arguments">
-                <div class="tool-params-content">
-                  <strong>参数:</strong>
-                  <span v-if="getFormattedToolArgs(toolCall)">{{ getFormattedToolArgs(toolCall) }}</span>
-                  <span v-else>{{ toolCall.args || toolCall.function?.arguments }}</span>
-                </div>
-              </div>
-              <div class="tool-result" v-if="toolCall.tool_call_result && toolCall.tool_call_result.content">
-                <div class="tool-result-content" :data-tool-call-id="toolCall.id">
-                  <ToolResultRenderer
-                    :tool-name="toolCall.name || toolCall.function?.name"
-                    :result-content="toolCall.tool_call_result.content"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
+          <ToolCallRenderer :tool-call="toolCall" />
         </div>
       </div>
 
@@ -96,10 +75,11 @@
 import { computed, ref } from 'vue';
 import { CaretRightOutlined, ThunderboltOutlined, LoadingOutlined } from '@ant-design/icons-vue';
 import RefsComponent from '@/components/RefsComponent.vue'
-import { Loader, CircleCheckBig } from 'lucide-vue-next';
-import { ToolResultRenderer } from '@/components/ToolCallingResult'
+import { Copy, Check } from 'lucide-vue-next';
+import { ToolCallRenderer } from '@/components/ToolCallingResult'
 import { useAgentStore } from '@/stores/agent'
 import { useInfoStore } from '@/stores/info'
+import { useThemeStore } from '@/stores/theme'
 import { storeToRefs } from 'pinia'
 
 
@@ -143,39 +123,78 @@ const editorRef = ref()
 
 const emit = defineEmits(['retry', 'retryStoppedMessage', 'openRefs']);
 
+// 复制状态
+const isCopied = ref(false);
+
+const copyToClipboard = async (text) => {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      // 降级处理：使用传统的 execCommand 方法
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      textArea.style.position = 'fixed';
+      textArea.style.left = '-999999px';
+      textArea.style.top = '-999999px';
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      const successful = document.execCommand('copy');
+      document.body.removeChild(textArea);
+      if (!successful) throw new Error('execCommand failed');
+    }
+    isCopied.value = true;
+    setTimeout(() => {
+      isCopied.value = false;
+    }, 2000);
+  } catch (err) {
+    console.error('Failed to copy: ', err);
+  }
+};
+
 // 推理面板展开状态
 const reasoningActiveKey = ref(['hide']);
-const expandedToolCalls = ref(new Set()); // 展开的工具调用集合
+
+// 错误消息处理
+const displayError = computed(() => {
+  // 简化错误判断：只检查明确的错误类型标识
+  return !!(props.message.error_type || props.message.extra_metadata?.error_type);
+});
+
+const getErrorMessage = computed(() => {
+  // 优先使用直接的 error_message 字段
+  if (props.message.error_message) {
+    return props.message.error_message;
+  }
+
+  // 其次从 extra_metadata 中获取具体的错误信息
+  if (props.message.extra_metadata?.error_message) {
+    return props.message.extra_metadata.error_message;
+  }
+
+  // 对于已知的错误类型，返回默认提示
+  switch (props.message.error_type) {
+    case 'interrupted':
+      return '回答生成已中断';
+    case 'content_guard_blocked':
+      return '检测到敏感内容，已中断输出';
+    case 'unexpect':
+      return '生成过程中出现异常';
+    case 'agent_error':
+      return '智能体获取失败';
+    default:
+      return null;
+  }
+});
 
 // 引入智能体 store
 const agentStore = useAgentStore();
 const infoStore = useInfoStore();
-const { availableTools } = storeToRefs(agentStore);
+const themeStore = useThemeStore();
 
-// 工具相关方法
-const getToolNameByToolCall = (toolCall) => {
-  const toolId = toolCall.name || toolCall.function?.name;
-  const toolsList = availableTools.value ? Object.values(availableTools.value) : [];
-  const tool = toolsList.find(t => t.id === toolId);
-  return tool ? tool.name : toolId;
-};
-
-const getFormattedToolArgs = (toolCall) => {
-  const args = toolCall.args || toolCall.function?.arguments;
-  if (!args) return '';
-
-  try {
-    // 尝试解析JSON格式的参数
-    if (typeof args === 'string' && args.trim().startsWith('{')) {
-      const parsed = JSON.parse(args);
-      return JSON.stringify(parsed, null, 2);
-    }
-  } catch (e) {
-    // 如果解析失败，直接返回原始字符串
-  }
-
-  return args;
-};
+// 主题设置 - 根据系统主题动态切换
+const theme = computed(() => themeStore.isDark ? 'dark' : 'light');
 
 // 过滤有效的工具调用
 const validToolCalls = computed(() => {
@@ -194,11 +213,6 @@ const validToolCalls = computed(() => {
 });
 
 const parsedData = computed(() => {
-  // 调试工具调用处理
-  if (validToolCalls.value && validToolCalls.value.length > 0) {
-    console.log('Valid tool calls in message:', validToolCalls.value);
-  }
-
   // Start with default values from the prop to avoid mutation.
   let content = props.message.content.trim() || '';
   let reasoning_content = props.message.additional_kwargs?.reasoning_content || '';
@@ -226,14 +240,6 @@ const parsedData = computed(() => {
     reasoning_content,
   };
 });
-
-const toggleToolCall = (toolCallId) => {
-  if (expandedToolCalls.value.has(toolCallId)) {
-    expandedToolCalls.value.delete(toolCallId);
-  } else {
-    expandedToolCalls.value.add(toolCallId);
-  }
-};
 </script>
 
 <style lang="less" scoped>
@@ -248,7 +254,7 @@ const toggleToolCall = (toolCallId) => {
   font-size: 15px;
   line-height: 24px;
   box-sizing: border-box;
-  color: black;
+  color: var(--gray-10000);
   max-width: 100%;
   position: relative;
   letter-spacing: .25px;
@@ -278,6 +284,38 @@ const toggleToolCall = (toolCallId) => {
     white-space: pre-line;
   }
 
+  .message-copy-btn {
+    cursor: pointer;
+    color: var(--gray-400);
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    flex-shrink: 0;
+
+    &:hover {
+      color: var(--main-color);
+    }
+
+    &.is-copied {
+      color: var(--color-success-500);
+      opacity: 1;
+    }
+
+    &.human-copy {
+      position: absolute;
+      left: -28px;
+      bottom: 8px;
+    }
+  }
+
+  &:hover {
+    .message-copy-btn {
+      opacity: 1;
+    }
+  }
+
   .message-text-system {
     max-width: 100%;
     margin-bottom: 0;
@@ -292,12 +330,12 @@ const toggleToolCall = (toolCallId) => {
   }
 
   .err-msg {
-    color: #d15252;
-    border: 1px solid #f19999;
+    color: var(--color-error-500);
+    border: 1px solid currentColor;
     padding: 0.5rem 1rem;
     border-radius: 8px;
     text-align: left;
-    background: #fffbfb;
+    background: var(--color-error-50);
     margin-bottom: 10px;
     cursor: pointer;
   }
@@ -311,7 +349,7 @@ const toggleToolCall = (toolCallId) => {
     margin-top: 10px;
     margin-bottom: 15px;
     border-radius: 8px;
-    border: 1px solid var(--gray-200);
+    border: 1px solid var(--gray-150);
     background-color: var(--gray-25);
     overflow: hidden;
     transition: all 0.2s ease;
@@ -369,9 +407,9 @@ const toggleToolCall = (toolCallId) => {
     display: flex;
     align-items: center;
     gap: 8px;
-    background-color: #fef2f2;
+    background-color: var(--color-error-50);
     // border: 1px solid #f87171;
-    color: #991b1b;
+    color: var(--color-error-500);
     span {
       line-height: 1.5;
     }
@@ -405,7 +443,7 @@ const toggleToolCall = (toolCallId) => {
 
   :deep(.tool-call-display) {
     background-color: var(--gray-25);
-    outline: 1px solid var(--gray-200);
+    outline: 1px solid var(--gray-150);
     border-radius: 8px;
     overflow: hidden;
     transition: all 0.2s ease;
@@ -452,15 +490,22 @@ const toggleToolCall = (toolCallId) => {
       }
 
       .tool-loader.tool-success {
-        color: var(--color-success);
+        color: var(--color-success-500);
       }
 
       .tool-loader.tool-error {
-        color: var(--color-error);
+        color: var(--color-error-500);
       }
 
       .tool-loader.tool-loading {
-        color: var(--color-info);
+        color: var(--color-info-500);
+      }
+
+      .tool-expand-icon {
+        margin-left: auto;
+        color: var(--gray-400);
+        display: flex;
+        align-items: center;
       }
     }
 
@@ -474,7 +519,7 @@ const toggleToolCall = (toolCallId) => {
 
         .tool-params-content {
           margin: 0;
-          font-size: 13px;
+          font-size: 12px;
           overflow-x: auto;
           color: var(--gray-700);
           line-height: 1.5;
@@ -517,13 +562,13 @@ const toggleToolCall = (toolCallId) => {
 .retry-hint {
   margin-top: 8px;
   padding: 8px 16px;
-  color: #666;
+  color: var(--gray-600);
   font-size: 14px;
   text-align: left;
 }
 
 .retry-link {
-  color: #1890ff;
+  color: var(--color-info-500);
   cursor: pointer;
   margin-left: 4px;
 
@@ -534,10 +579,10 @@ const toggleToolCall = (toolCallId) => {
 
 .ant-btn-icon-only {
   &:has(.anticon-stop) {
-    background-color: #ff4d4f !important;
+    background-color: var(--color-error-500) !important;
 
     &:hover {
-      background-color: #ff7875 !important;
+      background-color: var(--color-error-100) !important;
     }
   }
 }
@@ -632,11 +677,50 @@ const toggleToolCall = (toolCallId) => {
 
   cite {
     font-size: 12px;
-    color: var(--gray-700);
+    color: var(--gray-800);
     font-style: normal;
     background-color: var(--gray-200);
     border-radius: 4px;
     outline: 2px solid var(--gray-200);
+    padding: 0rem 0.25rem;
+    margin-left: 4px;
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+
+    &:hover::after {
+      content: attr(source);
+      position: absolute;
+      bottom: calc(100% + 6px);
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 8px 12px;
+      background-color: var(--gray-900);
+      color: #fff;
+      font-size: 13px;
+      line-height: 1.5;
+      border-radius: 6px;
+      min-width: 200px;
+      max-width: 400px;
+      width: max-content;
+      white-space: normal;
+      word-break: break-word;
+      z-index: 1000;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      pointer-events: none;
+      text-align: center;
+    }
+
+    &:hover::before {
+      content: '';
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 5px solid transparent;
+      border-top-color: var(--gray-900);
+      z-index: 1000;
+    }
   }
 
   a {

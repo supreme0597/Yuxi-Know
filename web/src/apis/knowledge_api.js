@@ -1,4 +1,4 @@
-import { apiAdminGet, apiAdminPost, apiAdminPut, apiAdminDelete } from './base'
+import { apiAdminGet, apiAdminPost, apiAdminPut, apiAdminDelete, apiRequest } from './base'
 
 /**
  * 知识库管理API模块
@@ -53,6 +53,21 @@ export const databaseApi = {
    */
   deleteDatabase: async (dbId) => {
     return apiAdminDelete(`/api/knowledge/databases/${dbId}`)
+  },
+
+  /**
+   * 使用 AI 生成或优化知识库描述
+   * @param {string} name - 知识库名称
+   * @param {string} currentDescription - 当前描述（可选）
+   * @param {Array} fileList - 文件列表（可选）
+   * @returns {Promise} - 生成结果
+   */
+  generateDescription: async (name, currentDescription = '', fileList = []) => {
+    return apiAdminPost('/api/knowledge/generate-description', {
+      name,
+      current_description: currentDescription,
+      file_list: fileList
+    })
   }
 }
 
@@ -61,6 +76,34 @@ export const databaseApi = {
 // =============================================================================
 
 export const documentApi = {
+  /**
+   * 创建文件夹
+   * @param {string} dbId - 知识库ID
+   * @param {string} folderName - 文件夹名称
+   * @param {string} parentId - 父文件夹ID
+   * @returns {Promise} - 创建结果
+   */
+  createFolder: async (dbId, folderName, parentId = null) => {
+    return apiAdminPost(`/api/knowledge/databases/${dbId}/folders`, {
+      folder_name: folderName,
+      parent_id: parentId
+    })
+  },
+
+  /**
+   * 移动文档/文件夹
+   * @param {string} dbId - 知识库ID
+   * @param {string} docId - 文档/文件夹ID
+   * @param {string} newParentId - 新的父文件夹ID
+   * @returns {Promise} - 移动结果
+   */
+  moveDocument: async (dbId, docId, newParentId) => {
+    return apiAdminPut(`/api/knowledge/databases/${dbId}/documents/${docId}/move`, {
+      new_parent_id: newParentId
+    })
+  },
+
+
   /**
    * 添加文档到知识库
    * @param {string} dbId - 知识库ID
@@ -160,6 +203,37 @@ export const queryApi = {
    */
   getKnowledgeBaseQueryParams: async (dbId) => {
     return apiAdminGet(`/api/knowledge/databases/${dbId}/query-params`)
+  },
+
+  /**
+   * 更新知识库查询参数
+   * @param {string} dbId - 知识库ID
+   * @param {Object} params - 查询参数
+   * @returns {Promise} - 更新结果
+   */
+  updateKnowledgeBaseQueryParams: async (dbId, params) => {
+    return apiAdminPut(`/api/knowledge/databases/${dbId}/query-params`, params)
+  },
+
+  /**
+   * 生成知识库的测试问题
+   * @param {string} dbId - 知识库ID
+   * @param {number} count - 生成问题数量，默认10
+   * @returns {Promise} - 生成的问题列表
+   */
+  generateSampleQuestions: async (dbId, count = 10) => {
+    return apiAdminPost(`/api/knowledge/databases/${dbId}/sample-questions`, {
+      count
+    })
+  },
+
+  /**
+   * 获取知识库的测试问题
+   * @param {string} dbId - 知识库ID
+   * @returns {Promise} - 问题列表
+   */
+  getSampleQuestions: async (dbId) => {
+    return apiAdminGet(`/api/knowledge/databases/${dbId}/sample-questions`)
   }
 }
 
@@ -195,6 +269,40 @@ export const fileApi = {
    */
   getSupportedFileTypes: async () => {
     return apiAdminGet('/api/knowledge/files/supported-types')
+  },
+
+  /**
+   * 上传文件夹（zip格式）
+   * @param {File} file - zip文件
+   * @param {string} dbId - 知识库ID
+   * @returns {Promise} - 上传结果
+   */
+  uploadFolder: async (file, dbId) => {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    // 使用 apiRequest 直接发送 FormData，但使用统一的错误处理
+    return apiRequest(`/api/knowledge/files/upload-folder?db_id=${dbId}`, {
+      method: 'POST',
+      body: formData,
+      // 不设置 Content-Type，让浏览器自动设置 boundary
+    }, true, 'json')  // 需要认证，期望JSON响应
+  },
+
+  /**
+   * 处理文件夹（异步处理zip文件）
+   * @param {Object} data - 处理参数
+   * @param {string} data.file_path - 已上传的zip文件路径
+   * @param {string} data.db_id - 知识库ID
+   * @param {string} data.content_hash - 文件内容哈希
+   * @returns {Promise} - 处理任务结果
+   */
+  processFolder: async ({ file_path, db_id, content_hash }) => {
+    return apiAdminPost('/api/knowledge/files/process-folder', {
+      file_path,
+      db_id,
+      content_hash
+    })
   }
 }
 
@@ -240,5 +348,145 @@ export const embeddingApi = {
    */
   getAllModelsStatus: async () => {
     return apiAdminGet('/api/knowledge/embedding-models/status')
+  }
+}
+
+// =============================================================================
+// === RAG评估分组 ===
+// =============================================================================
+
+export const evaluationApi = {
+  /**
+   * 上传评估基准文件
+   * @param {string} dbId - 知识库ID
+   * @param {File} file - JSONL文件
+   * @param {Object} metadata - 基准元数据
+   * @returns {Promise} - 上传结果
+   */
+  uploadBenchmark: async (dbId, file, metadata = {}) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('name', metadata.name || '')
+    formData.append('description', metadata.description || '')
+
+    // 调试：打印 FormData 内容
+    console.log('FormData 内容:')
+    for (let [key, value] of formData.entries()) {
+      console.log(key, value)
+    }
+    console.log('file type:', file ? file.type : 'undefined')
+    console.log('file name:', file ? file.name : 'undefined')
+
+    // 直接传递 FormData，apiAdminPost 会正确处理
+    return apiAdminPost(`/api/evaluation/databases/${dbId}/benchmarks/upload`, formData)
+  },
+
+  /**
+   * 获取评估基准列表
+   * @param {string} dbId - 知识库ID
+   * @returns {Promise} - 基准列表
+   */
+  getBenchmarks: async (dbId) => {
+    return apiAdminGet(`/api/evaluation/databases/${dbId}/benchmarks`)
+  },
+
+  /**
+   * 获取评估基准详情
+   * @param {string} benchmarkId - 基准ID
+   * @returns {Promise} - 基准详情
+   */
+  getBenchmark: async (benchmarkId) => {
+    return apiAdminGet(`/api/evaluation/benchmarks/${benchmarkId}`)
+  },
+  /**
+   * 获取评估基准详情（带db_id）
+   * @param {string} dbId - 知识库ID
+   * @param {string} benchmarkId - 基准ID
+   */
+  getBenchmarkByDb: async (dbId, benchmarkId, page = 1, pageSize = 50) => {
+    const params = new URLSearchParams({
+      page: page.toString(),
+      page_size: pageSize.toString()
+    })
+    return apiAdminGet(`/api/evaluation/databases/${dbId}/benchmarks/${benchmarkId}?${params}`)
+  },
+
+  /**
+   * 删除评估基准
+   * @param {string} benchmarkId - 基准ID
+   * @returns {Promise} - 删除结果
+   */
+  deleteBenchmark: async (benchmarkId) => {
+    return apiAdminDelete(`/api/evaluation/benchmarks/${benchmarkId}`)
+  },
+
+  /**
+   * 自动生成评估基准
+   * @param {string} dbId - 知识库ID
+   * @param {Object} params - 生成参数
+   * @param {number} params.count - 生成问题数量
+   * @param {boolean} params.include_answers - 是否生成答案
+   * @param {Object} params.llm_config - LLM配置
+   * @returns {Promise} - 生成结果
+   */
+  generateBenchmark: async (dbId, params) => {
+    return apiAdminPost(`/api/evaluation/databases/${dbId}/benchmarks/generate`, params)
+  },
+
+  /**
+   * 运行RAG评估
+   * @param {string} dbId - 知识库ID
+   * @param {Object} params - 评估参数
+   * @param {string} params.benchmark_id - 基准ID
+   * @param {Object} params.retrieval_config - 检索配置
+   * @returns {Promise} - 评估任务ID
+   */
+  runEvaluation: async (dbId, params) => {
+    return apiAdminPost(`/api/evaluation/databases/${dbId}/run`, params)
+  },
+
+
+  /**
+   * 获取评估结果
+   * @param {string} taskId - 任务ID
+   * @returns {Promise} - 评估结果
+   */
+  getEvaluationResults: async (taskId) => {
+    // 已废弃：请改用 getEvaluationResultsByDb
+    return apiAdminGet(`/api/evaluation/${taskId}/results`)
+  },
+
+  /**
+   * 删除评估结果
+   * @param {string} taskId - 任务ID
+   * @returns {Promise} - 删除结果
+   */
+  deleteEvaluationResult: async (taskId) => {
+    // 已废弃：请改用 deleteEvaluationResultByDb
+    return apiAdminDelete(`/api/evaluation/${taskId}`)
+  },
+
+  // 新接口：带 db_id 的评估结果查询与删除
+  getEvaluationResultsByDb: async (dbId, taskId, params = {}) => {
+    const queryParams = new URLSearchParams();
+
+    if (params.page) queryParams.append('page', params.page);
+    if (params.pageSize) queryParams.append('page_size', params.pageSize);
+    if (params.errorOnly !== undefined) queryParams.append('error_only', params.errorOnly);
+
+    const url = `/api/evaluation/databases/${dbId}/results/${taskId}${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+    return apiAdminGet(url);
+  },
+  deleteEvaluationResultByDb: async (dbId, taskId) => {
+    return apiAdminDelete(`/api/evaluation/databases/${dbId}/results/${taskId}`)
+  },
+
+  /**
+   * 获取知识库的评估历史记录
+   * @param {string} dbId - 知识库ID
+   * @returns {Promise} - 评估历史列表
+   */
+  getEvaluationHistory: async (dbId) => {
+    return apiAdminGet(`/api/evaluation/databases/${dbId}/history`)
   }
 }

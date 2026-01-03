@@ -159,7 +159,7 @@ const handleRemoveAttachment = (fileId) => {
       top: -4px;
       right: -4px;
       background-color: var(--main-500);
-      color: white;
+      color: var(--gray-0);
       border-radius: 10px;
       width: 18px;
       height: 18px;
@@ -168,7 +168,7 @@ const handleRemoveAttachment = (fileId) => {
       align-items: center;
       justify-content: center;
       font-weight: 600;
-      border: 2px solid white;
+      border: 2px solid var(--gray-0);
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     }
   }
@@ -286,7 +286,7 @@ const handleRemoveAttachment = (fileId) => {
       transition: all 0.15s ease;
 
       &:hover:not(:disabled) {
-        color: var(--color-error);
+        color: var(--color-error-500);
       }
 
       &:disabled {

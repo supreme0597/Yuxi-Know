@@ -11,6 +11,7 @@ node_modules
 ### common gitignore
 .DS_Store
 .env
+.env.prod
 .env.test
 .env.local
 .env.*.local
@@ -23,11 +24,13 @@ logs
 *.log.*
 *.db
 *.lock
+!uv.lock
 tmp
 cache
 .cache
 .backup
 *.bak
+*._*
 
 
 ### IDE

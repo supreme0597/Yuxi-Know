@@ -1,11 +1,8 @@
 <script setup>
-import { ref, reactive, onMounted, useTemplateRef, computed } from 'vue'
+import { ref, reactive, onMounted, useTemplateRef, computed, provide } from 'vue'
 import { RouterLink, RouterView, useRoute } from 'vue-router'
-import {
-  GithubOutlined,
-  ExclamationCircleOutlined,
-} from '@ant-design/icons-vue'
-import { Bot, Waypoints, LibraryBig, Settings, BarChart3, BookOpen, CircleCheck } from 'lucide-vue-next';
+import { GithubOutlined } from '@ant-design/icons-vue'
+import { Bot, Waypoints, LibraryBig, BarChart3, CircleCheck } from 'lucide-vue-next';
 import { onLongPress } from '@vueuse/core'
 
 import { useConfigStore } from '@/stores/config'
@@ -16,6 +13,7 @@ import { storeToRefs } from 'pinia'
 import UserInfoComponent from '@/components/UserInfoComponent.vue'
 import DebugComponent from '@/components/DebugComponent.vue'
 import TaskCenterDrawer from '@/components/TaskCenterDrawer.vue'
+import SettingsModal from '@/components/SettingsModal.vue'
 
 const configStore = useConfigStore()
 const databaseStore = useDatabaseStore()
@@ -35,6 +33,14 @@ const isLoadingStars = ref(false)
 // Add state for debug modal
 const showDebugModal = ref(false)
 const htmlRefHook = useTemplateRef('htmlRefHook')
+
+// Add state for settings modal
+const showSettingsModal = ref(false)
+
+// Provide settings modal methods to child components
+const openSettingsModal = () => {
+  showSettingsModal.value = true
+}
 
 // Setup long press for debug modal
 onLongPress(
@@ -61,7 +67,7 @@ const getRemoteConfig = () => {
 }
 
 const getRemoteDatabase = () => {
-  databaseStore.getDatabaseInfo(undefined, false) // Explicitly load query params for remote database
+  databaseStore.loadDatabases()
 }
 
 // Fetch GitHub stars count
@@ -86,6 +92,8 @@ onMounted(async () => {
   getRemoteConfig()
   getRemoteDatabase()
   fetchGithubStars() // Fetch GitHub stars on mount
+  // 预加载任务数据，确保任务中心打开时有内容
+  taskerStore.loadTasks()
 })
 
 // 打印当前页面的路由信息，使用 vue3 的 setup composition API
@@ -117,6 +125,11 @@ const mainList = [{
     activeIcon: BarChart3,
   }
 ]
+
+// Provide settings modal methods to child components
+provide('settingsModal', {
+  openSettingsModal
+})
 </script>
 
 <template>
@@ -169,54 +182,33 @@ const mainList = [{
         <a-tooltip placement="right">
           <template #title>欢迎 Star</template>
           <a href="https://github.com/xerrors/Yuxi-Know" target="_blank" class="github-link">
-            <GithubOutlined class="icon" style="color: #222;"/>
+            <GithubOutlined class="icon" />
             <span v-if="githubStars > 0" class="github-stars">
               <span class="star-count">{{ (githubStars / 1000).toFixed(1) }}k</span>
             </span>
           </a>
         </a-tooltip>
       </div>
-      <div class="nav-item docs">
-        <a-tooltip placement="right">
-          <template #title>文档中心</template>
-          <a
-            href="https://xerrors.github.io/Yuxi-Know/"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="docs-link"
-          >
-            <BookOpen class="icon" size="22" />
-          </a>
-        </a-tooltip>
-      </div>
-      <!-- <div class="nav-item api-docs">
+
+
+        <!-- <div class="nav-item api-docs">
         <a-tooltip placement="right">
           <template #title>接口文档 {{ apiDocsUrl }}</template>
           <a :href="apiDocsUrl" target="_blank" class="github-link">
-            <ApiOutlined class="icon" style="color: #222;"/>
+            <ApiOutlined class="icon" style="color: var(--gray-1000);"/>
           </a>
         </a-tooltip>
       </div> -->
 
       <!-- 用户信息组件 -->
       <div class="nav-item user-info">
-        <a-tooltip placement="right">
-          <template #title>用户信息</template>
-          <UserInfoComponent />
-        </a-tooltip>
+        <UserInfoComponent />
       </div>
 
-      <RouterLink class="nav-item setting" to="/setting" active-class="active">
-        <a-tooltip placement="right">
-          <template #title>设置</template>
-          <Settings />
-        </a-tooltip>
-      </RouterLink>
-    </div>
+      </div>
     <div class="header-mobile">
-      <RouterLink to="/chat" class="nav-item" active-class="active">对话</RouterLink>
+      <RouterLink to="/agent" class="nav-item" active-class="active">对话</RouterLink>
       <RouterLink to="/database" class="nav-item" active-class="active">知识</RouterLink>
-      <RouterLink to="/setting" class="nav-item" active-class="active">设置</RouterLink>
     </div>
     <router-view v-slot="{ Component, route }" id="app-router-view">
       <keep-alive v-if="route.meta.keepAlive !== false">
@@ -239,6 +231,10 @@ const mainList = [{
       <DebugComponent />
     </a-modal>
     <TaskCenterDrawer />
+    <SettingsModal
+      v-model:visible="showSettingsModal"
+      @close="() => showSettingsModal = false"
+    />
   </div>
 </template>
 
@@ -323,7 +319,7 @@ div.header, #app-router-view {
       text-decoration: none;
       font-size: 24px;
       font-weight: bold;
-      color: #333;
+      color: var(--gray-900);
     }
   }
 
@@ -331,15 +327,15 @@ div.header, #app-router-view {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    height: 40px;
+    width: 36px;
+    height: 36px;
     padding: 4px;
     border: 1px solid transparent;
     border-radius: 12px;
     background-color: transparent;
-    color: #222;
+    color: var(--gray-1000);
     font-size: 20px;
-    transition: background-color 0.2s ease-in-out;
+    transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
     margin: 0;
     text-decoration: none;
     cursor: pointer;
@@ -353,13 +349,13 @@ div.header, #app-router-view {
     }
 
     &.active {
-      background-color: var(--gray-150);
+      background-color: var(--gray-100);
       font-weight: bold;
       color: var(--main-color);
     }
 
     &.warning {
-      color: red;
+      color: var(--color-error-500);
     }
 
     &:hover {
@@ -388,7 +384,7 @@ div.header, #app-router-view {
         margin-top: 4px;
 
         .star-icon {
-          color: #f0a742;
+          color: var(--color-warning-500);
           font-size: 12px;
           margin-right: 2px;
         }
@@ -402,16 +398,7 @@ div.header, #app-router-view {
     &.api-docs {
       padding: 10px 12px;
     }
-    &.docs {
-      padding: 10px 12px;
-      margin-bottom: 12px;
-
-      .docs-link {
-        display: flex;
-        align-items: center;
-        color: inherit;
-      }
-    }
+    &.docs { display: none; }
     &.task-center {
       .task-center-badge {
         width: 100%;
@@ -420,12 +407,24 @@ div.header, #app-router-view {
       }
     }
 
-    &.setting {
-      margin: 8px 0;
-
-      &:hover {
+    &.theme-toggle-nav {
+      .theme-toggle-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
         cursor: pointer;
+        color: var(--gray-1000);
+        transition: color 0.2s ease-in-out;
+
+        &:hover {
+          color: var(--main-color);
+        }
       }
+    }
+    &.user-info {
+      margin-bottom: 8px;
     }
   }
 
@@ -465,7 +464,7 @@ div.header, #app-router-view {
       transition: color 0.1s ease-in-out, font-size 0.1s ease-in-out;
 
       &.active {
-        color: black;
+        color: var(--gray-10000);
         font-size: 1.1rem;
       }
     }
@@ -541,7 +540,7 @@ div.header, #app-router-view {
       font-size: 15px;
     }
 
-    &.github, &.setting {
+    &.github {
       padding: 8px 12px;
 
       .icon {
@@ -552,9 +551,7 @@ div.header, #app-router-view {
       &.active {
         color: var(--main-color);
       }
-    }
 
-    &.github {
       a {
         display: flex;
         align-items: center;
@@ -566,9 +563,32 @@ div.header, #app-router-view {
         margin-left: 6px;
 
         .star-icon {
-          color: #f0a742;
+          color: var(--color-warning-500);
           font-size: 14px;
           margin-right: 2px;
+        }
+      }
+    }
+
+    &.theme-toggle-nav {
+      padding: 8px 12px;
+
+      .theme-toggle-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--gray-1000);
+        transition: color 0.2s ease-in-out;
+        cursor: pointer;
+
+        &:hover {
+          color: var(--main-color);
+        }
+      }
+
+      &.active {
+        .theme-toggle-icon {
+          color: var(--main-color);
         }
       }
     }

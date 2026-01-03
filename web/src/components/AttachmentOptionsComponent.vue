@@ -118,7 +118,7 @@ const processImageUpload = async (file) => {
         width: result.width,
         height: result.height,
         format: result.format,
-        mimeType: result.mime_type,
+        mimeType: result.mime_type || file.type,
         sizeBytes: result.size_bytes,
         originalName: file.name
       });
@@ -140,24 +140,6 @@ const processImageUpload = async (file) => {
   }
 };
 
-// 支持拖拽上传
-const handleDrop = (event) => {
-  event.preventDefault();
-  const files = event.dataTransfer.files;
-
-  if (files && files.length > 0) {
-    for (const file of files) {
-      if (file.type.startsWith('image/')) {
-        processImageUpload(file);
-        break; // 一次只处理一张图片
-      }
-    }
-  }
-};
-
-const handleDragOver = (event) => {
-  event.preventDefault();
-};
 </script>
 
 <style lang="less" scoped>

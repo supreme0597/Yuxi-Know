@@ -16,10 +16,7 @@
           <router-link to="/database" class="nav-link" v-if="userStore.isLoggedIn && userStore.isAdmin">
             <span>知识库</span>
           </router-link>
-          <router-link to="/setting" class="nav-link" v-if="userStore.isLoggedIn && userStore.isAdmin">
-            <span>设置</span>
-          </router-link>
-        </nav>
+          </nav>
         <div class="header-actions">
           <div class="github-link">
             <a href="https://github.com/xerrors/Yuxi-Know" target="_blank">
@@ -78,6 +75,8 @@
       </div>
     </div>
 
+    <ProjectOverview />
+
     <footer class="footer">
       <div class="footer-content">
         <p class="copyright">{{ infoStore.footer?.copyright || '© 2025 All rights reserved' }}</p>
@@ -92,7 +91,9 @@ import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useInfoStore } from '@/stores/info'
 import { useAgentStore } from '@/stores/agent'
+import { useThemeStore } from '@/stores/theme'
 import UserInfoComponent from '@/components/UserInfoComponent.vue'
+import ProjectOverview from '@/components/ProjectOverview.vue'
 import {
   BookText,
   Bug,
@@ -109,6 +110,7 @@ const router = useRouter()
 const userStore = useUserStore()
 const infoStore = useInfoStore()
 const agentStore = useAgentStore()
+const themeStore = useThemeStore()
 
 const goToChat = async () => {
   // 检查用户是否登录
@@ -148,6 +150,7 @@ onMounted(async () => {
 
 const iconKey = (value) => typeof value === 'string' ? value.toLowerCase() : ''
 
+// region icon_mapping
 const featureIconMap = {
   stars: Star,
   issues: CheckCircle2,
@@ -170,6 +173,7 @@ const actionIconMap = {
   github: Github,
   default: Github
 }
+// endregion icon_mapping
 
 const featureCards = computed(() => {
   const list = Array.isArray(infoStore.features) ? infoStore.features : []
@@ -217,7 +221,7 @@ const actionLinks = computed(() => {
 
 <style lang="less" scoped>
 .home-container {
-  height: 100vh;
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
   color: var(--main-900);
@@ -225,14 +229,13 @@ const actionLinks = computed(() => {
   position: relative;
   overflow-x: hidden;
 }
-
 .glass-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   width: 100%;
   padding: 0.75rem 2.5rem;
-  background-color: rgba(255, 255, 255, 0.85);
+  background-color: var(--color-trans-light);
   backdrop-filter: blur(20px);
   // border-bottom: 1px solid var(--main-30);
   position: fixed;
@@ -255,7 +258,7 @@ const actionLinks = computed(() => {
   gap: 0.5rem;
   padding: 0.6rem 1rem;
   text-decoration: none;
-  color: #555;
+  color: var(--gray-800);
   font-weight: 500;
   font-size: 0.95rem;
   transition: color 0.2s ease;
@@ -263,7 +266,7 @@ const actionLinks = computed(() => {
   overflow: hidden;
 
   &:hover {
-    color: #333;
+    color: var(--gray-900);
 
     svg {
       transform: scale(1.1);
@@ -272,7 +275,7 @@ const actionLinks = computed(() => {
 
   &.router-link-active {
       background: linear-gradient(135deg, var(--main-600), var(--main-500));
-      color: white;
+      color: var(--gray-0);
       border-radius: 1.5rem;
 
       &:hover {
@@ -313,14 +316,14 @@ const actionLinks = computed(() => {
   display: flex;
   align-items: center;
   text-decoration: none;
-  color: #555;
+  color: var(--gray-600);
   padding: 0.6rem 1rem;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   font-size: 0.9rem;
   font-weight: 500;
 
   &:hover {
-    color: #333;
+    color: var(--gray-700);
 
     svg {
       transform: scale(1.1);
@@ -330,10 +333,20 @@ const actionLinks = computed(() => {
   svg {
     margin-right: 6px;
     transition: transform 0.3s ease;
+    fill: currentColor;
   }
 
   .stars-count {
     font-weight: 600;
+  }
+
+  // 暗色模式样式
+  :global(.dark) & {
+    color: var(--gray-400);
+
+    &:hover {
+      color: var(--gray-300);
+    }
   }
 }
 
@@ -418,7 +431,7 @@ const actionLinks = computed(() => {
 
 .button-base.primary {
   background: linear-gradient(135deg, var(--main-600), var(--main-500));
-  color: #fff;
+  color: var(--gray-0);
   border-color: transparent;
 
   &:hover {
@@ -498,7 +511,7 @@ const actionLinks = computed(() => {
 .section {
   width: 100%;
   max-width: 1200px;
-  margin: 0 auto;
+  margin: 50px auto 0px auto;
   padding: 2rem 0;
 }
 
@@ -623,7 +636,7 @@ const actionLinks = computed(() => {
     transition: opacity 0.3s ease;
 
     .overlay-content {
-      color: white;
+      color: var(--gray-0);
 
       h3 {
         font-size: 1.5rem;

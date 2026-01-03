@@ -13,20 +13,60 @@
               @press-enter.prevent="onQuery"
             />
             <div class="search-actions">
-              <a-switch
-                v-model:checked="showRawData"
-                checked-children="格式化"
-                un-checked-children="原始"
-              />
-              <a-button
-                @click="onQuery"
-                :loading="searchLoading"
-                class="search-button"
-                type="primary"
-                :disabled="!queryText.trim()"
-                :icon=h(SearchOutlined)
-                shape="circle"
-              />
+                <div class="query-examples-compact">
+                  <div class="examples-label-group">
+                    <a-tooltip title="点击手动生成测试问题" placement="bottom">
+                      <a-button
+                      type="text"
+                      size="small"
+                      class="examples-label-btn"
+                      @click="() => generateSampleQuestions(false)"
+                    >
+                      示例:
+                    </a-button>
+                  </a-tooltip>
+                </div>
+                <div class="examples-container">
+                  <!-- 加载中或生成中 -->
+                  <div v-if="loadingQuestions || generatingQuestions" class="loading-text">
+                    <a-spin size="small" />
+                    <span>{{ generatingQuestions ? 'AI生成中...' : '加载中...' }}</span>
+                  </div>
+
+                  <!-- 示例轮播 -->
+                  <transition v-else-if="queryExamples.length > 0" name="fade" mode="out-in">
+                    <a-button
+                      type="link"
+                      :key="currentExampleIndex"
+                      @click="useQueryExample(queryExamples[currentExampleIndex])"
+                      size="small"
+                      class="example-btn"
+                    >
+                      {{ queryExamples[currentExampleIndex] }}
+                    </a-button>
+                  </transition>
+
+                  <!-- 空状态 - 添加文件后会自动生成 -->
+                  <span v-else style="color: var(--gray-500); font-size: 12px;">暂无问题，请点击左侧按钮生成</span>
+                </div>
+              </div>
+              <div style="display: flex; gap: 12px; align-items: center;">
+                <a-switch
+                  v-if="!isLightRAG"
+                  v-model:checked="showRawData"
+                  checked-children="格式化"
+                  un-checked-children="原始"
+                />
+                <a-button
+                  @click="onQuery"
+                  :loading="searchLoading"
+                  class="search-button"
+                  type="primary"
+                  :disabled="!queryText.trim()"
+                  :icon=h(SearchOutlined)
+                  shape="circle"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -44,7 +84,7 @@
               {{ queryResult }}
             </div>
 
-            <!-- Chroma/Milvus 返回列表格式 -->
+            <!-- Milvus 返回列表格式 -->
             <div v-else-if="Array.isArray(queryResult)" class="result-list">
               <div v-if="queryResult.length === 0" class="no-results">
                 <p>未找到相关结果</p>
@@ -102,12 +142,13 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, h } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch, h } from 'vue';
 import { useDatabaseStore } from '@/stores/database';
 import { message } from 'ant-design-vue';
 import { queryApi } from '@/apis/knowledge_api';
 import {
   SearchOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons-vue';
 
 const store = useDatabaseStore();
@@ -123,13 +164,156 @@ const props = defineProps({
   },
 });
 
+// 声明事件
+const emit = defineEmits(['toggleVisible']);
 
 const searchLoading = computed(() => store.state.searchLoading);
 const queryResult = ref('');
 const showRawData = ref(true);
 
+// 判断是否为 LightRAG 类型知识库
+const isLightRAG = computed(() => store.database?.kb_type?.toLowerCase() === 'lightrag');
+
 // 查询测试
 const queryText = ref('');
+
+// 示例问题相关
+const queryExamples = ref([]);
+const currentExampleIndex = ref(0);
+const loadingQuestions = ref(false);
+const generatingQuestions = ref(false);
+const searchConfigModalVisible = ref(false);
+
+// 示例轮播相关
+let exampleCarouselInterval = null;
+
+// 方法定义
+
+// 打开检索配置弹窗
+const openSearchConfigModal = () => {
+  searchConfigModalVisible.value = true;
+};
+
+// 处理检索配置保存
+const handleSearchConfigSave = (config) => {
+  console.log('查询测试中的检索配置已更新:', config);
+  // 可以在这里添加配置更新后的处理逻辑，比如重新查询
+};
+
+// 加载示例问题
+const loadSampleQuestions = async () => {
+  if (!store.database?.db_id) return;
+
+  try {
+    loadingQuestions.value = true;
+    const data = await queryApi.getSampleQuestions(store.database.db_id);
+    if (data.questions && data.questions.length > 0) {
+      queryExamples.value = data.questions;
+    } else {
+      // 如果没有问题，清空列表
+      queryExamples.value = [];
+    }
+  } catch (error) {
+    // 404表示还没有生成问题，清空问题列表
+    if (error.status === 404 || error?.message?.includes('404') || error?.message?.includes('还没有生成')) {
+      queryExamples.value = [];
+    } else {
+      console.error('加载示例问题失败:', error);
+    }
+  } finally {
+    loadingQuestions.value = false;
+  }
+};
+
+// 清空问题列表
+const clearQuestions = () => {
+  queryExamples.value = [];
+  currentExampleIndex.value = 0;
+  stopExampleCarousel();
+};
+
+// 生成示例问题
+const generateSampleQuestions = async (silent = false) => {
+  if (!store.database?.db_id) return;
+
+  try {
+    generatingQuestions.value = true;
+    const data = await queryApi.generateSampleQuestions(store.database.db_id, 10);
+    if (data.questions && data.questions.length > 0) {
+      queryExamples.value = data.questions;
+      if (!silent) {
+        message.success(`成功生成 ${data.questions.length} 个测试问题`);
+      }
+      // 开始轮播
+      if (!exampleCarouselInterval) {
+        startExampleCarousel();
+      }
+    }
+  } catch (error) {
+    console.error('生成示例问题失败:', error);
+    // 静默模式下不显示错误消息（自动生成时）
+    if (!silent) {
+      // 提取详细错误信息
+      let errorMsg = '未知错误';
+      if (error.response?.data?.detail) {
+        errorMsg = error.response.data.detail;
+      } else if (error.detail) {
+        errorMsg = error.detail;
+      } else if (error.message) {
+        errorMsg = error.message;
+      } else if (typeof error === 'string') {
+        errorMsg = error;
+      } else {
+        errorMsg = JSON.stringify(error);
+      }
+      message.error('生成失败: ' + errorMsg);
+    }
+  } finally {
+    generatingQuestions.value = false;
+  }
+};
+
+const useQueryExample = (example) => {
+  queryText.value = example;
+  onQuery();
+};
+
+const startExampleCarousel = () => {
+  if (exampleCarouselInterval) return;
+
+  exampleCarouselInterval = setInterval(() => {
+    currentExampleIndex.value = (currentExampleIndex.value + 1) % queryExamples.value.length;
+  }, 10000); // 每10秒切换一次
+};
+
+const stopExampleCarousel = () => {
+  if (exampleCarouselInterval) {
+    clearInterval(exampleCarouselInterval);
+    exampleCarouselInterval = null;
+  }
+};
+
+// 监听知识库ID变化，切换知识库时重新加载问题
+watch(
+  () => store.database?.db_id,
+  async (newDbId, oldDbId) => {
+    // 如果知识库ID发生变化
+    if (newDbId && newDbId !== oldDbId) {
+      // 停止当前轮播
+      stopExampleCarousel();
+      // 清空当前问题列表
+      queryExamples.value = [];
+      currentExampleIndex.value = 0;
+      // 重新加载新知识库的问题
+      await loadSampleQuestions();
+      // 如果有问题，启动轮播
+      if (queryExamples.value.length > 0) {
+        startExampleCarousel();
+      }
+    }
+  },
+  { immediate: false }
+);
 
 
 const onQuery = async () => {
@@ -156,10 +340,39 @@ const onQuery = async () => {
   }
 };
 
-// 组件挂载时加载查询参数
-onMounted(() => {
+// 组件挂载时启动示例轮播
+onMounted(async () => {
   // 加载查询参数
   store.loadQueryParams();
+
+  // 加载示例问题
+  await loadSampleQuestions();
+
+  // 如果有示例问题，启动轮播
+  if (queryExamples.value.length > 0) {
+    startExampleCarousel();
+  }
+  // 不自动生成，只在创建知识库和添加文件时由 DataBaseInfoView 触发生成
+});
+
+// 组件卸载时停止示例轮播
+onUnmounted(() => {
+  // 停止示例轮播
+  stopExampleCarousel();
+});
+
+// 检查是否已有问题
+const hasQuestions = () => {
+  return queryExamples.value.length > 0;
+};
+
+// 暴露给父组件的方法和属性
+defineExpose({
+  generateSampleQuestions,
+  loadSampleQuestions,
+  hasQuestions,
+  clearQuestions,
+  queryExamples
 });
 </script>
 
@@ -200,12 +413,12 @@ onMounted(() => {
   border-radius: 12px;
   border: 1px solid var(--gray-200);
   background-color: var(--gray-0);
-  box-shadow: 0 1px 3px rgba(23, 23, 23, 0.05);
+  box-shadow: 0 1px 3px var(--shadow-1);
   transition: border-color 0.5s ease, box-shadow 0.5s ease;
 
   &:hover {
     border-color: var(--main-400);
-    box-shadow: 0 4px 12px rgba(1, 97, 121, 0.08);
+    box-shadow: 0 4px 12px var(--shadow-2);
   }
 
   :deep(.ant-input) {
@@ -239,7 +452,7 @@ onMounted(() => {
 .search-button {
   background-color: var(--main-color);
   border-color: var(--main-color);
-  box-shadow: 0 2px 4px rgba(1, 97, 121, 0.15);
+  box-shadow: 0 2px 4px var(--shadow-3);
   transition: all 0.2s ease;
 
   &:hover:not(:disabled) {
@@ -347,8 +560,8 @@ onMounted(() => {
         }
 
         .result-rerank-score {
-          background-color: var(--stats-warning-bg);
-          color: var(--stats-warning-color);
+          background-color: var(--color-warning-50);
+          color: var(--color-warning-700);
         }
       }
 
@@ -393,6 +606,69 @@ onMounted(() => {
       color: var(--gray-1000);
     }
   }
+}
+
+.query-examples-compact {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.examples-label-btn {
+  color: var(--gray-500);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  margin-left: -8px;
+  margin-right: -6px;
+
+  &:hover {
+    color: var(--main-color);
+    background-color: var(--gray-100);
+  }
+
+  .anticon { /* Target Ant Design icons directly */
+    font-size: 10px; /* Make icon smaller */
+  }
+}
+
+.examples-container {
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+}
+
+.loading-text {
+  font-size: 12px;
+  color: var(--gray-400);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.example-btn {
+  text-align: left;
+  white-space: normal;
+  height: auto;
+  padding: 0;
+  font-size: 12px;
+  color: var(--gray-500);
+
+  &:hover {
+    color: var(--main-color);
+  }
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 
 </style>

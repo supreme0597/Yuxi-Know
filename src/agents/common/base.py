@@ -23,11 +23,11 @@ class BaseAgent:
     name = "base_agent"
     description = "base_agent"
     capabilities: list[str] = []  # 智能体能力列表，如 ["file_upload", "web_search"] 等
+    context_schema: type[BaseContext] = BaseContext  # 智能体上下文 schema
 
     def __init__(self, **kwargs):
         self.graph = None  # will be covered by get_graph
         self.checkpointer = None
-        self.context_schema = BaseContext
         self.workdir = Path(sys_config.save_dir) / "agents" / self.module_name
         self.workdir.mkdir(parents=True, exist_ok=True)
         self._metadata_cache = None  # Cache for metadata to avoid repeated file reads
@@ -74,7 +74,7 @@ class BaseAgent:
 
         # 从 input_context 中提取 attachments（如果有）
         attachments = (input_context or {}).get("attachments", [])
-        input_config = {"configurable": input_context, "recursion_limit": 100}
+        input_config = {"configurable": input_context, "recursion_limit": 300}
 
         async for msg, metadata in graph.astream(
             {"messages": messages, "attachments": attachments},
@@ -132,6 +132,11 @@ class BaseAgent:
             logger.error(f"获取智能体 {self.name} 历史消息出错: {e}")
             return []
 
+    def reload_graph(self):
+        """重置 graph 缓存，强制下次调用 get_graph 时重新构建"""
+        self.graph = None
+        logger.info(f"{self.name} graph 缓存已清空，将在下次调用时重新构建")
+
     @abstractmethod
     async def get_graph(self, **kwargs) -> CompiledStateGraph:
         """
@@ -156,7 +161,11 @@ class BaseAgent:
 
     async def get_async_conn(self) -> aiosqlite.Connection:
         """获取异步数据库连接"""
-        return await aiosqlite.connect(os.path.join(self.workdir, "aio_history.db"))
+        conn = await aiosqlite.connect(os.path.join(self.workdir, "aio_history.db"))
+        # Patch: langgraph's AsyncSqliteSaver expects is_alive() method which aiosqlite may not have
+        if not hasattr(conn, "is_alive"):
+            conn.is_alive = lambda: True
+        return conn
 
     async def get_aio_memory(self) -> AsyncSqliteSaver:
         """获取异步存储实例"""

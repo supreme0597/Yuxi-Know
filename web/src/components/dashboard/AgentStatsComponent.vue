@@ -7,7 +7,7 @@
           <a-statistic
             title="智能体总数"
             :value="agentStats?.total_agents || 0"
-            :value-style="{ color: 'var(--chart-info)' }"
+            :value-style="{ color: 'var(--color-info-500)' }"
             suffix="个"
           />
         </a-col>
@@ -15,7 +15,7 @@
           <a-statistic
             title="总对话数"
             :value="totalConversations"
-            :value-style="{ color: 'var(--chart-secondary)' }"
+            :value-style="{ color: 'var(--color-accent-500)' }"
             suffix="次"
           />
         </a-col>
@@ -23,7 +23,7 @@
           <a-statistic
             title="工具调用总数"
             :value="totalToolUsage"
-            :value-style="{ color: 'var(--chart-warning)' }"
+            :value-style="{ color: 'var(--color-warning-500)' }"
             suffix="次"
           />
         </a-col>
@@ -37,7 +37,7 @@
       <!-- 对话数和工具调用数分布 -->
       <a-col :span="24">
         <div class="chart-container">
-          <h4>对话/工具调用分布</h4>
+          <h4>对话/工具调用分布 (TOP 3)</h4>
           <div ref="conversationToolChartRef" class="chart"></div>
         </div>
       </a-col>
@@ -65,22 +65,13 @@
           <template v-if="column.key === 'agent_id'">
             <a-tag color="blue">{{ record.agent_id }}</a-tag>
           </template>
-          <template v-if="column.key === 'score'">
-            <a-progress
-              :percent="record.score"
-              size="small"
-              :stroke-color="getScoreColor(record.score)"
-              :show-info="true"
-              :format="(percent) => `${percent}分`"
-            />
-          </template>
           <template v-if="column.key === 'satisfaction_rate'">
             <a-statistic
               :value="record.satisfaction_rate"
               suffix="%"
               :value-style="{
-                color: record.satisfaction_rate >= 80 ? 'var(--chart-success)' :
-                       record.satisfaction_rate >= 60 ? 'var(--chart-warning)' : 'var(--chart-error)',
+                color: record.satisfaction_rate >= 80 ? 'var(--color-success-500)' :
+                       record.satisfaction_rate >= 60 ? 'var(--color-warning-500)' : 'var(--color-error-500)',
                 fontSize: '14px'
               }"
             />
@@ -98,7 +89,16 @@
 <script setup>
 import { ref, onMounted, watch, nextTick, computed } from 'vue'
 import * as echarts from 'echarts'
-import { getColorByIndex, getChartColor } from '@/utils/chartColors'
+import { getColorByIndex } from '@/utils/chartColors'
+import { useThemeStore } from '@/stores/theme'
+
+// CSS 变量解析工具函数
+function getCSSVariable(variableName, element = document.documentElement) {
+  return getComputedStyle(element).getPropertyValue(variableName).trim()
+}
+
+// theme store
+const themeStore = useThemeStore()
 
 // Props
 const props = defineProps({
@@ -127,23 +127,18 @@ const performerColumns = [
   {
     title: '智能体ID',
     key: 'agent_id',
-    width: '25%'
-  },
-  {
-    title: '综合评分',
-    key: 'score',
-    width: '20%'
+    width: '30%'
   },
   {
     title: '满意度',
     key: 'satisfaction_rate',
-    width: '20%',
+    width: '25%',
     align: 'center'
   },
   {
     title: '对话数',
     key: 'conversation_count',
-    width: '15%',
+    width: '20%',
     align: 'center'
   }
 ]
@@ -163,12 +158,6 @@ const topPerformers = computed(() => {
   return props.agentStats?.top_performing_agents || []
 })
 
-// 颜色辅助函数
-const getScoreColor = (score) => {
-  if (score >= 80) return getChartColor('primary')
-  if (score >= 60) return getChartColor('warning')
-  return getChartColor('accent')
-}
 
 
 // 初始化对话数和工具调用数合并图表
@@ -177,25 +166,51 @@ const initConversationToolChart = () => {
       (!props.agentStats?.agent_conversation_counts?.length &&
        !props.agentStats?.agent_tool_usage?.length)) return
 
+  // 如果已存在图表实例，先销毁
+  if (conversationToolChart) {
+    conversationToolChart.dispose()
+    conversationToolChart = null
+  }
+
   conversationToolChart = echarts.init(conversationToolChartRef.value)
 
   const conversationData = props.agentStats.agent_conversation_counts || []
   const toolData = props.agentStats.agent_tool_usage || []
 
-  // 获取所有智能体ID
-  const allAgentIds = [...new Set([
-    ...conversationData.map(item => item.agent_id),
-    ...toolData.map(item => item.agent_id)
-  ])]
+  // 获取所有智能体ID并按对话数+工具调用数排序，取前3个
+  const allAgentStats = {}
+
+  // 统计每个智能体的总数据量（对话数 + 工具调用数）
+  conversationData.forEach(item => {
+    if (!allAgentStats[item.agent_id]) {
+      allAgentStats[item.agent_id] = { conversation: 0, tool: 0, total: 0 }
+    }
+    allAgentStats[item.agent_id].conversation = item.conversation_count
+    allAgentStats[item.agent_id].total += item.conversation_count
+  })
+
+  toolData.forEach(item => {
+    if (!allAgentStats[item.agent_id]) {
+      allAgentStats[item.agent_id] = { conversation: 0, tool: 0, total: 0 }
+    }
+    allAgentStats[item.agent_id].tool = item.tool_usage_count
+    allAgentStats[item.agent_id].total += item.tool_usage_count
+  })
+
+  // 按总数据量降序排序，取前3个
+  const topAgentIds = Object.entries(allAgentStats)
+    .sort(([,a], [,b]) => b.total - a.total)
+    .slice(0, 3)
+    .map(([agentId]) => agentId)
 
   const option = {
     tooltip: {
       trigger: 'axis',
-      backgroundColor: 'rgba(255, 255, 255, 0.95)',
-      borderColor: '#e8e8e8',
+      backgroundColor: getCSSVariable('--gray-0'),
+      borderColor: getCSSVariable('--gray-200'),
       borderWidth: 1,
       textStyle: {
-        color: '#666'
+        color: getCSSVariable('--gray-600')
       }
     },
     legend: {
@@ -204,7 +219,7 @@ const initConversationToolChart = () => {
       top: '0%',
       orient: 'horizontal',
       textStyle: {
-        color: '#666'
+        color: getCSSVariable('--gray-500')
       }
     },
     grid: {
@@ -216,14 +231,14 @@ const initConversationToolChart = () => {
     },
     xAxis: {
       type: 'category',
-      data: allAgentIds,
+      data: topAgentIds,
       axisLine: {
         lineStyle: {
-          color: '#e8e8e8'
+          color: getCSSVariable('--gray-200')
         }
       },
       axisLabel: {
-        color: '#666',
+        color: getCSSVariable('--gray-500'),
         interval: 0,
         // rotate: 45
       }
@@ -232,15 +247,15 @@ const initConversationToolChart = () => {
       type: 'value',
       axisLine: {
         lineStyle: {
-          color: '#e8e8e8'
+          color: getCSSVariable('--gray-200')
         }
       },
       axisLabel: {
-        color: '#666'
+        color: getCSSVariable('--gray-500')
       },
       splitLine: {
         lineStyle: {
-          color: '#f0f0f0'
+          color: getCSSVariable('--gray-150')
         }
       }
     },
@@ -248,38 +263,38 @@ const initConversationToolChart = () => {
       {
         name: '对话数',
         type: 'bar',
-        data: allAgentIds.map(agentId => {
+        data: topAgentIds.map(agentId => {
           const item = conversationData.find(d => d.agent_id === agentId)
           return item ? item.conversation_count : 0
         }),
         itemStyle: {
-          color: getChartColor('primary'),
+          color: getColorByIndex(0),
           borderRadius: [4, 4, 0, 0]
         },
         emphasis: {
           itemStyle: {
-            color: getChartColor('primary'),
+            color: getColorByIndex(0),
             shadowBlur: 10,
-            shadowColor: 'rgba(2, 142, 160, 0.3)'
+            shadowColor: getCSSVariable('--color-info-50')
           }
         }
       },
       {
         name: '工具调用数',
         type: 'bar',
-        data: allAgentIds.map(agentId => {
+        data: topAgentIds.map(agentId => {
           const item = toolData.find(d => d.agent_id === agentId)
           return item ? item.tool_usage_count : 0
         }),
         itemStyle: {
-          color: getChartColor('accent'),
+          color: getColorByIndex(1),
           borderRadius: [4, 4, 0, 0]
         },
         emphasis: {
           itemStyle: {
-            color: getChartColor('primary'),
+            color: getColorByIndex(1),
             shadowBlur: 10,
-            shadowColor: 'rgba(2, 142, 160, 0.3)'
+            shadowColor: getCSSVariable('--color-info-50')
           }
         }
       }
@@ -313,6 +328,15 @@ onMounted(() => {
   window.addEventListener('resize', handleResize)
 })
 
+// 监听主题变化，重新渲染图表
+watch(() => themeStore.isDark, () => {
+  if (props.agentStats && conversationToolChart) {
+    nextTick(() => {
+      updateCharts()
+    })
+  }
+})
+
 // 组件卸载时清理
 const cleanup = () => {
   window.removeEventListener('resize', handleResize)
@@ -329,6 +353,39 @@ defineExpose({
 </script>
 
 <style scoped lang="less">
+
+/* 指标值样式 */
+.metric-value {
+  font-weight: 500;
+  color: var(--gray-1000);
+  font-size: 14px;
+}
+
+
+/* 排名显示样式 */
+.rank-display {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  .rank-medal {
+    font-size: 20px;
+  }
+
+  .rank-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    background-color: var(--gray-100);
+    border-radius: 50%;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--gray-600);
+    border: 1px solid var(--gray-200);
+  }
+}
 
 // AgentStatsComponent 特有的样式
 .top-performers, .metrics-comparison {
@@ -353,4 +410,9 @@ defineExpose({
 :deep(.ant-progress-bg) {
   transition: all 0.3s ease;
 }
+
+:deep(.ant-statistic-content-value) {
+  font-weight: bold !important;
+}
+
 </style>

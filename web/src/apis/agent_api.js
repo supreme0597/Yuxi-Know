@@ -74,6 +74,14 @@ export const agentApi = {
   getAgentHistory: (agentId, threadId) => apiGet(`/api/chat/agent/${agentId}/history?thread_id=${threadId}`),
 
   /**
+   * 获取指定会话的 AgentState
+   * @param {string} agentId - 智能体ID
+   * @param {string} threadId - 会话ID
+   * @returns {Promise} - AgentState
+   */
+  getAgentState: (agentId, threadId) => apiGet(`/api/chat/agent/${agentId}/state?thread_id=${threadId}`),
+
+  /**
    * Submit feedback for a message
    * @param {number} messageId - Message ID
    * @param {string} rating - 'like' or 'dislike'
@@ -118,10 +126,13 @@ export const agentApi = {
    * 保存智能体配置
    * @param {string} agentName - 智能体名称
    * @param {Object} config - 配置对象
+   * @param {Object} options - 额外参数 (e.g., { reload_graph: true })
    * @returns {Promise} - 保存结果
    */
-  saveAgentConfig: async (agentName, config) => {
-    return apiAdminPost(`/api/chat/agent/${agentName}/config`, config)
+  saveAgentConfig: async (agentName, config, options = {}) => {
+    const queryParams = new URLSearchParams(options).toString();
+    const url = `/api/chat/agent/${agentName}/config` + (queryParams ? `?${queryParams}` : '');
+    return apiAdminPost(url, config)
   },
 
   /**
@@ -132,12 +143,6 @@ export const agentApi = {
   setDefaultAgent: async (agentId) => {
     return apiAdminPost('/api/chat/set_default_agent', { agent_id: agentId })
   },
-
-  /**
-   * 获取所有可用工具的信息
-   * @returns {Promise} - 工具信息列表
-   */
-  getTools: (agentId) => apiGet(`/api/chat/tools?agent_id=${agentId}`),
 
   /**
    * 恢复被人工审批中断的对话（流式响应）
