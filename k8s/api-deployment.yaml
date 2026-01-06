@@ -1,0 +1,127 @@
+---
+# API Server Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: yuxi-api
+  namespace: yuxi-know
+  labels:
+    app: yuxi-api
+    component: backend
+spec:
+  replicas: 3  # 多副本支持水平扩展
+  selector:
+    matchLabels:
+      app: yuxi-api
+  template:
+    metadata:
+      labels:
+        app: yuxi-api
+        component: backend
+    spec:
+      containers:
+      - name: api
+        image: yuxi-api:0.4.prod  # 替换为你的镜像
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5050
+          name: http
+          protocol: TCP
+        
+        # 环境变量（从 ConfigMap 和 Secret 注入）
+        envFrom:
+        - configMapRef:
+            name: yuxi-know-config
+        - secretRef:
+            name: yuxi-know-secrets
+        
+        # 资源限制
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        
+        # 健康检查
+        livenessProbe:
+          httpGet:
+            path: /api/system/health
+            port: 5050
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /api/system/health
+            port: 5050
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        # 挂载持久化存储
+        volumeMounts:
+        - name: saves
+          mountPath: /app/saves
+        - name: models
+          mountPath: /models
+          readOnly: true
+      
+      volumes:
+      - name: saves
+        persistentVolumeClaim:
+          claimName: yuxi-saves-pvc
+      - name: models
+        persistentVolumeClaim:
+          claimName: yuxi-models-pvc
+
+---
+# API Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: yuxi-api-service
+  namespace: yuxi-know
+  labels:
+    app: yuxi-api
+spec:
+  type: ClusterIP
+  selector:
+    app: yuxi-api
+  ports:
+  - name: http
+    port: 5050
+    targetPort: 5050
+    protocol: TCP
+
+---
+# HorizontalPodAutoscaler - 自动扩缩容
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: yuxi-api-hpa
+  namespace: yuxi-know
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: yuxi-api
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80

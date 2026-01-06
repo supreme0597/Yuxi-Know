@@ -1,0 +1,31 @@
+---
+# K8s ConfigMap - 应用配置
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: yuxi-know-config
+  namespace: yuxi-know
+data:
+  # 数据库配置
+  DATABASE_URL: "postgresql+asyncpg://yuxi:PLACEHOLDER_PASSWORD@postgres-service:5432/yuxi_know"
+  DATABASE_URL_SYNC: "postgresql://yuxi:PLACEHOLDER_PASSWORD@postgres-service:5432/yuxi_know"
+  
+  # 存储配置
+  SAVE_DIR: "/app/saves"
+  MODEL_DIR: "/models"
+  
+  # 配置模式（关键：启用数据库配置）
+  CONFIG_MODE: "database"
+  
+  # 外部服务地址
+  MILVUS_URI: "http://milvus-service:19530"
+  NEO4J_URI: "bolt://neo4j-service:7687"
+  NEO4J_USERNAME: "neo4j"
+  MINIO_URI: "http://minio-service:9000"
+  
+  # Redis 配置（用于分布式锁和缓存）
+  REDIS_HOST: "redis-service"
+  REDIS_PORT: "6379"
+  
+  # 运行时标识
+  RUNNING_IN_DOCKER: "true"

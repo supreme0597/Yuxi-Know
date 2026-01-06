@@ -348,3 +348,26 @@ class MessageFeedback(Base):
             "reason": self.reason,
             "created_at": format_utc_datetime(self.created_at),
         }
+
+
+class SystemConfig(Base):
+    """系统动态配置表"""
+
+    __tablename__ = "system_configs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    key = Column(String(255), unique=True, index=True, nullable=False, comment="配置键")
+    value = Column(JSON, nullable=False, comment="配置值 (JSON格式)")
+    category = Column(String(50), index=True, nullable=True, comment="配置分类")
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, comment="更新时间")
+
+
+class GlobalMetadata(Base):
+    """全局元数据存储表 (用于替代原有的本地 JSON 文件存储，如知识库列表)"""
+
+    __tablename__ = "global_metadata"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    key = Column(String(255), unique=True, index=True, nullable=False, comment="元数据键")
+    content = Column(JSON, nullable=False, comment="元数据内容")
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, comment="更新时间")

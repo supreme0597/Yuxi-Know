@@ -1,0 +1,29 @@
+---
+# PersistentVolumeClaim - 共享存储 (saves 目录)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: yuxi-saves-pvc
+  namespace: yuxi-know
+spec:
+  accessModes:
+  - ReadWriteMany  # 多个 Pod 可同时读写
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: nfs-storage  # 替换为你的存储类
+
+---
+# PersistentVolumeClaim - 模型存储 (只读)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: yuxi-models-pvc
+  namespace: yuxi-know
+spec:
+  accessModes:
+  - ReadOnlyMany  # 多个 Pod 只读
+  resources:
+    requests:
+      storage: 100Gi
+  storageClassName: nfs-storage

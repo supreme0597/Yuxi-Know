@@ -25,6 +25,18 @@ from src.config.static.models import (
 )
 from src.utils.logging_config import logger
 
+# 延迟导入 db_manager 避免循环依赖
+_db_manager = None
+
+
+def get_db_manager():
+    """延迟获取数据库管理器实例"""
+    global _db_manager
+    if _db_manager is None:
+        from src.storage.db.manager import db_manager
+        _db_manager = db_manager
+    return _db_manager
+
 
 class Config(BaseModel):
     """应用配置类"""
@@ -109,12 +121,15 @@ class Config(BaseModel):
     _config_file: Path | None = None
     _user_modified_fields: set[str] = set()
     _modified_providers: set[str] = set()  # 记录具体修改的模型提供商
+    _config_mode: str = "file"  # 配置存储模式: file 或 database
 
     model_config = {"arbitrary_types_allowed": True, "extra": "allow"}
 
     def __init__(self, **data):
         super().__init__(**data)
         self._setup_paths()
+        # 判断配置模式（环境变量 CONFIG_MODE: file/database，默认 file）
+        self._config_mode = os.getenv("CONFIG_MODE", "file").lower()
         self._load_user_config()
         self._load_custom_providers()
         self._handle_environment()
@@ -126,6 +141,13 @@ class Config(BaseModel):
         self._config_file.parent.mkdir(parents=True, exist_ok=True)
 
     def _load_user_config(self):
+        """加载用户配置（支持文件或数据库）"""
+        if self._config_mode == "database":
+            self._load_user_config_from_database()
+        else:
+            self._load_user_config_from_file()
+
+    def _load_user_config_from_file(self):
         """从 TOML 文件加载用户配置"""
         if not self._config_file or not self._config_file.exists():
             logger.info(f"Config file not found, using defaults: {self._config_file}")
@@ -151,6 +173,44 @@ class Config(BaseModel):
 
         except Exception as e:
             logger.error(f"Failed to load config from {self._config_file}: {e}")
+
+    def _load_user_config_from_database(self):
+        """从数据库加载用户配置"""
+        try:
+            from src.storage.db.models import SystemConfig
+            from sqlalchemy import select
+
+            db_manager = get_db_manager()
+            with db_manager.get_session_context() as session:
+                # 查询所有系统配置
+                stmt = select(SystemConfig)
+                results = session.execute(stmt).scalars().all()
+
+                if not results:
+                    logger.info("No config found in database, using defaults")
+                    return
+
+                user_config = {}
+                for config_row in results:
+                    user_config[config_row.key] = config_row.value
+
+                # 记录用户修改的字段
+                self._user_modified_fields = set(user_config.keys())
+
+                # 更新配置
+                for key, value in user_config.items():
+                    if key == "model_names":
+                        self._load_model_names(value)
+                    elif hasattr(self, key):
+                        setattr(self, key, value)
+                    else:
+                        logger.warning(f"Unknown config key from database: {key}")
+
+                logger.info(f"Loaded {len(user_config)} config items from database")
+
+        except Exception as e:
+            logger.error(f"Failed to load config from database: {e}")
+            logger.info("Falling back to default configuration")
 
     def _load_model_names(self, model_names_data):
         """加载用户自定义的模型配置"""
@@ -232,6 +292,13 @@ class Config(BaseModel):
             raise ValueError("No model provider available, please check your `.env` file.")
 
     def save(self):
+        """保存配置（支持文件或数据库）"""
+        if self._config_mode == "database":
+            self._save_to_database()
+        else:
+            self._save_to_file()
+
+    def _save_to_file(self):
         """保存配置到 TOML 文件（仅保存用户修改的字段）"""
         if not self._config_file:
             logger.warning("Config file path not set")
@@ -264,6 +331,52 @@ class Config(BaseModel):
             logger.info(f"Config saved to {self._config_file}")
         except Exception as e:
             logger.error(f"Failed to save config to {self._config_file}: {e}")
+
+    def _save_to_database(self):
+        """保存配置到数据库（仅保存用户修改的字段）"""
+        try:
+            from src.storage.db.models import SystemConfig
+            from sqlalchemy import select, update
+
+            db_manager = get_db_manager()
+            
+            # 获取默认配置
+            default_config = Config.model_construct()
+
+            # 对比当前配置和默认配置，找出用户修改的字段
+            user_modified = {}
+            for field_name in self.model_fields.keys():
+                # 跳过 exclude=True 的字段
+                field_info = self.model_fields[field_name]
+                if field_info.exclude:
+                    continue
+
+                current_value = getattr(self, field_name)
+                default_value = getattr(default_config, field_name)
+
+                # 如果值不同，说明用户修改了
+                if current_value != default_value:
+                    user_modified[field_name] = current_value
+
+            with db_manager.get_session_context() as session:
+                for key, value in user_modified.items():
+                    # 查询配置项是否已存在
+                    stmt = select(SystemConfig).where(SystemConfig.key == key)
+                    existing = session.execute(stmt).scalar_one_or_none()
+
+                    if existing:
+                        # 更新现有配置
+                        existing.value = value
+                    else:
+                        # 插入新配置
+                        new_config = SystemConfig(key=key, value=value, category="app")
+                        session.add(new_config)
+
+            logger.info(f"Saved {len(user_modified)} config items to database")
+
+        except Exception as e:
+            logger.error(f"Failed to save config to database: {e}")
+
 
     def dump_config(self) -> dict[str, Any]:
         """导出配置为字典（用于 API 返回）"""
