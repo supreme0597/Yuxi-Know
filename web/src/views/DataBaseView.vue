@@ -77,6 +77,44 @@
         />
       </div>
 
+      <!-- Dify 知识库配置 -->
+      <div v-if="newDatabase.kb_type === 'dify'" class="dify-config">
+        <h3 style="margin-top: 20px">
+          Dify API 基础 URL<span style="color: var(--color-error-500)">*</span>
+        </h3>
+        <a-input
+          v-model:value="newDatabase.dify_config.base_url"
+          placeholder="例如: https://api.dify.ai/v1"
+          size="large"
+        />
+
+        <h3 style="margin-top: 20px">
+          API 密钥<span style="color: var(--color-error-500)">*</span>
+        </h3>
+        <a-input-password
+          v-model:value="newDatabase.dify_config.api_key"
+          placeholder="请输入 Dify API 密钥"
+          size="large"
+        />
+
+        <h3 style="margin-top: 20px">
+          数据集 ID<span style="color: var(--color-error-500)">*</span>
+        </h3>
+        <a-input
+          v-model:value="newDatabase.dify_config.dataset_id"
+          placeholder="请输入 Dify 数据集 ID"
+          size="large"
+        />
+
+        <a-alert
+          message="配置说明"
+          description="请确保填写的 API 密钥和数据集 ID 有效。您可以从 Dify 管理后台获取这些信息。"
+          type="info"
+          show-icon
+          style="margin-top: 16px"
+        />
+      </div>
+
       <h3 style="margin-top: 20px">知识库描述</h3>
       <p style="color: var(--gray-700); font-size: 14px">
         在智能体流程中，这里的描述会作为工具的描述。智能体会根据知识库的标题和描述来选择合适的工具。所以这里描述的越详细，智能体越容易选择到合适的工具。
@@ -237,6 +275,11 @@ const createEmptyDatabaseForm = () => ({
   llm_info: {
     provider: '',
     model_name: ''
+  },
+  dify_config: {
+    base_url: 'https://api.dify.ai/v1',
+    api_key: '',
+    dataset_id: ''
   }
 })
 
@@ -366,18 +409,47 @@ const buildRequestData = () => {
     }
   }
 
+  if (newDatabase.kb_type === 'dify') {
+    const { base_url, api_key, dataset_id } = newDatabase.dify_config
+    const trimmedBaseUrl = base_url?.trim()
+    const trimmedApiKey = api_key?.trim()
+    const trimmedDatasetId = dataset_id?.trim()
+
+    // 验证 Dify 必填字段
+    if (!trimmedBaseUrl || !trimmedApiKey || !trimmedDatasetId) {
+      throw new Error('Dify 配置不完整：请填写所有必填字段')
+    }
+
+    // 验证 base_url 格式
+    if (!trimmedBaseUrl.startsWith('http://') && !trimmedBaseUrl.startsWith('https://')) {
+      throw new Error('Dify API 基础 URL 格式错误：必须以 http:// 或 https:// 开头')
+    }
+
+    // 将配置直接放入 additional_params 下的 dify_config 字段
+    requestData.additional_params.dify_config = {
+      base_url: trimmedBaseUrl,
+      api_key: trimmedApiKey,
+      dataset_id: trimmedDatasetId
+    }
+  }
+
   return requestData
 }
 
 // 创建按钮处理
 const handleCreateDatabase = async () => {
-  const requestData = buildRequestData()
   try {
+    const requestData = buildRequestData()
     await databaseStore.createDatabase(requestData)
     resetNewDatabase()
     state.openNewDatabaseModel = false
   } catch (error) {
-    // 错误已在 store 中处理
+    // 如果是验证错误，显示给用户
+    if (error.message) {
+      window.$message?.error(error.message)
+      return
+    }
+    // 其他错误已在 store 中处理
   }
 }
 

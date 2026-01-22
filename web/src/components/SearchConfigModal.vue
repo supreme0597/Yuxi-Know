@@ -27,7 +27,15 @@
         <a-form layout="vertical">
           <a-row :gutter="16">
             <a-col :span="12" v-for="param in queryParams" :key="param.key">
-              <a-form-item :label="param.label">
+              <a-form-item>
+                <template #label>
+                  <span>
+                    {{ param.label }}
+                    <a-tooltip v-if="param.description" :title="param.description">
+                      <info-circle-outlined style="margin-left: 4px; color: var(--gray-400); font-size: 13px;" />
+                    </a-tooltip>
+                  </span>
+                </template>
                 <a-select
                   v-if="param.type === 'select'"
                   v-model:value="meta[param.key]"
@@ -55,7 +63,8 @@
                   v-model:value="meta[param.key]"
                   style="width: 100%"
                   :min="param.min || 0"
-                  :max="param.max || 100"
+                  :max="param.max || (param.max === 0 ? 0 : 100)"
+                  :step="param.step || 1"
                 />
               </a-form-item>
             </a-col>
@@ -70,6 +79,7 @@
 import { ref, reactive, computed, watch } from 'vue'
 import { useDatabaseStore } from '@/stores/database'
 import { message } from 'ant-design-vue'
+import { InfoCircleOutlined } from '@ant-design/icons-vue'
 import { queryApi } from '@/apis/knowledge_api'
 
 const props = defineProps({
