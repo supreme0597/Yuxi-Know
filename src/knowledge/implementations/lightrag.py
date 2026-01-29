@@ -325,89 +325,7 @@ class LightRagKB(KnowledgeBase):
             # Remove from processing queue
             self._remove_from_processing_queue(file_id)
 
-    async def update_content(self, db_id: str, file_ids: list[str], params: dict | None = None) -> list[dict]:
-        """更新内容 - 根据file_ids重新解析文件并更新向量库"""
-        if db_id not in self.databases_meta:
-            raise ValueError(f"Database {db_id} not found")
 
-        rag = await self._get_lightrag_instance(db_id)
-        if not rag:
-            raise ValueError(f"Failed to get LightRAG instance for {db_id}")
-
-        # 处理默认参数
-        if params is None:
-            params = {}
-        content_type = params.get("content_type", "file")
-        processed_items_info = []
-
-        for file_id in file_ids:
-            # 从元数据中获取文件信息
-            if file_id not in self.files_meta:
-                logger.warning(f"File {file_id} not found in metadata, skipping")
-                continue
-
-            file_meta = self.files_meta[file_id]
-            file_path = file_meta.get("path")
-
-            if not file_path:
-                logger.warning(f"File path not found for {file_id}, skipping")
-                continue
-
-            # 添加到处理队列
-            self._add_to_processing_queue(file_id)
-
-            try:
-                # 更新状态为处理中
-                self.files_meta[file_id]["processing_params"] = params.copy()
-                self.files_meta[file_id]["status"] = "processing"
-                await self._save_metadata()
-
-                # 重新解析文件为 markdown
-                if content_type != "file":
-                    raise ValueError("URL 内容解析已禁用")
-                markdown_content = await process_file_to_markdown(file_path, params=params)
-                markdown_content_lines = markdown_content[:100].replace("\n", " ")
-                logger.info(f"Markdown content: {markdown_content_lines}...")
-
-                # 先删除现有的 LightRAG 数据（仅删除chunks，保留元数据）
-                await self.delete_file_chunks_only(db_id, file_id)
-
-                # 使用 LightRAG 重新插入内容
-                await rag.ainsert(input=markdown_content, ids=file_id, file_paths=file_path)
-
-                logger.info(f"Updated {content_type} {file_path} in LightRAG. Done.")
-
-                # 更新元数据状态
-                self.files_meta[file_id]["status"] = "done"
-                await self._save_metadata()
-
-                # 从处理队列中移除
-                self._remove_from_processing_queue(file_id)
-
-                # 返回更新后的文件信息
-                updated_file_meta = file_meta.copy()
-                updated_file_meta["status"] = "done"
-                updated_file_meta["file_id"] = file_id
-                processed_items_info.append(updated_file_meta)
-
-            except Exception as e:
-                error_msg = str(e)
-                logger.error(f"更新{content_type} {file_path} 失败: {error_msg}, {traceback.format_exc()}")
-                self.files_meta[file_id]["status"] = "failed"
-                self.files_meta[file_id]["error"] = error_msg
-                await self._save_metadata()
-
-                # 从处理队列中移除
-                self._remove_from_processing_queue(file_id)
-
-                # 返回失败的文件信息
-                failed_file_meta = file_meta.copy()
-                failed_file_meta["status"] = "failed"
-                failed_file_meta["file_id"] = file_id
-                failed_file_meta["error"] = error_msg
-                processed_items_info.append(failed_file_meta)
-
-        return processed_items_info
 
     async def aquery(self, query_text: str, db_id: str, agent_call: bool = False, **kwargs) -> str:
         """异步查询知识库"""
@@ -501,6 +419,9 @@ class LightRagKB(KnowledgeBase):
         """删除文件（包括元数据）"""
         # 先删除 LightRAG 中的 chunks 数据
         await self.delete_file_chunks_only(db_id, file_id)
+
+        # 清理 MinIO 中的文件
+        await self._cleanup_minio_files(file_id)
 
         # 删除文件记录
         if file_id in self.files_meta:

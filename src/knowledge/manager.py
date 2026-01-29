@@ -175,7 +175,13 @@ class KnowledgeBaseManager:
         all_databases = []
         for row in rows:
             kb_instance = self._get_or_create_kb_instance(row.kb_type or "lightrag")
-            db_info = kb_instance.get_database_info(row.db_id)
+            # 支持异步和同步两种 get_database_info 实现
+            # 列表接口不需要文件详情，提升性能
+            result = kb_instance.get_database_info(row.db_id, include_files=False)
+            if asyncio.iscoroutine(result):
+                db_info = await result
+            else:
+                db_info = result
             if db_info:
                 # 补充 share_config 和 additional_params
                 db_info["share_config"] = row.share_config or {"is_shared": True, "accessible_departments": []}
@@ -401,7 +407,12 @@ class KnowledgeBaseManager:
 
         try:
             kb_instance = await self._get_kb_for_database(db_id)
-            db_info = kb_instance.get_database_info(db_id)
+            # 支持异步和同步两种 get_database_info 实现
+            result = kb_instance.get_database_info(db_id)
+            if asyncio.iscoroutine(result):
+                db_info = await result
+            else:
+                db_info = result
         except KBNotFoundError:
             db_info = {
                 "db_id": db_id,
@@ -432,10 +443,7 @@ class KnowledgeBaseManager:
         kb_instance = await self._get_kb_for_database(db_id)
         await kb_instance.delete_file(db_id, file_id)
 
-    async def update_content(self, db_id: str, file_ids: list[str], params: dict | None = None) -> list[dict]:
-        """更新内容（重新分块）"""
-        kb_instance = await self._get_kb_for_database(db_id)
-        return await kb_instance.update_content(db_id, file_ids, params or {})
+
 
     async def get_file_basic_info(self, db_id: str, file_id: str) -> dict:
         """获取文件基本信息（仅元数据）"""

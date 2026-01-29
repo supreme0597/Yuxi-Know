@@ -66,6 +66,7 @@ dependencies = [
     "torchvision==0.23",
     "docling>=2.68.0",
     "loguru>=0.7.3",
+    "dify-client",
 ]
 [tool.ruff]
 line-length = 120  # 代码最大行宽
@@ -92,6 +93,7 @@ explicit = true
 [tool.uv.sources]
 torch = { index = "pytorch-cpu" }
 torchvision = { index = "pytorch-cpu" }
+dify-client = { path = "../../IdeaProjects/dify-python-sdk", editable = true }
 
 
 [tool.pytest.ini_options]

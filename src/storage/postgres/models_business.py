@@ -110,6 +110,17 @@ class User(Base):
         remaining = int((self.login_locked_until - utc_now_naive()).total_seconds())
         return max(0, remaining)
 
+    def increment_failed_login(self):
+        """增加登录失败次数，达到阈值后锁定账户"""
+        from datetime import timedelta
+
+        self.login_failed_count += 1
+        self.last_failed_login = utc_now_naive()
+
+        # 连续失败 5 次后锁定 15 分钟
+        if self.login_failed_count >= 5:
+            self.login_locked_until = utc_now_naive() + timedelta(minutes=15)
+
     def reset_failed_login(self):
         """重置登录失败相关字段"""
         self.login_failed_count = 0
