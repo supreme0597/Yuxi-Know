@@ -58,7 +58,8 @@
                   v-model:value="meta[param.key]"
                   style="width: 100%"
                   :min="param.min || 0"
-                  :max="param.max || 100"
+                  :max="param.max || (param.max === 0 ? 0 : 100)"
+                  :step="param.step || 1"
                 />
               </a-form-item>
             </a-col>
