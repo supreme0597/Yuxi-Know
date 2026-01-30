@@ -25,12 +25,15 @@
 
       <div v-else class="config-forms">
         <a-form layout="vertical">
+          <!-- 普通参数（两列布局） -->
           <a-row :gutter="16">
-            <a-col :span="12" v-for="param in queryParams" :key="param.key">
+            <a-col :span="12" v-for="param in regularParams" :key="param.key">
               <a-form-item :label="param.label">
                 <template #extra v-if="param.description">
                   <div class="param-description">{{ param.description }}</div>
                 </template>
+                
+                <!-- Select 类型 -->
                 <a-select
                   v-if="param.type === 'select'"
                   v-model:value="meta[param.key]"
@@ -44,6 +47,8 @@
                     {{ option.label }}
                   </a-select-option>
                 </a-select>
+                
+                <!-- Boolean 类型 -->
                 <a-select
                   v-else-if="param.type === 'boolean'"
                   :value="computedMeta[param.key]"
@@ -53,6 +58,8 @@
                   <a-select-option value="true">启用</a-select-option>
                   <a-select-option value="false">关闭</a-select-option>
                 </a-select>
+                
+                <!-- Number 类型 -->
                 <a-input-number
                   v-else-if="param.type === 'number'"
                   v-model:value="meta[param.key]"
@@ -64,6 +71,70 @@
               </a-form-item>
             </a-col>
           </a-row>
+
+          <!-- 分组参数（独立容器） -->
+          <div v-for="param in groupParams" :key="param.label" class="param-group">
+            <a-collapse 
+              :default-active-key="param.collapsed ? [] : ['content']"
+              :bordered="false"
+              expand-icon-position="end"
+            >
+              <a-collapse-panel key="content">
+                <template #header>
+                  <div class="group-header">
+                    <span class="group-label">{{ param.label }}</span>
+                    <span v-if="param.description" class="group-description">{{ param.description }}</span>
+                  </div>
+                </template>
+                
+                <a-row :gutter="16">
+                  <a-col :span="12" v-for="subParam in param.options" :key="subParam.key">
+                    <a-form-item :label="subParam.label">
+                      <template #extra v-if="subParam.description">
+                        <div class="param-description">{{ subParam.description }}</div>
+                      </template>
+                      
+                      <!-- Select 类型 -->
+                      <a-select
+                        v-if="subParam.type === 'select'"
+                        v-model:value="meta[subParam.key]"
+                        style="width: 100%"
+                      >
+                        <a-select-option
+                          v-for="option in subParam.options"
+                          :key="option.value"
+                          :value="option.value"
+                        >
+                          {{ option.label }}
+                        </a-select-option>
+                      </a-select>
+                      
+                      <!-- Boolean 类型 -->
+                      <a-select
+                        v-else-if="subParam.type === 'boolean'"
+                        :value="computedMeta[subParam.key]"
+                        @update:value="(value) => updateMeta(subParam.key, value)"
+                        style="width: 100%"
+                      >
+                        <a-select-option value="true">启用</a-select-option>
+                        <a-select-option value="false">关闭</a-select-option>
+                      </a-select>
+                      
+                      <!-- Number 类型 -->
+                      <a-input-number
+                        v-else-if="subParam.type === 'number'"
+                        v-model:value="meta[subParam.key]"
+                        style="width: 100%"
+                        :min="subParam.min || 0"
+                        :max="subParam.max || (subParam.max === 0 ? 0 : 100)"
+                        :step="subParam.step || 1"
+                      />
+                    </a-form-item>
+                  </a-col>
+                </a-row>
+              </a-collapse-panel>
+            </a-collapse>
+          </div>
         </a-form>
       </div>
     </div>
@@ -97,11 +168,29 @@ const error = ref('')
 const queryParams = ref([])
 const meta = reactive({})
 
+// 计算属性：分离普通参数和分组参数
+const regularParams = computed(() => {
+  return queryParams.value.filter(param => param.type !== 'group')
+})
+
+const groupParams = computed(() => {
+  return queryParams.value.filter(param => param.type === 'group')
+})
+
 // 计算属性：处理布尔类型的双向绑定
 const computedMeta = computed(() => {
   const result = {}
   for (const key in meta) {
-    const param = queryParams.value.find((p) => p.key === key)
+    // 需要在所有参数中查找（包括分组参数的子参数）
+    let param = regularParams.value.find((p) => p.key === key)
+    if (!param) {
+      // 在分组参数中查找
+      for (const group of groupParams.value) {
+        param = group.options?.find((p) => p.key === key)
+        if (param) break
+      }
+    }
+    
     if (param?.type === 'boolean') {
       // 对于布尔类型，返回字符串给 select，但保持内部为布尔值
       result[key] = meta[key].toString()
@@ -114,7 +203,16 @@ const computedMeta = computed(() => {
 
 // 处理值更新
 const updateMeta = (key, value) => {
-  const param = queryParams.value.find((p) => p.key === key)
+  // 需要在所有参数中查找（包括分组参数的子参数）
+  let param = regularParams.value.find((p) => p.key === key)
+  if (!param) {
+    // 在分组参数中查找
+    for (const group of groupParams.value) {
+      param = group.options?.find((p) => p.key === key)
+      if (param) break
+    }
+  }
+  
   if (param?.type === 'boolean') {
     // 将字符串转换回布尔值
     meta[key] = value === 'true'
@@ -142,17 +240,24 @@ const loadQueryParams = async () => {
     // 过滤掉 include_distances 配置项，默认为 True 且不可修改
     queryParams.value = queryParams.value.filter((param) => param.key !== 'include_distances')
 
-    // 初始化 meta 对象
-    queryParams.value.forEach((param) => {
-      if (param.default !== undefined) {
-        // 对于布尔类型，确保使用布尔值而不是字符串
-        if (param.type === 'boolean') {
-          meta[param.key] = Boolean(param.default)
-        } else {
-          meta[param.key] = param.default
+    // 初始化 meta 对象（包括分组参数）
+    const initializeParams = (params) => {
+      params.forEach((param) => {
+        if (param.type === 'group' && param.options) {
+          // 递归处理分组中的参数
+          initializeParams(param.options)
+        } else if (param.default !== undefined && param.key) {
+          // 对于布尔类型，确保使用布尔值而不是字符串
+          if (param.type === 'boolean') {
+            meta[param.key] = Boolean(param.default)
+          } else {
+            meta[param.key] = param.default
+          }
         }
-      }
-    })
+      })
+    }
+    
+    initializeParams(queryParams.value)
 
     // 确保设置 include_distances 为 true（即使不显示也要设置）
     meta['include_distances'] = true
@@ -282,6 +387,51 @@ watch(
   color: var(--gray-500);
   line-height: 1.5;
   margin-top: 4px;
+}
+
+// 分组参数样式
+.param-group {
+  margin-bottom: 16px;
+  
+  :deep(.ant-collapse) {
+    background: var(--gray-25);
+    border: 1px solid var(--gray-200);
+    border-radius: 8px;
+  }
+  
+  :deep(.ant-collapse-item) {
+    border-bottom: none;
+  }
+  
+  :deep(.ant-collapse-header) {
+    padding: 12px 16px;
+    font-weight: 500;
+    color: var(--gray-700);
+  }
+  
+  :deep(.ant-collapse-content-box) {
+    padding: 16px;
+    background: var(--gray-0);
+  }
+}
+
+.group-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  
+  .group-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--gray-800);
+  }
+  
+  .group-description {
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--gray-500);
+    line-height: 1.4;
+  }
 }
 
 // 表单样式优化

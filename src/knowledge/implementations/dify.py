@@ -31,6 +31,10 @@ class DifyKB(KnowledgeBase):
 
         # 元数据锁
         self._metadata_lock = asyncio.Lock()
+        
+        # Segments 查询缓存 {(doc_id, positions_hash): (segments, timestamp)}
+        # 缓存TTL从数据库配置中的 cache_ttl 参数读取
+        self._segments_cache: dict[tuple[str, str], tuple[list[dict], float]] = {}
 
         logger.info("DifyKB initialized")
 
@@ -319,8 +323,23 @@ class DifyKB(KnowledgeBase):
             logger.error(f"Failed to get client for expansion: {e}")
             return original_chunks
 
-        # 直接调用 _fetch_sorted_segments，省去 get_file_basic_info 的网络开销
-        tasks = [self._fetch_sorted_segments(db_id, doc_id, client) for doc_id in doc_ids]
+        # 预计算每个文档需要的 position 范围（用于优化分页）
+        doc_required_positions = {}
+        for doc_id in doc_ids:
+            positions = set()
+            for chunk in docs_map[doc_id]:
+                pos = chunk.get("metadata", {}).get("position")
+                if pos and isinstance(pos, int):
+                    # 计算需要的范围：position ± n
+                    for i in range(max(1, pos - n), pos + n + 1):
+                        positions.add(i)
+            doc_required_positions[doc_id] = positions
+        
+        # 调用 _fetch_sorted_segments 时传递所需的 position 范围
+        tasks = [
+            self._fetch_sorted_segments(db_id, doc_id, client, doc_required_positions.get(doc_id)) 
+            for doc_id in doc_ids
+        ]
         
         # 注意：这里可能会有异常（如下载失败），我们需要处理
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -624,43 +643,245 @@ class DifyKB(KnowledgeBase):
 
         raise Exception(f"File not found locally or on Dify: {file_id}")
 
-    async def _fetch_sorted_segments(self, db_id: str, dify_document_id: str, client=None) -> list[dict]:
+    async def _fetch_sorted_segments(
+        self, 
+        db_id: str, 
+        dify_document_id: str, 
+        client=None,
+        required_positions: set[int] | None = None
+    ) -> list[dict]:
         """
-        获取并解析文档分片（按 position 排序）
+        获取并解析文档分片（按 position 排序，支持按需分页）
+        
+        Args:
+            db_id: 数据库ID
+            dify_document_id: Dify文档ID
+            client: 可选的客户端实例
+            required_positions: 可选的所需 position 集合，用于优化分页获取
         """
         if not client:
             client = await self._get_client(db_id)
+        
+        # 从配置中读取优化参数
+        query_params = self._get_query_params(db_id)
+        merge_threshold = int(query_params.get("merge_threshold", 10))
+        min_page_size = int(query_params.get("min_page_size", 20))
+        max_page_size = int(query_params.get("max_page_size", 500))
+        max_retries = int(query_params.get("max_retries", 3))
+        cache_ttl = int(query_params.get("cache_ttl", 300))
+        
+        # 辅助函数：将 position 集合分组为连续区间
+        def group_consecutive_positions(positions: set[int]) -> list[tuple[int, int]]:
+            """将 position 集合分组为连续区间，例如 {3,4,5,6,7,87,88,89,90,91} → [(3,7), (87,91)]"""
+            if not positions:
+                return []
+            sorted_positions = sorted(positions)
+            intervals = []
+            start = end = sorted_positions[0]
+            for pos in sorted_positions[1:]:
+                if pos == end + 1:
+                    end = pos
+                else:
+                    intervals.append((start, end))
+                    start = end = pos
+            intervals.append((start, end))
+            return intervals
+        
+        # 优化1：检查缓存
+        if required_positions and cache_ttl > 0:
+            import hashlib
+            pos_hash = hashlib.md5(str(sorted(required_positions)).encode()).hexdigest()
+            cache_key = (dify_document_id, pos_hash)
+            
+            if cache_key in self._segments_cache:
+                cached_data, timestamp = self._segments_cache[cache_key]
+                import time
+                if time.time() - timestamp < cache_ttl:
+                    logger.debug(f"Cache hit for document {dify_document_id} ({len(cached_data)} segments)")
+                    return cached_data
+                else:
+                    # 缓存过期，删除
+                    del self._segments_cache[cache_key]
             
         try:
-            # 查询文档的 segments（需要指定 status 和增大 limit）
-            response = await client.query_segments(
-                document_id=dify_document_id, 
-                status="completed",
-                params={"limit": 1000}  # 获取更多 segments
-            )
-            response_data = response.json()
+            all_segments = []
             
-            if response.status_code == 200:
-                segments = response_data.get("data", [])
-                # 确保按 position 正序排列
-                segments.sort(key=lambda x: x.get("position", 0))
+            # 优化：如果指定了 required_positions，使用分组精确查询
+            if required_positions:
+                intervals = group_consecutive_positions(required_positions)
+                logger.info(f"Optimized query: {len(required_positions)} positions → {len(intervals)} intervals (before merge)")
                 
-                logger.info(f"Got {len(segments)} segments for document {dify_document_id}")
-                doc_chunks = []
-
-                for idx, segment in enumerate(segments):
-                    text = segment.get("content", "")
-                    chunk_data = {
-                        "id": segment.get("id", ""),
-                        "content": text,
-                        "chunk_order_index": idx,
-                        "position": segment.get("position"),
-                    }
-                    doc_chunks.append(chunk_data)
-                return doc_chunks
+                # 优化1：合并间隔较小的相邻区间（避免重复查询相同页）
+                merged_intervals = []
+                for start_pos, end_pos in intervals:
+                    if merged_intervals and start_pos - merged_intervals[-1][1] <= merge_threshold:
+                        # 合并到上一个区间
+                        merged_intervals[-1] = (merged_intervals[-1][0], end_pos)
+                        logger.debug(f"Merged interval: [{merged_intervals[-1][0]}, {end_pos}] (gap <= {merge_threshold})")
+                    else:
+                        merged_intervals.append((start_pos, end_pos))
+                
+                if len(merged_intervals) < len(intervals):
+                    logger.info(f"Merged {len(intervals)} intervals → {len(merged_intervals)} intervals")
+                
+                # 优化2：收集所有查询参数，去重后批量查询
+                query_tasks = {}  # {(page, limit): [intervals]}
+                
+                for start_pos, end_pos in merged_intervals:
+                    interval_size = end_pos - start_pos + 1
+                    
+                    # 动态计算 page_size（使用配置的最小/最大值）
+                    dynamic_page_size = max(
+                        min(interval_size + 10, max_page_size),
+                        min_page_size
+                    )
+                    
+                    # 计算需要的页码范围
+                    start_page = (start_pos - 1) // dynamic_page_size + 1
+                    end_page = (end_pos - 1) // dynamic_page_size + 1
+                    
+                    logger.debug(
+                        f"Interval [{start_pos}, {end_pos}] (size={interval_size}) → "
+                        f"pages {start_page}-{end_page} (page_size={dynamic_page_size})"
+                    )
+                    
+                    # 收集查询参数
+                    for page in range(start_page, end_page + 1):
+                        key = (page, dynamic_page_size)
+                        if key not in query_tasks:
+                            query_tasks[key] = []
+                        query_tasks[key].append((start_pos, end_pos))
+                
+                logger.info(f"Deduplicated queries: {len(query_tasks)} unique (page, limit) combinations")
+                
+                # 优化2：并行查询 + 优化3：重试机制（使用配置的重试次数）
+                async def query_single_page(page: int, limit: int, interval_list: list[tuple[int, int]]):
+                    """查询单个页面，带重试机制"""
+                    import time
+                    
+                    for retry in range(max_retries):
+                        try:
+                            response = await client.query_segments(
+                                document_id=dify_document_id, status="completed",
+                                params={"limit": limit, "page": page}
+                            )
+                            response_data = response.json()
+                            
+                            if response.status_code == 200:
+                                segments = response_data.get("data", [])
+                                
+                                # 筛选所有相关区间的 segments
+                                page_results = []
+                                for start_pos, end_pos in interval_list:
+                                    filtered_segments = [
+                                        seg for seg in segments 
+                                        if start_pos <= seg.get("position", 0) <= end_pos
+                                    ]
+                                    page_results.extend(filtered_segments)
+                                    
+                                    logger.debug(
+                                        f"Page {page} (limit={limit}): filtered {len(filtered_segments)} "
+                                        f"for interval [{start_pos}, {end_pos}]"
+                                    )
+                                
+                                return page_results
+                            
+                            elif response.status_code == 429:  # Rate limit
+                                wait_time = 2 ** retry  # 指数退避
+                                logger.warning(f"Rate limit on page {page}, retry {retry+1}/{max_retries}, waiting {wait_time}s")
+                                await asyncio.sleep(wait_time)
+                            else:
+                                logger.warning(f"Failed to query page {page} (status={response.status_code}): {response_data}")
+                                if retry == max_retries - 1:
+                                    raise Exception(f"Query failed after {max_retries} retries: {response_data}")
+                                await asyncio.sleep(1)
+                        
+                        except Exception as e:
+                            if retry == max_retries - 1:
+                                logger.error(f"Failed to query page {page} after {max_retries} retries: {e}")
+                                raise
+                            logger.warning(f"Error querying page {page}, retry {retry+1}/{max_retries}: {e}")
+                            await asyncio.sleep(1)
+                    
+                    return []
+                
+                # 并行执行所有页查询
+                tasks = [
+                    query_single_page(page, limit, interval_list)
+                    for (page, limit), interval_list in query_tasks.items()
+                ]
+                
+                import time
+                t_start = time.time()
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                t_elapsed = time.time() - t_start
+                
+                # 合并结果
+                for result in results:
+                    if isinstance(result, Exception):
+                        logger.error(f"Query task failed: {result}")
+                        # 继续处理其他结果，不中断
+                    elif result:
+                        all_segments.extend(result)
+                
+                # 去重并按 position 排序
+                unique_segments = {seg["id"]: seg for seg in all_segments}.values()
+                all_segments = sorted(unique_segments, key=lambda x: x.get("position", 0))
+                logger.info(
+                    f"Optimized query completed: {len(all_segments)} segments "
+                    f"from {len(merged_intervals)} intervals via {len(query_tasks)} queries "
+                    f"in {t_elapsed:.2f}s (parallel, cache_ttl={cache_ttl}s)"
+                )
+                
             else:
-                logger.warning(f"Failed to get segments from Dify: {response_data}")
-                return []
+                # 未指定 required_positions，使用分页获取全部（兼容 get_file_content 调用）
+                page = 1
+                limit = 1000
+                
+                while True:
+                    response = await client.query_segments(
+                        document_id=dify_document_id, status="completed",
+                        params={"limit": limit, "page": page}
+                    )
+                    response_data = response.json()
+                    
+                    if response.status_code != 200:
+                        logger.warning(f"Failed to get segments (page {page}): {response_data}")
+                        break
+                    
+                    segments = response_data.get("data", [])
+                    if not segments:
+                        break
+                    
+                    all_segments.extend(segments)
+                    logger.debug(f"Fetched {len(segments)} segments (page {page})")
+                    
+                    if response_data.get("has_more", False):
+                        page += 1
+                    else:
+                        if len(segments) < limit:
+                            break
+                        page += 1
+                
+                logger.info(f"Fetched {len(all_segments)} segments in {page} page(s)")
+            
+            # 构建返回结果
+            doc_chunks = []
+            for idx, segment in enumerate(all_segments):
+                doc_chunks.append({
+                    "id": segment.get("id", ""),
+                    "content": segment.get("content", ""),
+                    "chunk_order_index": idx,
+                    "position": segment.get("position"),
+                })
+            
+            # 优化1：存入缓存
+            if required_positions and cache_ttl > 0:
+                import time
+                self._segments_cache[cache_key] = (doc_chunks, time.time())
+                logger.debug(f"Cached {len(doc_chunks)} segments for document {dify_document_id} (TTL={cache_ttl}s)")
+            
+            return doc_chunks
                 
         except Exception as e:
             logger.error(f"Failed to get file content from Dify: {e}")
@@ -941,16 +1162,75 @@ class DifyKB(KnowledgeBase):
                 "default": False,
                 "description": "是否使用 Dify 的重排序模型",
             },
+            # 高级优化参数（分组）
             {
-                "key": "context_size",
-                "label": "上下文扩展",
-                "type": "number",
-                "default": 0,
-                "min": 0,
-                "max": 10,
-                "step": 1,
-                "description": "自动补充前后 n 个相邻分片 (0 表示禁用)",
-            },
+                "type": "group",
+                "label": "⚙️ 高级优化参数",
+                "collapsed": True,  # 默认折叠
+                "description": "调整这些参数可以优化查询性能和上下文扩展，普通用户建议使用默认值",
+                "options": [
+                    {
+                        "key": "context_size",
+                        "label": "上下文扩展",
+                        "type": "number",
+                        "default": 0,
+                        "min": 0,
+                        "max": 10,
+                        "step": 1,
+                        "description": "自动补充前后 n 个相邻分片（0 表示禁用）。启用后可能增加查询时间。推荐值：0-3",
+                    },
+                    {
+                        "key": "merge_threshold",
+                        "label": "区间合并阈值",
+                        "type": "number",
+                        "default": 10,
+                        "min": 0,
+                        "max": 50,
+                        "step": 1,
+                        "description": "相邻区间间隔小于此值时自动合并（减少查询次数）。推荐值：10",
+                    },
+                    {
+                        "key": "min_page_size",
+                        "label": "最小页大小",
+                        "type": "number",
+                        "default": 20,
+                        "min": 10,
+                        "max": 100,
+                        "step": 5,
+                        "description": "每次查询最少获取的分片数。推荐值：20",
+                    },
+                    {
+                        "key": "max_page_size",
+                        "label": "最大页大小",
+                        "type": "number",
+                        "default": 500,
+                        "min": 100,
+                        "max": 1000,
+                        "step": 50,
+                        "description": "每次查询最多获取的分片数。网络慢时可适当调大。推荐值：500",
+                    },
+                    {
+                        "key": "cache_ttl",
+                        "label": "缓存有效期（秒）",
+                        "type": "number",
+                        "default": 300,
+                        "min": 0,
+                        "max": 3600,
+                        "step": 60,
+                        "description": "查询结果缓存时间，0 表示禁用缓存。推荐值：300（5分钟）",
+                    },
+                    {
+                        "key": "max_retries",
+                        "label": "最大重试次数",
+                        "type": "number",
+                        "default": 3,
+                        "min": 1,
+                        "max": 5,
+                        "step": 1,
+                        "description": "API 请求失败时的重试次数。推荐值：3",
+                    },
+                ]
+            }
         ]
 
         return {"type": "dify", "options": options}
