@@ -1,16 +1,12 @@
 import asyncio
-import os
 import traceback
 from typing import Any
 
 from dify_client.async_client import AsyncKnowledgeBaseClient
 
-from src.storage.minio.client import aupload_file_to_minio, get_minio_client
+from src.knowledge.base import FileStatus, KnowledgeBase
 from src.utils import logger
 from src.utils.datetime_utils import utc_isoformat, coerce_any_to_utc_datetime, format_utc_datetime
-
-
-from src.knowledge.base import FileStatus, KnowledgeBase
 
 
 class DifyKB(KnowledgeBase):
@@ -291,21 +287,21 @@ class DifyKB(KnowledgeBase):
             return original_chunks
             
         # 1. 按文档分组
-        docs_map = {}  # {doc_id: [chunks]}
-        doc_scores = {} # {doc_id: max_score}
+        docs_map = {}  # {file_id: [chunks]}
+        doc_scores = {} # {file_id: max_score}
         
         for chunk in original_chunks:
             meta = chunk.get("metadata", {})
-            doc_id = meta.get("document_id")
-            if not doc_id:
+            file_id = meta.get("file_id")
+            if not file_id:
                 continue
             
-            if doc_id not in docs_map:
-                docs_map[doc_id] = []
-                doc_scores[doc_id] = 0.0
+            if file_id not in docs_map:
+                docs_map[file_id] = []
+                doc_scores[file_id] = 0.0
             
-            docs_map[doc_id].append(chunk)
-            doc_scores[doc_id] = max(doc_scores[doc_id], chunk.get("score", 0.0))
+            docs_map[file_id].append(chunk)
+            doc_scores[file_id] = max(doc_scores[file_id], chunk.get("score", 0.0))
             
         if not docs_map:
             return original_chunks
@@ -314,7 +310,7 @@ class DifyKB(KnowledgeBase):
         
         # 2. 并行获取全文分片
         # 我们使用 gather 并发获取所有涉及文档的内容
-        doc_ids = list(docs_map.keys())
+        file_ids = list(docs_map.keys())
         
         # 预先获取 client 以复用 connection
         try:
@@ -325,20 +321,21 @@ class DifyKB(KnowledgeBase):
 
         # 预计算每个文档需要的 position 范围（用于优化分页）
         doc_required_positions = {}
-        for doc_id in doc_ids:
+        for file_id in file_ids:
             positions = set()
-            for chunk in docs_map[doc_id]:
-                pos = chunk.get("metadata", {}).get("position")
+            for chunk in docs_map[file_id]:
+                # 注意：position 现在对应 chunk_index
+                pos = chunk.get("metadata", {}).get("chunk_index")
                 if pos and isinstance(pos, int):
                     # 计算需要的范围：position ± n
                     for i in range(max(1, pos - n), pos + n + 1):
                         positions.add(i)
-            doc_required_positions[doc_id] = positions
+            doc_required_positions[file_id] = positions
         
         # 调用 _fetch_sorted_segments 时传递所需的 position 范围
         tasks = [
-            self._fetch_sorted_segments(db_id, doc_id, client, doc_required_positions.get(doc_id)) 
-            for doc_id in doc_ids
+            self._fetch_sorted_segments(db_id, file_id, client, doc_required_positions.get(file_id)) 
+            for file_id in file_ids
         ]
         
         # 注意：这里可能会有异常（如下载失败），我们需要处理
@@ -348,25 +345,25 @@ class DifyKB(KnowledgeBase):
         expanded_result = []
         
         # 按最高分降序排列文档，以此顺序构建最终结果
-        sorted_doc_ids = sorted(doc_ids, key=lambda x: doc_scores[x], reverse=True)
+        sorted_file_ids = sorted(file_ids, key=lambda x: doc_scores[x], reverse=True)
         
-        # 建立 doc_id -> content_info 的映射
+        # 建立 file_id -> content_info 的映射
         doc_contents = {}
-        for doc_id, res in zip(doc_ids, results):
+        for file_id, res in zip(file_ids, results):
             if isinstance(res, Exception):
-                logger.warning(f"Failed to fetch content for expansion (doc={doc_id}): {res}")
+                logger.warning(f"Failed to fetch content for expansion (file_id={file_id}): {res}")
             else:
                 # 兼容原有结构，将 chunks 列表包装为 {"lines": chunks}
-                doc_contents[doc_id] = {"lines": res}
+                doc_contents[file_id] = {"lines": res}
 
-        for doc_id in sorted_doc_ids:
+        for file_id in sorted_file_ids:
             # 如果获取全文失败，回退到使用原始 chunks
-            content_info = doc_contents.get(doc_id)
+            content_info = doc_contents.get(file_id)
             if not content_info or not content_info.get("lines"):
-                expanded_result.extend(docs_map[doc_id])
+                expanded_result.extend(docs_map[file_id])
                 continue
 
-            full_segments = content_info["lines"] # List of {id, content, chunk_order_index}
+            full_segments = content_info["lines"] # List of {id, content, position, ...} (注意这里是 Dify 原生数据)
             # 建立 segment_id -> index 映射
             seg_id_to_idx = {seg["id"]: idx for idx, seg in enumerate(full_segments)}
             
@@ -374,18 +371,31 @@ class DifyKB(KnowledgeBase):
             hit_indices = set()
             hit_scores = {} # index -> score
             
-            for chunk in docs_map[doc_id]:
-                seg_id = chunk["metadata"].get("segment_id")
-                pos = chunk["metadata"].get("position")
+            for chunk in docs_map[file_id]:
+                chunk_id = chunk["metadata"].get("chunk_id")
+                chunk_index = chunk["metadata"].get("chunk_index")
                 
                 idx = -1
                 
                 # 优先 ID 匹配
-                if seg_id in seg_id_to_idx:
-                    idx = seg_id_to_idx[seg_id]
-                # ID 匹配失败则尝试 Position 匹配 (Dify position 1-based)
-                elif pos and isinstance(pos, int) and 0 < pos <= len(full_segments):
-                    idx = pos - 1
+                if chunk_id in seg_id_to_idx:
+                    idx = seg_id_to_idx[chunk_id]
+                # ID 匹配失败则尝试 Position 匹配 (Dify position 1-based, 假设 full_segments 是按 position 排序的)
+                elif chunk_index and isinstance(chunk_index, int) and 0 < chunk_index <= len(full_segments):
+                    # 这种按 index 的方式假设 full_segments 是完整的或者是按顺序的。
+                    # 但因为我们用了 required_positions，full_segments 可能不是完整的，
+                    # 所以最好是用 sort 后的 list 的内容去查。
+                    # FIX: full_segments 是 _fetch_sorted_segments 返回的 Dify 原生片段列表。
+                    # _fetch_sorted_segments 已经按 position 排序了。
+                    # 如果是部分获取，index 就不等于 position - 1 了。
+                    # 所以必须通过 chunk_id 来匹配。
+                    # 如果没有 chunk_id (不太可能)，只能尝试找 position 属性
+                    
+                    # 查找 matching segment by position property
+                    for i, seg in enumerate(full_segments):
+                        if seg.get("position") == chunk_index:
+                            idx = i
+                            break
                     
                 if idx != -1:
                     hit_indices.add(idx)
@@ -393,10 +403,6 @@ class DifyKB(KnowledgeBase):
                     current_score = chunk.get("score", 0.0)
                     hit_scores[idx] = max(hit_scores.get(idx, 0.0), current_score)
                 else:
-                    # 如果 ID 本文对不上（罕见），退回到原始 chunk
-                    # 但为了不打乱顺序，这里我们可能得做特殊处理
-                    # 简单起见，如果找不到全文对应关系，这个 chunk 就"孤立"在最后？
-                    # 或者我们尽量匹配内容？暂且忽略极罕见情况
                     pass
 
             # 计算扩展后的索引集合
@@ -413,19 +419,12 @@ class DifyKB(KnowledgeBase):
             sorted_indices = sorted(list(expanded_indices))
             
             # 构建新的 chunks
-            doc_name = docs_map[doc_id][0]["metadata"].get("source", "Unknown")
+            doc_name = docs_map[file_id][0]["metadata"].get("source", "Unknown")
             
             for idx in sorted_indices:
-                segment = full_segments[idx]
+                segment = full_segments[idx] # Dify Native Segment
                 seg_id = segment.get("id")
                 content = segment.get("content")
-                
-                # 如果是原始命中，使用原始分数；如果是扩展的，使用 None 或 关联分数
-                # 为了保持 RAG 连贯性，我们也可以给扩展分片赋予"上下文分数"
-                # 这里我们简单赋值：如果是 hit，用 hit_score，否则用 hit 邻居的 score?
-                # 简单点：扩展分片 score = max_doc_score * 0.9 (作为上下文) ?
-                # 用户没指定 score 逻辑，我们由于是 list output，最好保留原始 hit 的 score 以便识别
-                # 扩展分片 score 设为 None，表示它是上下文
                 
                 score = hit_scores.get(idx) 
                 
@@ -433,10 +432,9 @@ class DifyKB(KnowledgeBase):
                     "content": content,
                     "metadata": {
                         "source": doc_name,
-                        "document_id": doc_id,
-                        "segment_id": seg_id,
-                        "chunk_order_index": idx,
-                        "position": segment.get("position"),
+                        "file_id": file_id,
+                        "chunk_id": seg_id,
+                        "chunk_index": segment.get("position"),
                         "is_extended": score is None # 标记是否为扩展分片
                     },
                     "score": score
@@ -529,9 +527,9 @@ class DifyKB(KnowledgeBase):
 
                 metadata = {
                     "source": document.get("name", "未知来源"),
-                    "document_id": document.get("id"),
-                    "segment_id": segment.get("id"),
-                    "position": segment.get("position"),
+                    "file_id": document.get("id"),
+                    "chunk_id": segment.get("id"),
+                    "chunk_index": segment.get("position"),
                 }
 
                 chunk = {"content": segment.get("content", ""), "metadata": metadata, "score": score}
@@ -540,20 +538,57 @@ class DifyKB(KnowledgeBase):
 
             logger.debug(f"Dify query response: {len(retrieved_chunks)} chunks found")
             
-            # 检查是否有上下文扩展需求
-            # 支持 context_size 或 user_n 参数
-            # FIX: 使用 merged_kwargs 以支持从保存的配置中读取参数
+            # 上下文扩展
             context_size = int(merged_kwargs.get("context_size", 0))
-            if context_size > 0:
-                expanded_results = await self._expand_search_results(db_id, retrieved_chunks, context_size)
-                t2 = time.time()
-                expand_cost = t2 - t1
-                total_cost = t2 - t0
-                logger.info(f"Dify query with expansion finished. Retrieve: {retrieve_cost:.3f}s, Expand: {expand_cost:.3f}s, Total: {total_cost:.3f}s")
-                return expanded_results
+            if context_size <= 0:
+                return retrieved_chunks
 
-            logger.info(f"Dify query finished (no expansion). Time: {retrieve_cost:.3f}s")
-            return retrieved_chunks
+            final_results = await self._expand_search_results(db_id, retrieved_chunks, context_size)
+            t2 = time.time()
+            expand_cost = t2 - t1
+            logger.info(f"Dify query expansion: {len(retrieved_chunks)} -> {len(final_results)} chunks (Time: {expand_cost:.3f}s)")
+
+            # 早期返回：无结果或不使用重排序
+            if not final_results:
+                return []
+
+            use_local_reranker = bool(merged_kwargs.get("use_local_reranker", False))
+            if not use_local_reranker:
+                return final_results
+
+            # 本地重排序逻辑 (Local Rerank)
+            local_model_id = merged_kwargs.get("local_reranker_model")
+            if not local_model_id:
+                raise ValueError(
+                    "Local reranker model must be specified when use_local_reranker=True. "
+                    "Please provide local_reranker_model in query parameters."
+                )
+
+            try:
+                from src.models.rerank import get_reranker
+
+                reranker = get_reranker(local_model_id)
+                try:
+                    rerank_start = time.time()
+                    documents_text = [chunk["content"] for chunk in final_results]
+                    rerank_scores = await reranker.acompute_score([query_text, documents_text], normalize=True)
+
+                    for chunk, rerank_score in zip(final_results, rerank_scores):
+                        chunk["rerank_score"] = float(rerank_score)
+
+                    final_results.sort(
+                        key=lambda item: item.get("rerank_score", item.get("score", 0.0)), reverse=True
+                    )
+                    elapsed = time.time() - rerank_start
+                    logger.info(f"Local reranking completed for {db_id} in {elapsed:.3f}s with model {local_model_id}")
+                finally:
+                    await reranker.aclose()
+
+            except Exception as exc:  # noqa: BLE001
+                logger.error(f"Local reranking failed: {exc}, falling back to expanded results")
+
+            # 统一返回结果
+            return final_results
 
         except Exception as e:
             logger.error(f"Dify query error: {e}, {traceback.format_exc()}")
@@ -1124,43 +1159,52 @@ class DifyKB(KnowledgeBase):
     def get_query_params_config(self, db_id: str, **kwargs) -> dict:
         """获取 Dify 知识库的查询参数配置"""
         options = [
+            # Dify 检索配置（分组）
             {
-                "key": "final_top_k",
-                "label": "最终返回数",
-                "type": "number",
-                "default": 10,
-                "min": 1,
-                "max": 100,
-                "description": "返回给前端的文档数量",
-            },
-            {
-                "key": "similarity_threshold",
-                "label": "相似度阈值",
-                "type": "number",
-                "default": 0.0,
-                "min": 0.0,
-                "max": 1.0,
-                "step": 0.1,
-                "description": "过滤相似度低于此值的结果",
-            },
-            {
-                "key": "search_method",
-                "label": "搜索方法",
-                "type": "select",
-                "default": "semantic_search",
+                "type": "group",
+                "label": "🔍 Dify 检索配置",
+                "collapsed": False,
+                "description": "配置 Dify 底层检索参数",
                 "options": [
-                    {"value": "semantic_search", "label": "语义搜索", "description": "基于向量的语义搜索"},
-                    {"value": "full_text_search", "label": "全文搜索", "description": "基于关键词的全文搜索"},
-                    {"value": "hybrid_search", "label": "混合搜索", "description": "语义搜索+全文搜索"},
-                ],
-                "description": "Dify 搜索方法",
-            },
-            {
-                "key": "use_reranker",
-                "label": "启用重排序",
-                "type": "boolean",
-                "default": False,
-                "description": "是否使用 Dify 的重排序模型",
+                    {
+                        "key": "final_top_k",
+                        "label": "最终返回数",
+                        "type": "number",
+                        "default": 10,
+                        "min": 1,
+                        "max": 100,
+                        "description": "返回给前端的文档数量",
+                    },
+                    {
+                        "key": "similarity_threshold",
+                        "label": "相似度阈值",
+                        "type": "number",
+                        "default": 0.0,
+                        "min": 0.0,
+                        "max": 1.0,
+                        "step": 0.1,
+                        "description": "过滤相似度低于此值的结果",
+                    },
+                    {
+                        "key": "search_method",
+                        "label": "搜索方法",
+                        "type": "select",
+                        "default": "semantic_search",
+                        "options": [
+                            {"value": "semantic_search", "label": "语义搜索", "description": "基于向量的语义搜索"},
+                            {"value": "full_text_search", "label": "全文搜索", "description": "基于关键词的全文搜索"},
+                            {"value": "hybrid_search", "label": "混合搜索", "description": "语义搜索+全文搜索"},
+                        ],
+                        "description": "Dify 搜索方法",
+                    },
+                    {
+                        "key": "use_reranker",
+                        "label": "启用 Dify 重排序",
+                        "type": "boolean",
+                        "default": False,
+                        "description": "是否使用 Dify 的重排序模型",
+                    },
+                ]
             },
             # 高级优化参数（分组）
             {
@@ -1178,6 +1222,44 @@ class DifyKB(KnowledgeBase):
                         "max": 10,
                         "step": 1,
                         "description": "自动补充前后 n 个相邻分片（0 表示禁用）。启用后可能增加查询时间。推荐值：0-3",
+                    },
+                    {
+                        "key": "cache_ttl",
+                        "label": "缓存有效期（秒）",
+                        "type": "number",
+                        "default": 300,
+                        "min": 0,
+                        "max": 3600,
+                        "step": 60,
+                        "description": "查询结果缓存时间，0 表示禁用缓存。推荐值：300（5分钟）",
+                    },
+                    {
+                        "key": "use_local_reranker",
+                        "label": "启用本地重排序",
+                        "type": "boolean",
+                        "default": False,
+                        "description": "对上下文扩展后的结果进行二次重排序（避免无关分块）",
+                    },
+                    {
+                        "key": "local_reranker_model",
+                        "label": "本地重排序模型",
+                        "type": "select",
+                        "default": "",
+                        "options": [
+                            {"label": info.name, "value": model_id}
+                            for model_id, info in kwargs.get("reranker_names", {}).items()
+                        ],
+                        "description": "选择用于重排序的模型（需要在 config 中配置 API Key）",
+                    },
+                    {
+                        "key": "max_retries",
+                        "label": "最大重试次数",
+                        "type": "number",
+                        "default": 3,
+                        "min": 1,
+                        "max": 5,
+                        "step": 1,
+                        "description": "API 请求失败时的重试次数。推荐值：3",
                     },
                     {
                         "key": "merge_threshold",
@@ -1208,26 +1290,6 @@ class DifyKB(KnowledgeBase):
                         "max": 1000,
                         "step": 50,
                         "description": "每次查询最多获取的分片数。网络慢时可适当调大。推荐值：500",
-                    },
-                    {
-                        "key": "cache_ttl",
-                        "label": "缓存有效期（秒）",
-                        "type": "number",
-                        "default": 300,
-                        "min": 0,
-                        "max": 3600,
-                        "step": 60,
-                        "description": "查询结果缓存时间，0 表示禁用缓存。推荐值：300（5分钟）",
-                    },
-                    {
-                        "key": "max_retries",
-                        "label": "最大重试次数",
-                        "type": "number",
-                        "default": 3,
-                        "min": 1,
-                        "max": 5,
-                        "step": 1,
-                        "description": "API 请求失败时的重试次数。推荐值：3",
                     },
                 ]
             }
