@@ -48,6 +48,14 @@
                 <a-button type="text" size="small" @click.stop="previewBenchmark(benchmark)">
                   <EyeOutlined />
                 </a-button>
+                <a-button
+                  type="text"
+                  size="small"
+                  :loading="!!downloadingBenchmarkMap[benchmark.benchmark_id]"
+                  @click.stop="downloadBenchmark(benchmark)"
+                >
+                  <DownloadOutlined />
+                </a-button>
                 <a-button type="text" size="small" danger @click.stop="deleteBenchmark(benchmark)">
                   <DeleteOutlined />
                 </a-button>
@@ -196,6 +204,7 @@ import {
   UploadOutlined,
   RobotOutlined,
   EyeOutlined,
+  DownloadOutlined,
   DeleteOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
@@ -225,6 +234,7 @@ const generateModalVisible = ref(false)
 const previewModalVisible = ref(false)
 const previewData = ref(null)
 const previewQuestions = ref([])
+const downloadingBenchmarkMap = reactive({})
 const previewPagination = ref({
   current: 1,
   pageSize: 10,
@@ -404,6 +414,60 @@ const previewBenchmark = async (benchmark) => {
   } catch (error) {
     console.error('获取基准详情失败:', error)
     message.error('获取基准详情失败')
+  }
+}
+
+const parseDownloadFilename = (contentDisposition) => {
+  if (!contentDisposition) return ''
+
+  const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)
+  if (utf8Match && utf8Match[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1])
+    } catch (error) {
+      console.warn('解析 UTF-8 文件名失败:', error)
+    }
+  }
+
+  const asciiMatch = contentDisposition.match(/filename=\"?([^\";]+)\"?/i)
+  if (asciiMatch && asciiMatch[1]) {
+    return asciiMatch[1]
+  }
+
+  return ''
+}
+
+// 下载基准
+const downloadBenchmark = async (benchmark) => {
+  const benchmarkId = benchmark?.benchmark_id
+  if (!benchmarkId) return
+  if (downloadingBenchmarkMap[benchmarkId]) return
+
+  downloadingBenchmarkMap[benchmarkId] = true
+  try {
+    const response = await evaluationApi.downloadBenchmark(benchmarkId)
+    const blob = await response.blob()
+    const contentDisposition =
+      response.headers.get('Content-Disposition') || response.headers.get('content-disposition')
+    const headerFilename = parseDownloadFilename(contentDisposition)
+    const fallbackFilename = `${benchmark.name || benchmarkId}.jsonl`
+    const filename = headerFilename || fallbackFilename
+
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+
+    message.success('下载成功')
+  } catch (error) {
+    console.error('下载基准失败:', error)
+    message.error(`下载失败: ${error.message || '未知错误'}`)
+  } finally {
+    delete downloadingBenchmarkMap[benchmarkId]
   }
 }
 

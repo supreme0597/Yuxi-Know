@@ -61,7 +61,7 @@ const props = defineProps({
   flex: 1;
   width: 100%;
   font-size: 14px;
-  color: rgba(0, 0, 0, 0.45);
+  color: var(--gray-900);
 
   .header-title-block {
     display: flex;
@@ -77,7 +77,7 @@ const props = defineProps({
   }
 
   p {
-    margin: 8px 0 0;
+    margin: 4px 0 0;
   }
 }
 

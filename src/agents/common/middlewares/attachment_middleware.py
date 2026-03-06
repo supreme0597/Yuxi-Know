@@ -1,4 +1,7 @@
-"""附件注入中间件 - 使用 LangChain 标准中间件实现"""
+"""附件注入中间件 - 使用 LangChain 标准中间件实现
+
+从 State 中读取附件信息，注入提示词让模型使用 read_file 工具读取附件内容。
+"""
 
 from __future__ import annotations
 
@@ -7,8 +10,11 @@ from typing import NotRequired
 
 from langchain.agents import AgentState
 from langchain.agents.middleware import AgentMiddleware, ModelRequest, ModelResponse
+from langchain_core.messages import SystemMessage
 
 from src.utils import logger
+
+ATTACHMENT_PROMPT_MARKER = "<!-- attachment_context -->"
 
 
 class AttachmentState(AgentState):
@@ -18,43 +24,46 @@ class AttachmentState(AgentState):
 
 
 def _build_attachment_prompt(attachments: Sequence[dict]) -> str | None:
-    """Render attachments into a single system prompt block."""
+    """Render attachments into a system prompt block with file paths.
+
+    提示模型使用 read_file 工具读取附件内容。
+    """
     if not attachments:
         return None
 
-    chunks: list[str] = []
-    for idx, attachment in enumerate(attachments, 1):
-        if attachment.get("status") != "parsed":
-            continue
+    valid_attachments = [a for a in attachments if a.get("status") == "parsed"]
 
-        markdown = attachment.get("markdown")
-        if not markdown:
-            continue
-
-        file_name = attachment.get("file_name") or f"附件 {idx}"
-        truncated = "（已截断）" if attachment.get("truncated") else ""
-        header = f"### 附件 {idx}: {file_name}{truncated}"
-        chunks.append(f"{header}\n\n{markdown}".strip())
-
-    if not chunks:
+    if not valid_attachments:
         return None
 
-    instructions = (
-        "以下为用户提供的附件内容，请综合这些文件与用户的新问题进行回答。如附件与问题无关，可忽略附件内容：\n\n"
-    )
-    return instructions + "\n\n".join(chunks)
+    attachment_infos: list[str] = []
+    for attachment in valid_attachments:
+        file_name = attachment.get("file_name", "未知文件")
+        file_path = attachment.get("file_path", "")
+        truncated = "（已截断）" if attachment.get("truncated") else ""
+
+        if file_path:
+            attachment_infos.append(f"- {file_name}{truncated}: {file_path}")
+        else:
+            attachment_infos.append(f"- {file_name}{truncated}")
+
+    lines = [
+        "用户上传了以下附件：",
+        "",
+        *attachment_infos,
+        "",
+        "请使用 read_file 工具读取附件内容后，再回答用户的问题。",
+    ]
+
+    return "\n".join(lines)
 
 
 class AttachmentMiddleware(AgentMiddleware[AttachmentState]):
     """
-    LangChain 标准中间件：从 State 中读取附件并注入到消息中。
+    LangChain 标准中间件：从 State 中读取附件并注入提示词。
 
-    根据官方文档示例：
-    https://docs.langchain.com/oss/python/langchain/middleware
-
-    从 request.state 中读取 attachments，将其转换为 SystemMessage 并注入到消息列表开头。
-
-    NOTE: 缺点是无法命中缓存了
+    LangGraph 会自动从 checkpointer 恢复 state，包括 attachments。
+    从 request.state 中读取附件，将其转换为上下文块 并注入到系统提示词中。
     """
 
     state_schema = AttachmentState
@@ -62,36 +71,37 @@ class AttachmentMiddleware(AgentMiddleware[AttachmentState]):
     async def awrap_model_call(
         self, request: ModelRequest, handler: Callable[[ModelRequest], ModelResponse]
     ) -> ModelResponse:
-        # Read from State: get uploaded files metadata
-        # logger.debug(f"inject_attachment_context: request.state = {request.state}")
+        # 从 state 获取附件（LangGraph 自动从 checkpointer 恢复）
         attachments = request.state.get("attachments", [])
+        logger.info(f"AttachmentMiddleware: found {len(attachments)} attachments in state")
 
         if attachments:
-            # Build attachment context
+            # 构建附件提示
             attachment_prompt = _build_attachment_prompt(attachments)
 
             if attachment_prompt:
-                logger.debug(f"Injecting {len(attachments)} attachments into model request")
+                logger.info("AttachmentMiddleware: injecting attachment prompt")
+                existing_blocks = list(request.system_message.content_blocks) if request.system_message else []
+                existing_text = "\n".join(
+                    block.get("text", "")
+                    for block in existing_blocks
+                    if isinstance(block, dict) and block.get("type") == "text"
+                )
 
-                messages = list(request.messages)
-                insert_idx = 0
-                for idx, msg in enumerate(messages):
-                    if isinstance(msg, dict):
-                        role = msg.get("role") or msg.get("type")
-                        is_system = role == "system"
-                    else:
-                        msg_type = getattr(msg, "type", None) or getattr(msg, "role", None)
-                        is_system = msg_type == "system"
+                if ATTACHMENT_PROMPT_MARKER in existing_text:
+                    logger.info("AttachmentMiddleware: attachment prompt already injected, skip")
+                    return await handler(request)
 
-                    if not is_system:
-                        break
-                    insert_idx = idx + 1
-
-                messages.insert(insert_idx, {"role": "system", "content": attachment_prompt})
-                request = request.override(messages=messages)
+                merged_blocks = existing_blocks + [
+                    {"type": "text", "text": f"{ATTACHMENT_PROMPT_MARKER}\n{attachment_prompt}"}
+                ]
+                request = request.override(system_message=SystemMessage(content=merged_blocks))
 
         return await handler(request)
 
 
 # 创建中间件实例，供其他模块使用
-inject_attachment_context = AttachmentMiddleware()
+save_attachments_to_fs = AttachmentMiddleware()
+
+# 保留旧名称以保持向后兼容（已废弃）
+inject_attachment_context = save_attachments_to_fs

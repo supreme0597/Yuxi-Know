@@ -3,18 +3,53 @@ import json
 import traceback
 import uuid
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 
 from langchain.messages import AIMessage, AIMessageChunk, HumanMessage
 from langgraph.types import Command
 
 from src import config as conf
-from src import knowledge_base
 from src.agents import agent_manager
 from src.plugins.guard import content_guard
 from src.repositories.agent_config_repository import AgentConfigRepository
 from src.repositories.conversation_repository import ConversationRepository
 from src.storage.postgres.manager import pg_manager
 from src.utils.logging_config import logger
+
+
+def _build_state_files(attachments: list[dict]) -> dict:
+    """将附件列表转换为 StateBackend 格式的 files 字典
+
+    StateBackend 期望的格式:
+    {
+        "/attachments/file.md": {
+            "content": ["line1", "line2", ...],
+            "created_at": "...",
+            "modified_at": "...",
+        }
+    }
+    """
+    files = {}
+    for attachment in attachments:
+        if attachment.get("status") != "parsed":
+            continue
+
+        file_path = attachment.get("file_path")
+        markdown = attachment.get("markdown")
+
+        if not file_path or not markdown:
+            continue
+
+        now = datetime.now(UTC).isoformat()
+        # 将 markdown 内容按行拆分
+        content_lines = markdown.split("\n")
+        files[file_path] = {
+            "content": content_lines,
+            "created_at": attachment.get("uploaded_at", now),
+            "modified_at": attachment.get("uploaded_at", now),
+        }
+
+    return files
 
 
 async def _get_langgraph_messages(agent_instance, config_dict):
@@ -29,20 +64,16 @@ async def _get_langgraph_messages(agent_instance, config_dict):
 
 
 def extract_agent_state(values: dict) -> dict:
+    """从 LangGraph state 中提取 agent 状态"""
     if not isinstance(values, dict):
         return {}
 
-    def _norm_list(v):
-        if v is None:
-            return []
-        if isinstance(v, (list, tuple)):
-            return list(v)
-        return [v]
-
-    result = {}
-    print(f"values.keys(): {values.keys()}")
-    result["todos"] = _norm_list(values.get("todos"))[:20]
-    result["files"] = _norm_list(values.get("files"))[:50]
+    # 直接获取，信任 state 的数据结构
+    todos = values.get("todos")
+    result = {
+        "todos": list(todos)[:20] if todos else [],
+        "files": values.get("files") or {},
+    }
 
     return result
 
@@ -162,6 +193,59 @@ async def save_messages_from_langgraph_state(
         logger.error(traceback.format_exc())
 
 
+def _extract_interrupt_info(state) -> dict | None:
+    """从 LangGraph state 中提取中断信息"""
+    if hasattr(state, "tasks") and state.tasks:
+        for task in state.tasks:
+            if hasattr(task, "interrupts") and task.interrupts:
+                return task.interrupts[0]
+
+    interrupt_data = state.values.get("__interrupt__")
+    if isinstance(interrupt_data, list) and interrupt_data:
+        return interrupt_data[0]
+
+    return None
+
+
+def _get_interrupt_fields(info) -> tuple[str, str]:
+    """从中断信息中提取 question 和 operation"""
+    defaults = ("是否批准以下操作？", "需要人工审批的操作")
+    if isinstance(info, dict):
+        return info.get("question", defaults[0]), info.get("operation", defaults[1])
+    return getattr(info, "question", defaults[0]), getattr(info, "operation", defaults[1])
+
+
+def _ensure_full_msg(full_msg: AIMessage | None, accumulated_content: list[str]) -> AIMessage | None:
+    """如果 full_msg 为空且有累积内容，构建 AIMessage"""
+    if not full_msg and accumulated_content:
+        return AIMessage(content="".join(accumulated_content))
+    return full_msg
+
+
+async def _resolve_agent_config(
+    db, agent_id: str, department_id, user_id: str, agent_config_id: int | str | None
+) -> tuple:
+    """解析 agent_config，返回 (config_item, agent_config_id)"""
+    config_repo = AgentConfigRepository(db)
+    config_item = None
+    if agent_config_id is not None:
+        try:
+            config_item = await config_repo.get_by_id(int(agent_config_id))
+        except Exception:
+            logger.warning(f"Failed to fetch agent config {agent_config_id}: {traceback.format_exc()}")
+            config_item = None
+        if config_item is not None and (config_item.department_id != department_id or config_item.agent_id != agent_id):
+            config_item = None
+
+    if config_item is None:
+        config_item = await config_repo.get_or_create_default(
+            department_id=department_id, agent_id=agent_id, created_by=user_id
+        )
+        agent_config_id = config_item.id
+
+    return config_item, agent_config_id
+
+
 async def check_and_handle_interrupts(
     agent,
     langgraph_config: dict,
@@ -176,29 +260,9 @@ async def check_and_handle_interrupts(
         if not state or not state.values:
             return
 
-        interrupt_info = None
-
-        if hasattr(state, "tasks") and state.tasks:
-            for task in state.tasks:
-                if hasattr(task, "interrupts") and task.interrupts:
-                    interrupt_info = task.interrupts[0]
-                    break
-
-        if not interrupt_info and state.values:
-            interrupt_data = state.values.get("__interrupt__")
-            if interrupt_data and isinstance(interrupt_data, list) and len(interrupt_data) > 0:
-                interrupt_info = interrupt_data[0]
-
+        interrupt_info = _extract_interrupt_info(state)
         if interrupt_info:
-            question = "是否批准以下操作？"
-            operation = "需要人工审批的操作"
-            if isinstance(interrupt_info, dict):
-                question = interrupt_info.get("question", question)
-                operation = interrupt_info.get("operation", operation)
-            elif hasattr(interrupt_info, "question"):
-                question = getattr(interrupt_info, "question", question)
-                operation = getattr(interrupt_info, "operation", operation)
-
+            question, operation = _get_interrupt_fields(interrupt_info)
             meta["interrupt"] = {
                 "question": question,
                 "operation": operation,
@@ -279,22 +343,7 @@ async def stream_agent_chat(
         return
 
     agent_config_id = config.get("agent_config_id")
-    config_repo = AgentConfigRepository(db)
-    config_item = None
-    if agent_config_id is not None:
-        try:
-            config_item = await config_repo.get_by_id(int(agent_config_id))
-        except Exception:
-            logger.warning(f"Failed to fetch agent config {agent_config_id}: {traceback.format_exc()}")
-            config_item = None
-        if config_item is not None and (config_item.department_id != department_id or config_item.agent_id != agent_id):
-            config_item = None
-
-    if config_item is None:
-        config_item = await config_repo.get_or_create_default(
-            department_id=department_id, agent_id=agent_id, created_by=user_id
-        )
-        agent_config_id = config_item.id
+    config_item, agent_config_id = await _resolve_agent_config(db, agent_id, department_id, user_id, agent_config_id)
 
     if not (thread_id := config.get("thread_id")):
         thread_id = str(uuid.uuid4())
@@ -324,36 +373,11 @@ async def stream_agent_chat(
         except Exception as e:
             logger.error(f"Error saving user message: {e}")
 
-        try:
-            assert thread_id, "thread_id is required"
-            attachments = await conv_repo.get_attachments_by_thread_id(thread_id)
-            input_context["attachments"] = attachments
-        except Exception as e:
-            logger.error(f"Error loading attachments for thread_id={thread_id}: {e}")
-            input_context["attachments"] = []
-
-        # 根据用户权限过滤知识库
-        requested_knowledge_names = input_context["agent_config"].get("knowledges")
-        logger.info(f"Requesting knowledges: {requested_knowledge_names}")
-        if requested_knowledge_names and isinstance(requested_knowledge_names, list) and requested_knowledge_names:
-            user_info = {"role": "user", "department_id": department_id}
-            accessible_databases = await knowledge_base.get_databases_by_user(user_info)
-            accessible_kb_names = {
-                db.get("name")
-                for db in accessible_databases.get("databases", [])
-                if isinstance(db, dict) and db.get("name")
-            }
-            logger.info(f"Accessible knowledges: {accessible_kb_names}")
-
-            filtered_knowledge_names = [kb for kb in requested_knowledge_names if kb in accessible_kb_names]
-            blocked_knowledge_names = [kb for kb in requested_knowledge_names if kb not in accessible_kb_names]
-            if blocked_knowledge_names:
-                logger.warning(f"用户 {user_id} 无权访问知识库: {blocked_knowledge_names}, 已自动过滤")
-            input_context["agent_config"]["knowledges"] = filtered_knowledge_names
+        # 先构建 langgraph_config
+        langgraph_config = {"configurable": {"thread_id": thread_id, "user_id": user_id}}
 
         full_msg = None
         accumulated_content = []
-        langgraph_config = {"configurable": {"thread_id": thread_id, "user_id": user_id}}
         async for msg, metadata in agent.stream_messages(messages, input_context=input_context):
             if isinstance(msg, AIMessageChunk):
                 accumulated_content.append(msg.content)
@@ -381,8 +405,7 @@ async def stream_agent_chat(
                 except Exception as e:
                     logger.error(f"Error processing tool message: {e}")
 
-        if not full_msg and accumulated_content:
-            full_msg = AIMessage(content="".join(accumulated_content))
+        full_msg = _ensure_full_msg(full_msg, accumulated_content)
 
         if conf.enable_content_guard and hasattr(full_msg, "content") and await content_guard.check(full_msg.content):
             await save_partial_message(conv_repo, thread_id, full_msg, "content_guard_blocked")
@@ -404,8 +427,7 @@ async def stream_agent_chat(
         if agent_state:
             yield make_chunk(status="agent_state", agent_state=agent_state, meta=meta)
 
-        yield make_chunk(status="finished", meta=meta)
-
+        # 先存储数据库，再返回 finished，避免前端查询时数据未落库
         await save_messages_from_langgraph_state(
             agent_instance=agent,
             thread_id=thread_id,
@@ -413,13 +435,14 @@ async def stream_agent_chat(
             config_dict=langgraph_config,
         )
 
+        yield make_chunk(status="finished", meta=meta)
+
     except (asyncio.CancelledError, ConnectionError) as e:
         logger.warning(f"Client disconnected, cancelling stream: {e}")
 
         async def save_cleanup():
             nonlocal full_msg
-            if not full_msg and accumulated_content:
-                full_msg = AIMessage(content="".join(accumulated_content))
+            full_msg = _ensure_full_msg(full_msg, accumulated_content)
 
             async with pg_manager.get_async_session_context() as new_db:
                 new_conv_repo = ConversationRepository(new_db)
@@ -447,8 +470,7 @@ async def stream_agent_chat(
         error_msg = f"Error streaming messages: {e}"
         error_type = "unexpected_error"
 
-        if not full_msg and accumulated_content:
-            full_msg = AIMessage(content="".join(accumulated_content))
+        full_msg = _ensure_full_msg(full_msg, accumulated_content)
 
         async with pg_manager.get_async_session_context() as new_db:
             new_conv_repo = ConversationRepository(new_db)
@@ -508,22 +530,7 @@ async def stream_agent_resume(
         return
 
     agent_config_id = (config or {}).get("agent_config_id")
-    config_repo = AgentConfigRepository(db)
-    config_item = None
-    if agent_config_id is not None:
-        try:
-            config_item = await config_repo.get_by_id(int(agent_config_id))
-        except Exception:
-            logger.warning(f"Failed to fetch agent config {agent_config_id}: {traceback.format_exc()}")
-            config_item = None
-        if config_item is not None and (config_item.department_id != department_id or config_item.agent_id != agent_id):
-            config_item = None
-
-    if config_item is None:
-        config_item = await config_repo.get_or_create_default(
-            department_id=department_id, agent_id=agent_id, created_by=user_id
-        )
-        agent_config_id = config_item.id
+    config_item, agent_config_id = await _resolve_agent_config(db, agent_id, department_id, user_id, agent_config_id)
 
     input_context = {
         "user_id": user_id,
@@ -560,8 +567,8 @@ async def stream_agent_resume(
             yield chunk
 
         meta["time_cost"] = asyncio.get_event_loop().time() - start_time
-        yield make_resume_chunk(status="finished", meta=meta)
 
+        # 先存储数据库，再返回 finished，避免前端查询时数据未落库
         conv_repo = ConversationRepository(db)
         await save_messages_from_langgraph_state(
             agent_instance=agent,
@@ -569,6 +576,8 @@ async def stream_agent_resume(
             conv_repo=conv_repo,
             config_dict=langgraph_config,
         )
+
+        yield make_resume_chunk(status="finished", meta=meta)
 
     except (asyncio.CancelledError, ConnectionError) as e:
         logger.warning(f"Client disconnected during resume: {e}")
@@ -618,12 +627,23 @@ async def get_agent_state_view(
     state = await graph.aget_state(langgraph_config)
     agent_state = extract_agent_state(getattr(state, "values", {})) if state else {}
 
-    # 获取附件
-    try:
-        attachments = await conv_repo.get_attachments_by_thread_id(thread_id)
-        agent_state["attachments"] = attachments
-    except Exception as e:
-        logger.warning(f"Failed to fetch attachments for thread {thread_id}: {e}")
-        agent_state["attachments"] = []
+    # 如果 state 中没有 files，从附件构建
+    # 这确保了上传附件后立即可以在文件列表中看到文件
+    if not agent_state.get("files") or agent_state["files"] == {}:
+        try:
+            attachments = await conv_repo.get_attachments_by_thread_id(thread_id)
+            logger.info(f"[get_agent_state_view] found {len(attachments)} attachments in DB")
+            if attachments:
+                first_status = attachments[0].get("status")
+                first_has_markdown = bool(attachments[0].get("markdown"))
+                logger.info(
+                    f"[get_agent_state_view] first attachment status: {first_status}, "
+                    f"has markdown: {first_has_markdown}"
+                )
+                files = _build_state_files(attachments)
+                agent_state["files"] = files
+                logger.info(f"[get_agent_state_view] Built files from attachments: {len(files)} files")
+        except Exception as e:
+            logger.warning(f"Failed to fetch attachments for thread {thread_id}: {e}")
 
     return {"agent_state": agent_state}

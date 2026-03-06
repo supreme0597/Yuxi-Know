@@ -5,11 +5,20 @@
   <!-- 网页搜索 -->
   <WebSearchTool v-else-if="isWebSearchResult" :tool-call="toolCall" />
 
-  <!-- 知识库 -->
-  <KnowledgeBaseTool v-else-if="isKnowledgeBaseResult" :tool-call="toolCall" />
+  <!-- Chart -->
+  <ChartTool v-else-if="isChartResult" :tool-call="toolCall" />
+
+  <!-- 知识库列表 -->
+  <ListKbsTool v-else-if="toolName === 'list_kbs'" :tool-call="toolCall" />
+
+  <!-- 思维导图 -->
+  <GetMindmapTool v-else-if="toolName === 'get_mindmap'" :tool-call="toolCall" />
+
+  <!-- 知识库检索 -->
+  <QueryKbTool v-else-if="toolName === 'query_kb'" :tool-call="toolCall" />
 
   <!-- 待办事项 -->
-  <TodoListTool v-else-if="isTodoListResult" :tool-call="toolCall" />
+  <TodoListTool v-else-if="toolName === 'write_todos'" :tool-call="toolCall" />
 
   <!-- 计算器 -->
   <CalculatorTool v-else-if="isCalculatorResult" :tool-call="toolCall" />
@@ -21,7 +30,37 @@
   <TaskTool v-else-if="isTaskResult" :tool-call="toolCall" />
 
   <!-- 写文件 -->
-  <WriteFileTool v-else-if="isWriteFileResult" :tool-call="toolCall" />
+  <WriteFileTool v-else-if="toolName === 'write_file'" :tool-call="toolCall" />
+
+  <!-- 读文件 -->
+  <ReadFileTool v-else-if="toolName === 'read_file'" :tool-call="toolCall" />
+
+  <!-- 列目录 -->
+  <ListDirectoryTool
+    v-else-if="toolName === 'list_directory' || toolName === 'ls'"
+    :tool-call="toolCall"
+  />
+
+  <!-- 搜索文件内容 -->
+  <SearchFileContentTool v-else-if="toolName === 'search_file_content'" :tool-call="toolCall" />
+
+  <!-- Glob 搜索 -->
+  <GlobTool v-else-if="toolName === 'glob'" :tool-call="toolCall" />
+
+  <!-- 编辑文件 -->
+  <EditFileTool
+    v-else-if="toolName === 'edit_file' || toolName === 'replace'"
+    :tool-call="toolCall"
+  />
+
+  <!-- MySQL 查询 -->
+  <MysqlQueryTool v-else-if="toolName === 'mysql_query'" :tool-call="toolCall" />
+
+  <!-- MySQL 描述表 -->
+  <MysqlDescribeTableTool v-else-if="toolName === 'mysql_describe_table'" :tool-call="toolCall" />
+
+  <!-- MySQL 列出表 -->
+  <MysqlListTablesTool v-else-if="toolName === 'mysql_list_tables'" :tool-call="toolCall" />
 
   <!-- 默认展示 -->
   <BaseToolCall v-else :tool-call="toolCall" />
@@ -30,17 +69,26 @@
 <script setup>
 import { computed, ref } from 'vue'
 import BaseToolCall from './BaseToolCall.vue'
-import { useAgentStore } from '@/stores/agent'
-import { useDatabaseStore } from '@/stores/database'
 
 import WebSearchTool from './tools/WebSearchTool.vue'
-import KnowledgeBaseTool from './tools/KnowledgeBaseTool.vue'
+import ListKbsTool from './tools/ListKbsTool.vue'
+import GetMindmapTool from './tools/GetMindmapTool.vue'
+import QueryKbTool from './tools/QueryKbTool.vue'
 import KnowledgeGraphTool from './tools/KnowledgeGraphTool.vue'
+import ChartTool from './tools/ChartTool.vue'
 import CalculatorTool from './tools/CalculatorTool.vue'
 import TodoListTool from './tools/TodoListTool.vue'
 import ImageTool from './tools/ImageTool.vue'
 import TaskTool from './tools/TaskTool.vue'
 import WriteFileTool from './tools/WriteFileTool.vue'
+import ReadFileTool from './tools/ReadFileTool.vue'
+import ListDirectoryTool from './tools/ListDirectoryTool.vue'
+import SearchFileContentTool from './tools/SearchFileContentTool.vue'
+import GlobTool from './tools/GlobTool.vue'
+import EditFileTool from './tools/EditFileTool.vue'
+import MysqlQueryTool from './tools/MysqlQueryTool.vue'
+import MysqlDescribeTableTool from './tools/MysqlDescribeTableTool.vue'
+import MysqlListTablesTool from './tools/MysqlListTablesTool.vue'
 
 const props = defineProps({
   toolCall: {
@@ -49,17 +97,7 @@ const props = defineProps({
   }
 })
 
-const agentStore = useAgentStore()
-const databaseStore = useDatabaseStore()
-
 const toolName = computed(() => props.toolCall.name || props.toolCall.function?.name || '')
-const tool = computed(() => {
-  const toolsList = agentStore?.availableTools ? Object.values(agentStore.availableTools) : []
-  const tool = toolsList.find((t) => t.name === toolName.value)
-  return tool || null
-})
-
-const databases = computed(() => databaseStore.databases || [])
 
 const parseData = (content) => {
   if (typeof content === 'string') {
@@ -90,14 +128,6 @@ const isTaskResult = computed(() => {
   return args && typeof args === 'object' && 'subagent_type' in args
 })
 
-const isKnowledgeBaseResult = computed(() => {
-  const databaseInfo = databases.value.find((db) => db.name === toolName.value)
-  if (databaseInfo && databaseInfo.kb_type !== 'lightrag') {
-    return true
-  }
-  return false
-})
-
 const isKnowledgeGraphResult = computed(() => {
   const name = toolName.value.toLowerCase()
   const hasGraphKeyword = name.includes('graph') || name.includes('图谱') || name.includes('kg')
@@ -110,24 +140,24 @@ const isKnowledgeGraphResult = computed(() => {
   )
 })
 
-const isTodoListResult = computed(() => {
-  return toolName.value === 'write_todos'
-})
-
 const isCalculatorResult = computed(() => {
   const name = toolName.value.toLowerCase()
   return name.includes('calculator') || name.includes('calc') || name.includes('math')
 })
 
-const isImageResult = computed(() => {
+const isChartResult = computed(() => {
   const name = toolName.value.toLowerCase()
   if (!name.includes('chart')) return false
   const data = parseData(props.toolCall.tool_call_result?.content)
-  return data && typeof data === 'string' && data.startsWith('http')
+  // chart 返回数组格式 [{ type: "text", text: "url", id: "..." }]
+  return Array.isArray(data) && data.length > 0 && data[0].type === 'text'
 })
 
-const isWriteFileResult = computed(() => {
-  return toolName.value === 'write_file'
+const isImageResult = computed(() => {
+  const name = toolName.value.toLowerCase()
+  if (!name.includes('text_to_img')) return false
+  const data = parseData(props.toolCall.tool_call_result?.content)
+  return data && typeof data === 'string' && data.startsWith('http')
 })
 
 // 处理知识图谱刷新

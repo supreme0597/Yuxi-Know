@@ -94,6 +94,193 @@ export class MessageProcessor {
   }
 
   /**
+   * 提取一轮对话中所有知识库检索块
+   * @param {Object} conv - 单轮对话
+   * @param {Array} databases - 知识库列表
+   * @returns {Array} 归一化后的检索块
+   */
+  static extractKnowledgeChunksFromConversation(conv, databases = []) {
+    if (!conv || !Array.isArray(conv.messages) || conv.messages.length === 0) return []
+
+    const databaseNames = new Set(
+      (databases || [])
+        .map((db) => db?.name)
+        .filter((name) => typeof name === 'string' && name.trim())
+    )
+    if (databaseNames.size === 0) return []
+
+    const normalizedChunks = []
+    const dedupSet = new Set()
+
+    const appendChunk = (chunk, kbName) => {
+      if (!chunk || typeof chunk !== 'object') return
+      const content = typeof chunk.content === 'string' ? chunk.content.trim() : ''
+      if (!content) return
+
+      const metadata = chunk.metadata && typeof chunk.metadata === 'object' ? chunk.metadata : {}
+      const dedupKey =
+        metadata.chunk_id && typeof metadata.chunk_id === 'string'
+          ? `${kbName}::${metadata.chunk_id}`
+          : `${kbName}::${content}`
+      if (dedupSet.has(dedupKey)) return
+      dedupSet.add(dedupKey)
+
+      const score = typeof chunk.score === 'number' ? chunk.score : null
+      normalizedChunks.push({
+        kb_name: kbName,
+        content,
+        score,
+        metadata: {
+          source: metadata.source || '',
+          file_id: metadata.file_id || '',
+          chunk_id: metadata.chunk_id || '',
+          chunk_index: metadata.chunk_index
+        }
+      })
+    }
+
+    const parseToolResultContent = (content) => {
+      if (Array.isArray(content)) return content
+      if (content && typeof content === 'object') return content
+      if (typeof content === 'string') {
+        try {
+          return JSON.parse(content)
+        } catch {
+          return null
+        }
+      }
+      return null
+    }
+
+    for (const msg of conv.messages) {
+      if (!msg || msg.type !== 'ai' || !Array.isArray(msg.tool_calls)) continue
+
+      for (const toolCall of msg.tool_calls) {
+        const kbName = toolCall?.name || toolCall?.function?.name
+        if (!databaseNames.has(kbName)) continue
+
+        const content = toolCall?.tool_call_result?.content
+        const parsed = parseToolResultContent(content)
+        if (!parsed) continue
+
+        // Milvus / Dify: 直接是 chunks 数组
+        if (Array.isArray(parsed)) {
+          for (const chunk of parsed) appendChunk(chunk, kbName)
+          continue
+        }
+
+        // LightRAG: 结果为对象，chunks 在 data.chunks 下
+        const lightragChunks = parsed?.data?.chunks
+        if (Array.isArray(lightragChunks)) {
+          for (const chunk of lightragChunks) appendChunk(chunk, kbName)
+        }
+      }
+    }
+
+    normalizedChunks.sort((a, b) => {
+      const scoreA = typeof a.score === 'number' ? a.score : Number.NEGATIVE_INFINITY
+      const scoreB = typeof b.score === 'number' ? b.score : Number.NEGATIVE_INFINITY
+      return scoreB - scoreA
+    })
+
+    return normalizedChunks
+  }
+
+  /**
+   * 提取一轮对话中的网络搜索来源
+   * @param {Object} conv - 单轮对话
+   * @returns {Array} 归一化后的网络来源
+   */
+  static extractWebSourcesFromConversation(conv) {
+    if (!conv || !Array.isArray(conv.messages) || conv.messages.length === 0) return []
+
+    const webSources = []
+    const dedupSet = new Set()
+
+    const parseToolResultContent = (content) => {
+      if (Array.isArray(content)) return content
+      if (content && typeof content === 'object') return content
+      if (typeof content === 'string') {
+        try {
+          return JSON.parse(content)
+        } catch {
+          return null
+        }
+      }
+      return null
+    }
+
+    for (const msg of conv.messages) {
+      if (!msg || msg.type !== 'ai' || !Array.isArray(msg.tool_calls)) continue
+
+      for (const toolCall of msg.tool_calls) {
+        const toolName = (toolCall?.name || toolCall?.function?.name || '').toLowerCase()
+        if (!toolName.includes('tavily_search')) continue
+
+        const content = toolCall?.tool_call_result?.content
+        const parsed = parseToolResultContent(content)
+        const results = Array.isArray(parsed?.results) ? parsed.results : []
+        if (results.length === 0) continue
+
+        for (const item of results) {
+          const title = typeof item?.title === 'string' ? item.title.trim() : ''
+          const url = typeof item?.url === 'string' ? item.url.trim() : ''
+          if (!title || !url) continue
+          if (dedupSet.has(url)) continue
+          dedupSet.add(url)
+
+          webSources.push({
+            tool_name: toolCall?.name || toolCall?.function?.name || '网络搜索',
+            title,
+            url,
+            score: typeof item?.score === 'number' ? item.score : null,
+            content: typeof item?.content === 'string' ? item.content : '',
+            published_date: typeof item?.published_date === 'string' ? item.published_date : ''
+          })
+        }
+      }
+    }
+
+    webSources.sort((a, b) => {
+      const scoreA = typeof a.score === 'number' ? a.score : Number.NEGATIVE_INFINITY
+      const scoreB = typeof b.score === 'number' ? b.score : Number.NEGATIVE_INFINITY
+      return scoreB - scoreA
+    })
+
+    return webSources
+  }
+
+  /**
+   * 提取单个消息中的来源
+   * @param {Object} message - 消息对象
+   * @param {Array} databases - 知识库列表
+   * @returns {{knowledgeChunks: Array, webSources: Array}}
+   */
+  static extractSourcesFromMessage(message, databases = []) {
+    if (!message || message.type !== 'ai') return { knowledgeChunks: [], webSources: [] }
+
+    // 复用提取逻辑，通过构建临时对话对象
+    const mockConv = { messages: [message] }
+    return {
+      knowledgeChunks: MessageProcessor.extractKnowledgeChunksFromConversation(mockConv, databases),
+      webSources: MessageProcessor.extractWebSourcesFromConversation(mockConv)
+    }
+  }
+
+  /**
+   * 提取一轮对话中的全部来源（知识库+网络搜索）
+   * @param {Object} conv - 单轮对话
+   * @param {Array} databases - 知识库列表
+   * @returns {{knowledgeChunks: Array, webSources: Array}}
+   */
+  static extractSourcesFromConversation(conv, databases = []) {
+    return {
+      knowledgeChunks: MessageProcessor.extractKnowledgeChunksFromConversation(conv, databases),
+      webSources: MessageProcessor.extractWebSourcesFromConversation(conv)
+    }
+  }
+
+  /**
    * 合并消息块
    * @param {Array} chunks - 消息块数组
    * @returns {Object|null} 合并后的消息
@@ -290,7 +477,7 @@ export class MessageProcessor {
         try {
           const data = JSON.parse(buffer.trim())
           await processChunk(data)
-        } catch (e) {
+        } catch {
           console.warn('最终缓冲区内容无法解析:', buffer)
         }
       }

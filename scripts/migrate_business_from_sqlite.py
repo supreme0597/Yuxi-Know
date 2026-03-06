@@ -532,6 +532,7 @@ async def migrate_mcp_servers(sqlite_reader: SQLiteReader, dry_run: bool, execut
                         url=sqlite_server.url,
                         command=sqlite_server.command,
                         args=sqlite_server.args,
+                        env=getattr(sqlite_server, "env", None),
                         headers=sqlite_server.headers,
                         timeout=sqlite_server.timeout,
                         sse_read_timeout=sqlite_server.sse_read_timeout,

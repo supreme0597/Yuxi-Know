@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -94,7 +93,3 @@ async def convert_upload_to_markdown(upload: UploadFile) -> ConversionResult:
     except Exception as exc:  # noqa: BLE001
         logger.error("Attachment conversion failed: %s", exc)
         raise
-    finally:
-        # Remove the temp file in a thread to avoid blocking the event loop
-        if temp_path.exists():
-            await asyncio.to_thread(temp_path.unlink)

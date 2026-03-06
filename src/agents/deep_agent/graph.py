@@ -5,19 +5,25 @@ from deepagents.middleware.patch_tool_calls import PatchToolCallsMiddleware
 from deepagents.middleware.subagents import SubAgentMiddleware
 from langchain.agents import create_agent
 from langchain.agents.middleware import (
-    ModelRequest,
-    SummarizationMiddleware,
     TodoListMiddleware,
-    dynamic_prompt,
+    ToolCallLimitMiddleware,
 )
 
 from src.agents.common import BaseAgent, load_chat_model
-from src.agents.common.middlewares import RuntimeConfigMiddleware, inject_attachment_context
-from src.agents.common.tools import get_tavily_search
+from src.agents.common.backends import create_agent_composite_backend
+from src.agents.common.middlewares import RuntimeConfigMiddleware, SummaryOffloadMiddleware, save_attachments_to_fs
+from src.agents.common.middlewares.knowledge_base_middleware import KnowledgeBaseMiddleware
+from src.agents.common.middlewares.skills_middleware import SkillsMiddleware
+from src.agents.common.toolkits.buildin.tools import _create_tavily_search
 from src.services.mcp_service import get_tools_from_all_servers
+from src.utils import logger
 
 from .context import DeepContext
-from .prompts import DEEP_PROMPT
+
+
+def _create_fs_backend(rt):
+    """创建文件存储后端"""
+    return create_agent_composite_backend(rt)
 
 
 def _get_research_sub_agent(search_tools: list) -> dict:
@@ -57,12 +63,6 @@ critique_sub_agent = {
 }
 
 
-@dynamic_prompt
-def context_aware_prompt(request: ModelRequest) -> str:
-    """从 runtime context 动态生成系统提示词"""
-    return DEEP_PROMPT + "\n\n\n" + request.runtime.context.system_prompt
-
-
 class DeepAgent(BaseAgent):
     name = "深度分析智能体"
     description = "具备规划、深度分析和子智能体协作能力的智能体，可以处理复杂的多步骤任务"
@@ -80,16 +80,16 @@ class DeepAgent(BaseAgent):
 
     async def get_tools(self):
         """返回 Deep Agent 的专用工具"""
-        tools = []
-        tavily_search = get_tavily_search()
-        if tavily_search:
-            tools.append(tavily_search)
+        from src import config
 
-        # Assert that search tool is available for DeepAgent
-        assert tools, (
-            "DeepAgent requires at least one search tool. "
-            "Please configure TAVILY_API_KEY environment variable to enable web search."
-        )
+        tools = []
+        if config.enable_web_search:
+            tavily = _create_tavily_search()
+            if tavily:
+                tools.append(tavily)
+
+        if not tools:
+            logger.warning("No search tools configured, DeepAgent will work without web search")
         return tools
 
     async def get_graph(self, **kwargs):
@@ -106,40 +106,72 @@ class DeepAgent(BaseAgent):
         # Build subagents with search tools
         research_sub_agent = _get_research_sub_agent(search_tools)
 
+        # 主 Agent 上下文优化：90k tokens 触发压缩（128k context window 的 70%）
+        summary_middleware = SummaryOffloadMiddleware(
+            model=model,
+            trigger=("tokens", 90000),
+            trim_tokens_to_summarize=4000,
+            summary_offload_threshold=500,
+            max_retention_ratio=0.5,
+        )
+
+        # 子 Agent 独立的上下文优化：更激进的压缩策略
+        sub_summary_middleware = SummaryOffloadMiddleware(
+            model=sub_model,
+            trigger=("tokens", 50000),
+            trim_tokens_to_summarize=2000,
+            summary_offload_threshold=300,
+            max_retention_ratio=0.4,
+        )
+
+        subagents_middleware = SubAgentMiddleware(
+            default_model=sub_model,
+            default_tools=search_tools,
+            subagents=[critique_sub_agent, research_sub_agent],
+            default_middleware=[
+                RuntimeConfigMiddleware(
+                    model_context_name="subagents_model",
+                    enable_model_override=True,
+                    enable_system_prompt_override=False,
+                    enable_tools_override=False,
+                ),
+                PatchToolCallsMiddleware(),
+                sub_summary_middleware,
+                # 子 Agent 搜索工具限制：tavily_search 最多 8 次
+                ToolCallLimitMiddleware(
+                    tool_name="tavily_search",
+                    run_limit=8,
+                    exit_behavior="continue",
+                ),
+            ],
+            general_purpose_agent=True,
+        )
+
         # 使用 create_deep_agent 创建深度智能体
         graph = create_agent(
             model=model,
             system_prompt=context.system_prompt,
             middleware=[
-                context_aware_prompt,  # 动态系统提示词
-                inject_attachment_context,  # 附件上下文注入
+                FilesystemMiddleware(backend=_create_fs_backend),  # 文件系统后端
                 RuntimeConfigMiddleware(extra_tools=all_mcp_tools),
+                SkillsMiddleware(),  # Skills 中间件（提示词注入、依赖展开、动态激活）
+                save_attachments_to_fs,  # 附件注入提示词
                 TodoListMiddleware(),
-                FilesystemMiddleware(),
-                SubAgentMiddleware(
-                    default_model=sub_model,
-                    default_tools=search_tools,
-                    subagents=[critique_sub_agent, research_sub_agent],
-                    default_middleware=[
-                        TodoListMiddleware(),  # 子智能体也有 todo 列表
-                        FilesystemMiddleware(),  # 当前的两个文件系统是隔离的
-                        SummarizationMiddleware(
-                            model=sub_model,
-                            trigger=("tokens", 110000),
-                            keep=("messages", 10),
-                            trim_tokens_to_summarize=None,
-                        ),
-                        PatchToolCallsMiddleware(),
-                    ],
-                    general_purpose_agent=True,
-                ),
-                SummarizationMiddleware(
-                    model=model,
-                    trigger=("tokens", 110000),
-                    keep=("messages", 10),
-                    trim_tokens_to_summarize=None,
-                ),
                 PatchToolCallsMiddleware(),
+                KnowledgeBaseMiddleware(),  # 知识库工具
+                subagents_middleware,
+                summary_middleware,
+                # 工具调用限制：tavily_search 总调用最多 20 次
+                ToolCallLimitMiddleware(
+                    tool_name="tavily_search",
+                    thread_limit=20,
+                    exit_behavior="continue",
+                ),
+                # 总工具调用轮次限制：防止单次运行无限循环
+                ToolCallLimitMiddleware(
+                    run_limit=50,
+                    exit_behavior="end",
+                ),
             ],
             checkpointer=await self._get_checkpointer(),
         )

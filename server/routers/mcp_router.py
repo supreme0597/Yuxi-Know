@@ -33,6 +33,7 @@ class CreateMcpServerRequest(BaseModel):
     url: str | None = Field(None, description="服务器 URL（sse/streamable_http）")
     command: str | None = Field(None, description="命令（stdio）")
     args: list | None = Field(None, description="命令参数数组（stdio）")
+    env: dict | None = Field(None, description="环境变量（stdio）")
     description: str | None = Field(None, description="描述")
     headers: dict | None = Field(None, description="HTTP 请求头")
     timeout: int | None = Field(None, description="HTTP 超时时间（秒）")
@@ -46,6 +47,7 @@ class UpdateMcpServerRequest(BaseModel):
     url: str | None = Field(None, description="服务器 URL")
     command: str | None = Field(None, description="命令（stdio）")
     args: list | None = Field(None, description="命令参数数组（stdio）")
+    env: dict | None = Field(None, description="环境变量（stdio）")
     description: str | None = Field(None, description="描述")
     headers: dict | None = Field(None, description="HTTP 请求头")
     timeout: int | None = Field(None, description="HTTP 超时时间（秒）")
@@ -112,6 +114,7 @@ async def create_mcp_server_route(
             url=request.url,
             command=request.command,
             args=request.args,
+            env=request.env,
             description=request.description,
             headers=request.headers,
             timeout=request.timeout,
@@ -159,6 +162,11 @@ async def update_mcp_server_route(
         raise HTTPException(status_code=400, detail=f"传输类型必须是 {', '.join(valid_transports)} 之一")
 
     try:
+        fields_set = getattr(request, "model_fields_set", getattr(request, "__fields_set__", set()))
+        update_kwargs = {}
+        if "env" in fields_set:
+            update_kwargs["env"] = request.env
+
         server = await update_mcp_server(
             db,
             name=name,
@@ -173,6 +181,7 @@ async def update_mcp_server_route(
             tags=request.tags,
             icon=request.icon,
             updated_by=current_user.username,
+            **update_kwargs,
         )
         return {"success": True, "data": server.to_dict()}
     except ValueError as ve:

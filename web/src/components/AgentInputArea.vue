@@ -1,6 +1,7 @@
 <template>
   <MessageInputComponent
     ref="inputRef"
+    :key="inputKey"
     :model-value="modelValue"
     @update:modelValue="updateValue"
     :is-loading="isLoading"
@@ -8,6 +9,7 @@
     :send-button-disabled="sendButtonDisabled"
     :placeholder="placeholder"
     :force-multi-line="hasStateContent"
+    :mention="mention"
     @send="handleSend"
     @keydown="handleKeyDown"
   >
@@ -38,7 +40,7 @@
           @click="$emit('toggle-panel')"
           title="查看工作状态"
         >
-          <FolderDot :size="16" />
+          <FolderCode :size="18" />
           <span>状态</span>
         </div>
       </div>
@@ -47,7 +49,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import MessageInputComponent from '@/components/MessageInputComponent.vue'
 import ImagePreviewComponent from '@/components/ImagePreviewComponent.vue'
@@ -55,7 +57,7 @@ import AttachmentOptionsComponent from '@/components/AttachmentOptionsComponent.
 import { threadApi } from '@/apis'
 import { AgentValidator } from '@/utils/agentValidator'
 import { handleChatError, handleValidationError } from '@/utils/errorHandler'
-import { FolderDot } from 'lucide-vue-next'
+import { FolderCode } from 'lucide-vue-next'
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
@@ -68,7 +70,8 @@ const props = defineProps({
   threadId: { type: String, default: null },
   ensureThread: { type: Function, required: true },
   hasStateContent: { type: Boolean, default: false },
-  isPanelOpen: { type: Boolean, default: false }
+  isPanelOpen: { type: Boolean, default: false },
+  mention: { type: Object, default: () => null }
 })
 
 const emit = defineEmits([
@@ -81,6 +84,20 @@ const emit = defineEmits([
 
 const inputRef = ref(null)
 const currentImage = ref(null)
+
+// 用于强制重建输入组件的 key
+const inputKey = ref(0)
+
+// 监听 hasStateContent 变化，当从有 state 切换到无 state 时重建组件
+watch(
+  () => props.hasStateContent,
+  (newVal, oldVal) => {
+    // 当 hasStateContent 从 true 变为 false 时，重建输入组件
+    if (oldVal === true && newVal === false) {
+      inputKey.value++
+    }
+  }
+)
 
 const updateValue = (val) => {
   emit('update:modelValue', val)
@@ -108,12 +125,18 @@ const handleAttachmentUpload = async (files) => {
   }
 
   try {
+    const hide = message.loading({
+      content: '正在上传附件...',
+      key: 'upload-attachment',
+      duration: 0
+    })
     for (const file of files) {
       await threadApi.uploadThreadAttachment(threadId, file)
-      message.success(`${file.name} 上传成功`)
     }
-    emit('attachment-changed')
+    message.success({ content: '附件上传成功', key: 'upload-attachment', duration: 2 })
+    emit('attachment-changed', threadId)
   } catch (error) {
+    message.destroy('upload-attachment')
     handleChatError(error, 'upload')
   }
 }
@@ -168,7 +191,7 @@ defineExpose({
   padding: 0 8px;
   height: 28px;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--gray-600);
   cursor: pointer;
   transition: all 0.2s ease;

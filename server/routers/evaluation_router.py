@@ -1,6 +1,7 @@
 import traceback
 
 from fastapi import APIRouter, HTTPException, Depends, File, Form, Body, UploadFile
+from fastapi.responses import FileResponse
 from src.storage.postgres.models_business import User
 from server.utils.auth_middleware import get_admin_user
 from src.utils import logger
@@ -51,6 +52,29 @@ async def delete_evaluation_benchmark(benchmark_id: str, current_user: User = De
     except Exception as e:
         logger.error(f"删除评估基准失败: {e}, {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"删除评估基准失败: {str(e)}")
+
+
+@evaluation.get("/benchmarks/{benchmark_id}/download")
+async def download_evaluation_benchmark(benchmark_id: str, current_user: User = Depends(get_admin_user)):
+    """下载评估基准文件"""
+    from src.services.evaluation_service import EvaluationService
+
+    try:
+        service = EvaluationService()
+        download_info = await service.get_benchmark_download_info(benchmark_id)
+        return FileResponse(
+            path=download_info["file_path"],
+            filename=download_info["filename"],
+            media_type="application/x-ndjson",
+        )
+    except ValueError as e:
+        if "not found" in str(e).lower():
+            raise HTTPException(status_code=404, detail=str(e))
+        logger.error(f"下载评估基准失败: {e}, {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"下载评估基准失败: {str(e)}")
+    except Exception as e:
+        logger.error(f"下载评估基准失败: {e}, {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"下载评估基准失败: {str(e)}")
 
 
 @evaluation.get("/databases/{db_id}/results/{task_id}")

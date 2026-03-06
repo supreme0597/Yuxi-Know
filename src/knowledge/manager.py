@@ -2,7 +2,12 @@ import asyncio
 import os
 
 from src.knowledge.base import KBNotFoundError, KnowledgeBase
+from src.knowledge.chunking.ragflow_like.presets import (
+    deep_merge,
+    ensure_chunk_defaults_in_additional_params,
+)
 from src.knowledge.factory import KnowledgeBaseFactory
+from src.storage.postgres.models_business import User
 from src.utils import logger
 from src.utils.datetime_utils import utc_isoformat
 
@@ -171,22 +176,28 @@ class KnowledgeBaseManager:
 
         kb_repo = KnowledgeBaseRepository()
         rows = await kb_repo.get_all()
-
         all_databases = []
+        metadata_reloaded_types: set[str] = set()
         for row in rows:
-            kb_instance = self._get_or_create_kb_instance(row.kb_type or "lightrag")
-            # 支持异步和同步两种 get_database_info 实现
-            # 列表接口不需要文件详情，提升性能
-            result = kb_instance.get_database_info(row.db_id, include_files=False)
-            if asyncio.iscoroutine(result):
-                db_info = await result
-            else:
-                db_info = result
-            if db_info:
-                # 补充 share_config 和 additional_params
-                db_info["share_config"] = row.share_config or {"is_shared": True, "accessible_departments": []}
-                db_info["additional_params"] = row.additional_params or {}
-                all_databases.append(db_info)
+            kb_type = row.kb_type or "lightrag"
+            kb_instance = self._get_or_create_kb_instance(kb_type)
+            db_info = kb_instance.get_database_info(row.db_id)
+            if not db_info and kb_type not in metadata_reloaded_types:
+                try:
+                    await kb_instance._load_metadata()
+                    metadata_reloaded_types.add(kb_type)
+                except Exception as e:
+                    logger.warning(f"Failed to reload metadata for kb_type={kb_type}: {e}")
+                db_info = kb_instance.get_database_info(row.db_id)
+
+            if not db_info:
+                logger.warning(f"Skip database due to missing metadata: db_id={row.db_id}, kb_type={kb_type}")
+                continue
+
+            # 补充 share_config 和 additional_params
+            db_info["share_config"] = row.share_config or {"is_shared": True, "accessible_departments": []}
+            db_info["additional_params"] = ensure_chunk_defaults_in_additional_params(row.additional_params)
+            all_databases.append(db_info)
         return {"databases": all_databases}
 
     async def check_accessible(self, user: dict, db_id: str) -> bool:
@@ -233,19 +244,45 @@ class KnowledgeBaseManager:
 
         return user_department_id in accessible_departments
 
-    async def get_databases_by_user(self, user: dict) -> dict:
-        """根据用户权限获取知识库列表
+    async def get_databases_by_raw_id(self, user_id: int) -> dict:
+        """根据用户ID获取知识库列表（原始ID版本，兼容旧接口）"""
+        from src.repositories.user_repository import UserRepository
 
-        Args:
-            user: 用户信息字典，包含 role 和 department_id
+        # 通过数据库获取用户信息
+        user_repo = UserRepository()
+        user: User | None = await user_repo.get_by_id(id=int(user_id))
+        if not user:
+            logger.warning(f"User not found: {user_id}")
+            return {"databases": []}
+        return await self.get_databases_by_user(user)
 
-        Returns:
-            过滤后的知识库列表
-        """
+    async def get_databases_by_user_id(self, user_id: str) -> dict:
+        """根据用户ID获取知识库列表（字符串ID版本）"""
+        from src.repositories.user_repository import UserRepository
+
+        # 通过数据库获取用户信息
+        user_repo = UserRepository()
+        user: User | None = await user_repo.get_by_user_id(user_id)
+        if not user:
+            logger.warning(f"User not found: {user_id}")
+            return {"databases": []}
+        return await self.get_databases_by_user(user)
+
+    async def get_databases_by_user(self, user: User) -> dict:
+        """根据用户权限获取知识库列表"""
+
+        # 构建用户信息字典
+        user_info = {
+            "role": user.role,
+            "department_id": user.department_id,
+        }
+
+        logger.info(f"Getting databases for user {user.id} with role {user.role} and department {user.department_id}")
+
         all_databases = (await self.get_databases()).get("databases", [])
 
         # 超级管理员可以看到所有知识库
-        if user.get("role") == "superadmin":
+        if user_info.get("role") == "superadmin":
             return {"databases": all_databases}
 
         filtered_databases = []
@@ -255,7 +292,7 @@ class KnowledgeBaseManager:
             if not db_id:
                 continue
 
-            if await self.check_accessible(user, db_id):
+            if await self.check_accessible(user_info, db_id):
                 filtered_databases.append(db)
 
         return {"databases": filtered_databases}
@@ -315,6 +352,8 @@ class KnowledgeBaseManager:
         # 默认共享配置
         if share_config is None:
             share_config = {"is_shared": True, "accessible_departments": []}
+
+        kwargs = ensure_chunk_defaults_in_additional_params(kwargs)
 
         kb_instance = self._get_or_create_kb_instance(kb_type)
         db_info = await kb_instance.create_database(database_name, description, embed_info, **kwargs)
@@ -407,12 +446,7 @@ class KnowledgeBaseManager:
 
         try:
             kb_instance = await self._get_kb_for_database(db_id)
-            # 支持异步和同步两种 get_database_info 实现
-            result = kb_instance.get_database_info(db_id)
-            if asyncio.iscoroutine(result):
-                db_info = await result
-            else:
-                db_info = result
+            db_info = kb_instance.get_database_info(db_id)
         except KBNotFoundError:
             db_info = {
                 "db_id": db_id,
@@ -425,7 +459,7 @@ class KnowledgeBaseManager:
             }
 
         # 添加数据库中的附加字段
-        db_info["additional_params"] = kb.additional_params or {}
+        db_info["additional_params"] = ensure_chunk_defaults_in_additional_params(kb.additional_params)
         db_info["share_config"] = kb.share_config or {"is_shared": True, "accessible_departments": []}
         db_info["mindmap"] = kb.mindmap
         db_info["sample_questions"] = kb.sample_questions or []
@@ -443,7 +477,10 @@ class KnowledgeBaseManager:
         kb_instance = await self._get_kb_for_database(db_id)
         await kb_instance.delete_file(db_id, file_id)
 
-
+    async def update_content(self, db_id: str, file_ids: list[str], params: dict | None = None) -> list[dict]:
+        """更新内容（重新分块）"""
+        kb_instance = await self._get_kb_for_database(db_id)
+        return await kb_instance.update_content(db_id, file_ids, params or {})
 
     async def get_file_basic_info(self, db_id: str, file_id: str) -> dict:
         """获取文件基本信息（仅元数据）"""
@@ -574,6 +611,11 @@ class KnowledgeBaseManager:
         """更新数据库"""
         from src.repositories.knowledge_base_repository import KnowledgeBaseRepository
 
+        kb_repo = KnowledgeBaseRepository()
+        kb = await kb_repo.get_by_id(db_id)
+        if kb is None:
+            raise ValueError(f"数据库 {db_id} 不存在")
+
         kb_instance = await self._get_kb_for_database(db_id)
         kb_instance.update_database(db_id, name, description, llm_info)
 
@@ -584,13 +626,19 @@ class KnowledgeBaseManager:
         }
         if llm_info is not None:
             update_data["llm_info"] = llm_info
+
         if additional_params is not None:
-            update_data["additional_params"] = additional_params
+            merged_additional_params = ensure_chunk_defaults_in_additional_params(
+                deep_merge(kb.additional_params or {}, additional_params)
+            )
+            update_data["additional_params"] = merged_additional_params
+            if db_id in kb_instance.databases_meta:
+                kb_instance.databases_meta[db_id]["metadata"] = merged_additional_params
+
         if share_config is not None:
             update_data["share_config"] = share_config
 
         # 保存到数据库
-        kb_repo = KnowledgeBaseRepository()
         await kb_repo.update(db_id, update_data)
 
         return await self.get_database_info(db_id)

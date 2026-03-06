@@ -13,14 +13,17 @@ from starlette.responses import StreamingResponse
 from src.services.task_service import TaskContext, tasker
 from server.utils.auth_middleware import get_admin_user, get_required_user
 from src import config, knowledge_base
+from src.knowledge.chunking.ragflow_like.presets import ensure_chunk_defaults_in_additional_params
 from src.knowledge.indexing import SUPPORTED_FILE_EXTENSIONS, is_supported_file_extension, process_file_to_markdown
 from src.knowledge.utils import calculate_content_hash
 from src.models.embed import test_all_embedding_models_status, test_embedding_model_status
 from src.storage.postgres.models_business import User
-from src.storage.minio.client import StorageError, aupload_file_to_minio, get_minio_client
+from src.storage.minio.client import MinIOClient, StorageError, aupload_file_to_minio, get_minio_client
 from src.utils import logger
 
 knowledge = APIRouter(prefix="/knowledge", tags=["knowledge"])
+
+DIFY_REQUIRED_PARAMS = ("dify_api_url", "dify_token", "dify_dataset_id")
 
 media_types = {
     ".pdf": "application/pdf",
@@ -57,6 +60,27 @@ media_types = {
     ".hpp": "text/x-c++hdr",
 }
 
+
+def _validate_dify_additional_params(additional_params: dict | None) -> dict:
+    params = dict(additional_params or {})
+    missing_fields = [field for field in DIFY_REQUIRED_PARAMS if not str(params.get(field) or "").strip()]
+    if missing_fields:
+        raise HTTPException(status_code=400, detail=f"Dify 参数缺失: {', '.join(missing_fields)}")
+
+    api_url = str(params.get("dify_api_url") or "").strip()
+    if not api_url.endswith("/v1"):
+        raise HTTPException(status_code=400, detail="Dify api_url 必须以 /v1 结尾")
+    return params
+
+
+async def _ensure_database_not_dify(db_id: str, operation: str) -> None:
+    db_info = await knowledge_base.get_database_info(db_id)
+    if not db_info:
+        raise HTTPException(status_code=404, detail=f"知识库 {db_id} 不存在")
+    if (db_info.get("kb_type") or "").lower() == "dify":
+        raise HTTPException(status_code=400, detail=f"Dify 知识库只支持检索，不支持{operation}")
+
+
 # =============================================================================
 # === 知识库管理分组 ===
 # =============================================================================
@@ -66,8 +90,7 @@ media_types = {
 async def get_databases(current_user: User = Depends(get_admin_user)):
     """获取所有知识库（根据用户权限过滤）"""
     try:
-        user_info = {"role": current_user.role, "department_id": current_user.department_id}
-        return await knowledge_base.get_databases_by_user(user_info)
+        return await knowledge_base.get_databases_by_user_id(current_user.user_id)
     except Exception as e:
         logger.error(f"获取数据库列表失败 {e}, {traceback.format_exc()}")
         return {"message": f"获取数据库列表失败 {e}", "databases": []}
@@ -77,7 +100,7 @@ async def get_databases(current_user: User = Depends(get_admin_user)):
 async def create_database(
     database_name: str = Body(...),
     description: str = Body(...),
-    embed_model_name: str = Body(...),
+    embed_model_name: str | None = Body(None),
     kb_type: str = Body("lightrag"),
     additional_params: dict = Body({}),
     llm_info: dict = Body(None),
@@ -116,10 +139,20 @@ async def create_database(
                 params.pop("reranker_config", None)
 
         remove_reranker_config(kb_type, additional_params)
+        additional_params = ensure_chunk_defaults_in_additional_params(additional_params)
 
-        embed_info = config.embed_model_names[embed_model_name]
-        # 将Pydantic模型转换为字典以便JSON序列化
-        embed_info_dict = embed_info.model_dump() if hasattr(embed_info, "model_dump") else embed_info.dict()
+        embed_info_dict = None
+        if kb_type == "dify":
+            additional_params = _validate_dify_additional_params(additional_params)
+        else:
+            if not embed_model_name:
+                raise HTTPException(status_code=400, detail="embed_model_name 不能为空")
+            if embed_model_name not in config.embed_model_names:
+                raise HTTPException(status_code=400, detail=f"不支持的 embedding 模型: {embed_model_name}")
+            embed_info = config.embed_model_names[embed_model_name]
+            # 将Pydantic模型转换为字典以便JSON序列化
+            embed_info_dict = embed_info.model_dump() if hasattr(embed_info, "model_dump") else embed_info.dict()
+
         database_info = await knowledge_base.create_database(
             database_name,
             description,
@@ -147,8 +180,7 @@ async def create_database(
 async def get_accessible_databases(current_user: User = Depends(get_required_user)):
     """获取当前用户有权访问的知识库列表（用于智能体配置）"""
     try:
-        user_info = {"role": current_user.role, "department_id": current_user.department_id}
-        databases = await knowledge_base.get_databases_by_user(user_info)
+        databases = await knowledge_base.get_databases_by_user_id(current_user.user_id)
 
         accessible = [
             {
@@ -180,7 +212,7 @@ async def update_database_info(
     name: str = Body(...),
     description: str = Body(...),
     llm_info: dict = Body(None),
-    additional_params: dict = Body({}),
+    additional_params: dict | None = Body(None),
     share_config: dict = Body(None),
     current_user: User = Depends(get_admin_user),
 ):
@@ -190,6 +222,19 @@ async def update_database_info(
         f"additional_params={additional_params}, share_config={share_config}"
     )
     try:
+        if additional_params is not None:
+            additional_params = ensure_chunk_defaults_in_additional_params(additional_params)
+
+            db_info = await knowledge_base.get_database_info(db_id)
+            if not db_info:
+                raise HTTPException(status_code=404, detail=f"知识库 {db_id} 不存在")
+
+            kb_type = (db_info.get("kb_type") or "").lower()
+            if kb_type == "dify":
+                merged_params = dict(db_info.get("additional_params") or {})
+                merged_params.update(additional_params)
+                _validate_dify_additional_params(merged_params)
+
         database = await knowledge_base.update_database(
             db_id,
             name,
@@ -259,6 +304,7 @@ async def add_documents(
 ):
     """添加文档到知识库（上传 -> 解析 -> 可选入库）"""
     logger.debug(f"Add documents for db_id {db_id}: {items} {params=}")
+    await _ensure_database_not_dify(db_id, "文档添加/解析/入库")
 
     content_type = params.get("content_type", "file")
     # 自动入库参数
@@ -267,7 +313,13 @@ async def add_documents(
         "chunk_size": params.get("chunk_size", 1000),
         "chunk_overlap": params.get("chunk_overlap", 200),
         "qa_separator": params.get("qa_separator", ""),
+        "chunk_preset_id": params.get("chunk_preset_id"),
+        "chunk_parser_config": params.get("chunk_parser_config"),
     }
+    if not indexing_params.get("chunk_preset_id"):
+        indexing_params.pop("chunk_preset_id", None)
+    if not isinstance(indexing_params.get("chunk_parser_config"), dict):
+        indexing_params.pop("chunk_parser_config", None)
 
     # URL 解析与入库（需白名单验证）
     if content_type == "url":
@@ -441,6 +493,7 @@ async def add_documents(
 async def parse_documents(db_id: str, file_ids: list[str] = Body(...), current_user: User = Depends(get_admin_user)):
     """手动触发文档解析"""
     logger.debug(f"Parse documents for db_id {db_id}: {file_ids}")
+    await _ensure_database_not_dify(db_id, "文档解析")
 
     async def run_parse(context: TaskContext):
         await context.set_message("任务初始化")
@@ -494,6 +547,7 @@ async def index_documents(
 ):
     """手动触发文档入库（Indexing），支持更新参数"""
     logger.debug(f"Index documents for db_id {db_id}: {file_ids} {params=}")
+    await _ensure_database_not_dify(db_id, "文档入库")
 
     # extract operator_id safely before background task
     operator_id = current_user.id
@@ -566,6 +620,7 @@ async def index_documents(
 async def get_document_info(db_id: str, doc_id: str, current_user: User = Depends(get_admin_user)):
     """获取文档详细信息（包含基本信息和内容信息）"""
     logger.debug(f"GET document {doc_id} info in {db_id}")
+    await _ensure_database_not_dify(db_id, "文档查看")
 
     try:
         info = await knowledge_base.get_file_info(db_id, doc_id)
@@ -579,6 +634,7 @@ async def get_document_info(db_id: str, doc_id: str, current_user: User = Depend
 async def get_document_basic_info(db_id: str, doc_id: str, current_user: User = Depends(get_admin_user)):
     """获取文档基本信息（仅元数据）"""
     logger.debug(f"GET document {doc_id} basic info in {db_id}")
+    await _ensure_database_not_dify(db_id, "文档查看")
 
     try:
         info = await knowledge_base.get_file_basic_info(db_id, doc_id)
@@ -592,6 +648,7 @@ async def get_document_basic_info(db_id: str, doc_id: str, current_user: User = 
 async def get_document_content(db_id: str, doc_id: str, current_user: User = Depends(get_admin_user)):
     """获取文档内容信息（chunks和lines）"""
     logger.debug(f"GET document {doc_id} content in {db_id}")
+    await _ensure_database_not_dify(db_id, "文档查看")
 
     try:
         info = await knowledge_base.get_file_content(db_id, doc_id)
@@ -601,10 +658,62 @@ async def get_document_content(db_id: str, doc_id: str, current_user: User = Dep
         return {"message": "Failed to get file content", "status": "failed"}
 
 
+@knowledge.delete("/databases/{db_id}/documents/batch")
+async def batch_delete_documents(
+    db_id: str, file_ids: list[str] = Body(...), current_user: User = Depends(get_admin_user)
+):
+    """批量删除文档或文件夹"""
+    logger.debug(f"BATCH DELETE documents {file_ids} in {db_id}")
+    await _ensure_database_not_dify(db_id, "批量文档删除")
+
+    deleted_count = 0
+    failed_items = []
+
+    for doc_id in file_ids:
+        try:
+            file_meta_info = await knowledge_base.get_file_basic_info(db_id, doc_id)
+
+            # Check if it is a folder
+            is_folder = file_meta_info.get("meta", {}).get("is_folder", False)
+            if is_folder:
+                await knowledge_base.delete_folder(db_id, doc_id)
+                deleted_count += 1
+                continue
+
+            file_name = file_meta_info.get("meta", {}).get("filename")
+
+            # 尝试从MinIO删除文件，如果失败（例如旧知识库没有MinIO实例），则忽略
+            try:
+                minio_client = get_minio_client()
+                await minio_client.adelete_file(MinIOClient.get_ref_bucket_name(db_id), file_name)
+                logger.debug(f"成功从MinIO删除文件: {file_name}")
+            except Exception as minio_error:
+                logger.warning(f"从MinIO删除文件失败（可能是旧知识库）: {minio_error}")
+
+            # 无论MinIO删除是否成功，都继续从知识库删除
+            await knowledge_base.delete_file(db_id, doc_id)
+            deleted_count += 1
+        except Exception as e:
+            logger.error(f"批量删除过程中删除文档 {doc_id} 失败: {e}, {traceback.format_exc()}")
+            failed_items.append({"doc_id": doc_id, "error": str(e)})
+
+    if failed_items:
+        if deleted_count == 0:
+            raise HTTPException(status_code=400, detail=f"批量删除失败: 所有 {len(failed_items)} 个文件均未删除。")
+        return {
+            "message": f"部分删除成功: 已删除 {deleted_count} 个文件，失败 {len(failed_items)} 个",
+            "deleted_count": deleted_count,
+            "failed_items": failed_items,
+        }
+
+    return {"message": f"批量删除成功: 已删除 {deleted_count} 个文件", "deleted_count": deleted_count}
+
+
 @knowledge.delete("/databases/{db_id}/documents/{doc_id}")
 async def delete_document(db_id: str, doc_id: str, current_user: User = Depends(get_admin_user)):
     """删除文档或文件夹"""
     logger.debug(f"DELETE document {doc_id} info in {db_id}")
+    await _ensure_database_not_dify(db_id, "文档删除")
     try:
         file_meta_info = await knowledge_base.get_file_basic_info(db_id, doc_id)
 
@@ -614,7 +723,19 @@ async def delete_document(db_id: str, doc_id: str, current_user: User = Depends(
             await knowledge_base.delete_folder(db_id, doc_id)
             return {"message": "文件夹删除成功"}
 
-        # 知识库实现层会处理所有清理工作（包括 MinIO、云端文档等）
+        file_name = file_meta_info.get("meta", {}).get("path", "").split("/")[-1]
+
+        # 尝试从MinIO删除文件，如果失败（例如旧知识库没有MinIO实例），则忽略
+        try:
+            minio_client = get_minio_client()
+            await minio_client.adelete_file(MinIOClient.get_ref_bucket_name(db_id), file_name)
+            # 同时删除 parsed bucket 中的 parsed.md 文件
+            await minio_client.adelete_file(minio_client.KB_BUCKETS["parsed"], f"{db_id}/{doc_id}/parsed.md")
+            logger.debug(f"成功从MinIO删除文件: {file_name}")
+        except Exception as minio_error:
+            logger.warning(f"从MinIO删除文件失败（可能是旧知识库）: {minio_error}")
+
+        # 无论MinIO删除是否成功，都继续从知识库删除
         await knowledge_base.delete_file(db_id, doc_id)
         return {"message": "删除成功"}
     except Exception as e:
@@ -626,6 +747,7 @@ async def delete_document(db_id: str, doc_id: str, current_user: User = Depends(
 async def download_document(db_id: str, doc_id: str, request: Request, current_user: User = Depends(get_admin_user)):
     """下载原始文件 - 根据path类型选择本地或MinIO下载"""
     logger.debug(f"Download document {doc_id} from {db_id}")
+    await _ensure_database_not_dify(db_id, "文档下载")
     try:
         file_info = await knowledge_base.get_file_basic_info(db_id, doc_id)
         file_meta = file_info.get("meta", {})
@@ -904,15 +1026,16 @@ async def generate_sample_questions(
         生成的问题列表
     """
     try:
+        db_info = await knowledge_base.get_database_info(db_id)
+        if not db_info:
+            raise HTTPException(status_code=404, detail=f"知识库 {db_id} 不存在")
+        if (db_info.get("kb_type") or "").lower() == "dify":
+            raise HTTPException(status_code=400, detail="Dify 知识库不支持基于文件生成测试问题")
+
         from src.models import select_model
 
         # 从请求体中提取参数
         count = request_body.get("count", 10)
-
-        # 获取知识库信息
-        db_info = await knowledge_base.get_database_info(db_id)
-        if not db_info:
-            raise HTTPException(status_code=404, detail=f"知识库 {db_id} 不存在")
 
         db_name = db_info.get("name", "")
         all_files = db_info.get("files", {})
@@ -1059,6 +1182,7 @@ async def create_folder(
 ):
     """创建文件夹"""
     try:
+        await _ensure_database_not_dify(db_id, "文件夹创建")
         return await knowledge_base.create_folder(db_id, folder_name, parent_id)
     except Exception as e:
         logger.error(f"创建文件夹失败 {e}, {traceback.format_exc()}")
@@ -1075,6 +1199,7 @@ async def move_document(
     """移动文件或文件夹"""
     logger.debug(f"Move document {doc_id} to {new_parent_id} in {db_id}")
     try:
+        await _ensure_database_not_dify(db_id, "文件移动")
         return await knowledge_base.move_file(db_id, doc_id, new_parent_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

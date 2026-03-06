@@ -44,6 +44,7 @@ export default defineConfig({
             { text: '配置系统详解', link: '/latest/advanced/configuration' },
             { text: '文档解析', link: '/latest/advanced/document-processing' },
             { text: '智能体', link: '/latest/advanced/agents-config' },
+            { text: 'Skills 管理', link: '/latest/advanced/skills-management' },
             { text: '品牌自定义', link: '/latest/advanced/branding' },
             { text: '其他配置', link: '/latest/advanced/misc' },
             { text: '生产部署', link: '/latest/advanced/deployment' }

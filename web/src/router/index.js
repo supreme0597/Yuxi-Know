@@ -91,6 +91,29 @@ const router = createRouter({
       ]
     },
     {
+      path: '/extensions',
+      name: 'extensions',
+      component: AppLayout,
+      children: [
+        {
+          path: '',
+          name: 'ExtensionsComp',
+          component: () => import('../views/ExtensionsView.vue'),
+          meta: {
+            keepAlive: false,
+            requiresAuth: true,
+            requiresAdmin: true,
+            requiresSuperAdmin: true
+          }
+        }
+      ]
+    },
+    {
+      path: '/skills',
+      name: 'skills',
+      redirect: '/extensions'
+    },
+    {
       path: '/:pathMatch(.*)*',
       name: 'NotFound',
       component: () => import('../views/EmptyView.vue'),
@@ -104,6 +127,7 @@ router.beforeEach(async (to, from, next) => {
   // 检查路由是否需要认证
   const requiresAuth = to.matched.some((record) => record.meta.requiresAuth === true)
   const requiresAdmin = to.matched.some((record) => record.meta.requiresAdmin)
+  const requiresSuperAdmin = to.matched.some((record) => record.meta.requiresSuperAdmin)
 
   const userStore = useUserStore()
 
@@ -120,6 +144,7 @@ router.beforeEach(async (to, from, next) => {
 
   const isLoggedIn = userStore.isLoggedIn
   const isAdmin = userStore.isAdmin
+  const isSuperAdmin = userStore.isSuperAdmin
 
   // 如果路由需要认证但用户未登录
   if (requiresAuth && !isLoggedIn) {
@@ -151,6 +176,26 @@ router.beforeEach(async (to, from, next) => {
           // 没有可用的智能体，跳转到首页
           next('/')
         }
+      }
+    } catch (error) {
+      console.error('获取智能体信息失败:', error)
+      next('/')
+    }
+    return
+  }
+
+  // 如果路由需要超级管理员权限但用户不是超级管理员
+  if (requiresSuperAdmin && !isSuperAdmin) {
+    try {
+      const agentStore = useAgentStore()
+      if (!agentStore.isInitialized) {
+        await agentStore.initialize()
+      }
+      const defaultAgent = agentStore.defaultAgent
+      if (defaultAgent && defaultAgent.id) {
+        next(`/agent/${defaultAgent.id}`)
+      } else {
+        next('/')
       }
     } catch (error) {
       console.error('获取智能体信息失败:', error)

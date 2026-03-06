@@ -4,7 +4,7 @@
 
 系统基于 [LangGraph](https://github.com/langchain-ai/langgraph) 并通过统一的 `AgentManager` 管理所有智能体。`src/agents/__init__.py` 会在启动时遍历 `src/agents` 目录，对每个包含 `__init__.py` 的子包执行自动发现：所有继承 `BaseAgent` 的类都会被注册并立即初始化，因此只要代码落位正确，就不需要再手动登记或修改管理器。
 
-仓库预置了若干可直接运行的智能体：`chatbot` 聚焦对话与动态工具调度，`mini_agent` 提供精简模板，`reporter` 演示报告类链路。这些目录展示了上下文类、Graph 构造方式、子智能体引用以及中间件组合的范例，新增功能时可以直接复用。
+仓库预置了若干可直接运行的智能体：`chatbot` 聚焦对话与动态工具调度，`reporter` 演示报告类链路，`deep_agent` 提供深度分析能力。这些目录展示了上下文类、Graph 构造方式、子智能体引用以及中间件组合的范例，新增功能时可以直接复用。
 
 ### 智能体元数据配置
 
@@ -28,11 +28,7 @@
 
 需要额外上下文字段时，可继承 `BaseContext` 构建自己的配置表单，再把类绑定到 `context_schema`，平台会在 `saves/agents/<module>` 下生成默认配置。
 
-案例1 使用内置工具构建一个极简的智能体，可以动态选择 Prompt 和 LLM：
-
-<<< @/../src/agents/mini_agent/graph.py
-
-案例2 基于MySQL工具，以及自定义 MCP Server 的数据库报表助手。
+案例1 基于MySQL工具，以及自定义 MCP Server 的数据库报表助手。
 
 <<< @/../src/agents/reporter/graph.py
 
@@ -65,6 +61,7 @@ async def get_graph(self, **kwargs):
 | `tools` | list[str] | 启用的内置工具列表 |
 | `knowledges` | list[str] | 关联的知识库列表 |
 | `mcps` | list[str] | 启用的 MCP 服务器名称 |
+| `skills` | list[str] | 关联的 Skills（运行时只读挂载到 `/skills`） |
 
 ```python
 from src.agents.common import BaseContext
@@ -80,7 +77,8 @@ class MyAgentContext(BaseContext):
 
 ```python
 from src.agents.common import BaseContext, gen_tool_info
-from src.agents.common.tools import get_buildin_tools
+from src.agents.common.toolkits.buildin import calculator, query_knowledge_graph
+from src.agents.common.toolkits.buildin.tools import _create_tavily_search
 from src.agents.common.toolkits.mysql import get_mysql_tools
 
 @dataclass(kw_only=True)
@@ -89,7 +87,9 @@ class ReporterContext(BaseContext):
         default_factory=lambda: [t.name for t in get_mysql_tools()],
         metadata={
             "name": "工具",
-            "options": lambda: gen_tool_info(get_buildin_tools() + get_mysql_tools()),
+            "options": lambda: gen_tool_info(
+                [calculator, query_knowledge_graph, _create_tavily_search()] + get_mysql_tools()
+            ),
             "description": "包含内置工具和 MySQL 工具包。",
         },
     )
@@ -102,6 +102,14 @@ class ReporterContext(BaseContext):
 
 更多动态工具选择与 MCP 注册的例子，见 `src/agents/chatbot/graph.py` 中的中间件组合。
 
+### Skills 只读挂载
+
+`BaseContext.skills` 用于声明当前智能体可访问的技能目录（slug 列表）。运行时会将这些目录只读挂载到 `/skills/<slug>/...`：
+
+1. 仅显示配置中选中的 skills，未选中的 slug 在运行时不可见。
+2. `/skills` 仅支持读取能力（`ls/read/glob/grep`），写入和编辑会被拒绝。
+3. skills 元数据来自数据库索引，内容目录来自共享存储 `/app/saves/skills`。
+
 ### 拓展现有智能体
 
 智能体保持为 LangGraph 的标准节点组合，因此可以在原有 `graph.py` 中添加节点、条件与消息转换器。复用现成上下文时，只需扩展当前 `context_schema` 的字段；若功能差异较大，可以创建新的上下文类并替换 `context_schema`。
@@ -113,6 +121,16 @@ class ReporterContext(BaseContext):
 子智能体集中放在 `src/agents/common/subagents` 目录，典型例子是 `calc_agent`，它通过 LangChain 的 `create_agent` 构建计算器能力并以工具暴露给主图。新增子智能体时沿用这一结构：在目录内编写封装函数与 `@tool` 装饰器，导出后即可被任意智能体调用。
 
 中间件位于 `src/agents/common/middlewares`，包含上下文感知提示词、模型选择、动态工具加载以及附件注入等实现。如果需要编写新的中间件，请遵循 LangChain 官方文档中对 `AgentMiddleware`、`ModelRequest`、`ModelResponse` 等接口的定义，完成后在该目录的 `__init__.py` 暴露入口，主智能体即可在 `middleware` 列表中引用。
+
+#### RuntimeConfigMiddleware
+
+`RuntimeConfigMiddleware`（[runtime_config_middleware.py](https://github.com/xerrors/Yuxi-Know/blob/main/src/agents/common/middlewares/runtime_config_middleware.py)）是系统默认的核心中间件之一，负责在每次模型调用前自动注入运行时配置：
+
+1. **自动注入当前时间**：在 system prompt 开头追加当前时间，格式为 `当前时间：YYYY-MM-DD HH:MM:SS`，确保 LLM 能获取准确的时间上下文。
+2. **动态加载工具**：根据 `context.tools`、`context.knowledges`、`context.mcps` 自动组装可用工具列表。
+3. **模型选择**：根据 `context.model` 加载对应模型配置。
+
+如需自定义时间注入逻辑或禁用该行为，可继承该中间件并覆盖 `awrap_model_call` 方法。
 
 #### 文件上传中间件
 

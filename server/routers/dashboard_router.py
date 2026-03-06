@@ -449,6 +449,7 @@ async def get_knowledge_stats(
                 "lightrag": "LightRAG",
                 "faiss": "FAISS",
                 "milvus": "Milvus",
+                "dify": "Dify",
                 "qdrant": "Qdrant",
                 "elasticsearch": "Elasticsearch",
                 "unknown": "未知类型",

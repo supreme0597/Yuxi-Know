@@ -146,6 +146,27 @@ export const documentApi = {
   },
 
   /**
+   * 批量删除文档
+   * @param {string} dbId - 知识库ID
+   * @param {Array} fileIds - 文件ID列表
+   * @returns {Promise} - 批量删除结果
+   */
+  batchDeleteDocuments: async (dbId, fileIds) => {
+    return apiRequest(
+      `/api/knowledge/databases/${dbId}/documents/batch`,
+      {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(fileIds)
+      },
+      true,
+      'json'
+    )
+  },
+
+  /**
    * 下载文档
    * @param {string} dbId - 知识库ID
    * @param {string} docId - 文档ID
@@ -451,6 +472,15 @@ export const evaluationApi = {
    */
   deleteBenchmark: async (benchmarkId) => {
     return apiAdminDelete(`/api/evaluation/benchmarks/${benchmarkId}`)
+  },
+
+  /**
+   * 下载评估基准
+   * @param {string} benchmarkId - 基准ID
+   * @returns {Promise} - Response对象
+   */
+  downloadBenchmark: async (benchmarkId) => {
+    return apiAdminGet(`/api/evaluation/benchmarks/${benchmarkId}/download`, {}, 'blob')
   },
 
   /**

@@ -56,7 +56,7 @@ const processStreamResponse = async (response, onChunk) => {
   } finally {
     try {
       reader.releaseLock()
-    } catch (e) {
+    } catch {
       // Ignore errors on releasing lock
     }
   }
@@ -69,6 +69,7 @@ export function useAgentStreamHandler({
   supportsTodo,
   supportsFiles
 }) {
+  const debugPrefix = '[AgentStateDebug]'
   /**
    * Process a single stream chunk based on its status
    * @param {Object} chunk - The parsed JSON chunk
@@ -110,17 +111,39 @@ export function useAgentStreamHandler({
         return true
 
       case 'human_approval_required':
+        console.log(`${debugPrefix}[approval_required]`, {
+          threadId,
+          currentAgentId: unref(currentAgentId)
+        })
         // 使用审批 composable 处理审批请求
         return processApprovalInStream(chunk, threadId, unref(currentAgentId))
 
       case 'agent_state':
-        if ((unref(supportsTodo) || unref(supportsFiles)) && chunk.agent_state) {
-          console.log('[AgentState]', {
+        console.log(`${debugPrefix}[agent_state_chunk]`, {
+          threadId,
+          supportsTodo: unref(supportsTodo),
+          supportsFiles: unref(supportsFiles),
+          currentAgentId: unref(currentAgentId),
+          hasAgentState: !!chunk.agent_state,
+          todoCount: Array.isArray(chunk.agent_state?.todos) ? chunk.agent_state.todos.length : 0,
+          fileKeys: chunk.agent_state?.files ? Object.keys(chunk.agent_state.files) : []
+        })
+        if (chunk.agent_state) {
+          console.log(`${debugPrefix}[agent_state_apply]`, {
             threadId,
             todos: chunk.agent_state?.todos || [],
             files: chunk.agent_state?.files || []
           })
           threadState.agentState = chunk.agent_state
+        } else {
+          console.warn(`${debugPrefix}[agent_state_skip]`, {
+            reason: 'empty_state',
+            supportsTodo: unref(supportsTodo),
+            supportsFiles: unref(supportsFiles),
+            hasAgentState: !!chunk.agent_state,
+            currentAgentId: unref(currentAgentId),
+            threadId
+          })
         }
         return false
 
@@ -128,6 +151,13 @@ export function useAgentStreamHandler({
         // 先标记流式结束，但保持消息显示直到历史记录加载完成
         if (threadState) {
           threadState.isStreaming = false
+          console.log(`${debugPrefix}[finished]`, {
+            threadId,
+            currentAgentId: unref(currentAgentId),
+            hasThreadAgentState: !!threadState.agentState,
+            supportsTodo: unref(supportsTodo),
+            supportsFiles: unref(supportsFiles)
+          })
           if ((unref(supportsTodo) || unref(supportsFiles)) && threadState.agentState) {
             console.log(
               `[AgentState|Final] ${new Date().toLocaleTimeString()}.${new Date().getMilliseconds()}`,
@@ -143,7 +173,11 @@ export function useAgentStreamHandler({
 
       case 'interrupted':
         // 中断状态，刷新消息历史
-        console.warn('[Interrupted] case')
+        console.warn(`${debugPrefix}[interrupted]`, {
+          threadId,
+          message: chunkMessage,
+          currentAgentId: unref(currentAgentId)
+        })
         if (threadState) {
           threadState.isStreaming = false
         }
@@ -164,9 +198,26 @@ export function useAgentStreamHandler({
    * @param {Function} [onChunk] - Optional callback for each chunk (e.g. for logging)
    */
   const handleAgentResponse = async (response, threadId, onChunk = null) => {
+    console.log(`${debugPrefix}[stream_start]`, {
+      threadId,
+      currentAgentId: unref(currentAgentId),
+      supportsTodo: unref(supportsTodo),
+      supportsFiles: unref(supportsFiles)
+    })
     await processStreamResponse(response, (chunk) => {
+      if (chunk?.status && chunk.status !== 'loading') {
+        console.log(`${debugPrefix}[chunk_status]`, {
+          threadId,
+          status: chunk.status,
+          requestId: chunk.request_id
+        })
+      }
       if (onChunk) onChunk(chunk)
       return handleStreamChunk(chunk, threadId)
+    })
+    console.log(`${debugPrefix}[stream_end]`, {
+      threadId,
+      currentAgentId: unref(currentAgentId)
     })
   }
 

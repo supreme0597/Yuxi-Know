@@ -35,6 +35,7 @@ _mcp_tools_stats: dict[str, dict[str, int]] = {}
 
 # MCP Server configurations (Runtime cache, loaded from DB)
 MCP_SERVERS: dict[str, dict[str, Any]] = {}
+_UNSET = object()
 
 # Default MCP Server configurations (Imported to DB on first run)
 _DEFAULT_MCP_SERVERS = {
@@ -130,6 +131,7 @@ async def init_mcp_servers() -> None:
                         url=config.get("url"),
                         command=config.get("command"),
                         args=config.get("args"),
+                        env=config.get("env"),
                         headers=config.get("headers"),
                         timeout=config.get("timeout"),
                         sse_read_timeout=config.get("sse_read_timeout"),
@@ -155,6 +157,7 @@ async def init_mcp_servers() -> None:
                             url=config.get("url"),
                             command=config.get("command"),
                             args=config.get("args"),
+                            env=config.get("env"),
                             headers=config.get("headers"),
                             timeout=config.get("timeout"),
                             sse_read_timeout=config.get("sse_read_timeout"),
@@ -368,6 +371,7 @@ async def create_mcp_server(
     url: str = None,
     command: str = None,
     args: list = None,
+    env: dict = None,
     description: str = None,
     headers: dict = None,
     timeout: int = None,
@@ -389,6 +393,7 @@ async def create_mcp_server(
         url=url,
         command=command,
         args=args,
+        env=env,
         headers=headers,
         timeout=timeout,
         sse_read_timeout=sse_read_timeout,
@@ -417,6 +422,7 @@ async def update_mcp_server(
     url: str = None,
     command: str = None,
     args: list = None,
+    env: Any = _UNSET,
     headers: dict = None,
     timeout: int = None,
     sse_read_timeout: int = None,
@@ -439,6 +445,8 @@ async def update_mcp_server(
         server.command = command
     if args is not None:
         server.args = args
+    if env is not _UNSET:
+        server.env = env
     if headers is not None:
         server.headers = headers
     if timeout is not None:

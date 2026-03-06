@@ -10,11 +10,10 @@ from pymilvus import Collection, CollectionSchema, DataType, FieldSchema, connec
 
 from src import config
 from src.knowledge.base import FileStatus, KnowledgeBase
+from src.knowledge.chunking.ragflow_like.dispatcher import chunk_markdown
+from src.knowledge.chunking.ragflow_like.presets import resolve_chunk_processing_params
 from src.knowledge.indexing import process_file_to_markdown
-from src.knowledge.utils.kb_utils import (
-    get_embedding_config,
-    split_text_into_chunks,
-)
+from src.knowledge.utils.kb_utils import get_embedding_config
 from src.models.embed import OtherEmbedding
 from src.utils import hashstr, logger
 from src.utils.datetime_utils import utc_isoformat
@@ -191,13 +190,14 @@ class MilvusKB(KnowledgeBase):
     def _get_async_embedding_function(self, embed_info: dict):
         """获取 embedding 函数"""
         embedding_model = self._get_async_embedding(embed_info)
-        return partial(embedding_model.abatch_encode, batch_size=40)
+        batch_size = int(getattr(embedding_model, "batch_size", 40) or 40)
+        return partial(embedding_model.abatch_encode, batch_size=batch_size)
 
     def _get_embedding_function(self, embed_info: dict):
         """获取 embedding 函数"""
         embedding_model = self._get_async_embedding(embed_info)
-
-        return partial(embedding_model.batch_encode, batch_size=40)
+        batch_size = int(getattr(embedding_model, "batch_size", 40) or 40)
+        return partial(embedding_model.batch_encode, batch_size=batch_size)
 
     async def _get_milvus_collection(self, db_id: str):
         """获取或创建 Milvus 集合"""
@@ -222,7 +222,7 @@ class MilvusKB(KnowledgeBase):
 
     def _split_text_into_chunks(self, text: str, file_id: str, filename: str, params: dict) -> list[dict]:
         """将文本分割成块"""
-        return split_text_into_chunks(text, file_id, filename, params)
+        return chunk_markdown(text, file_id, filename, params)
 
     async def index_file(self, db_id: str, file_id: str, operator_id: str | None = None) -> dict:
         """
@@ -281,10 +281,14 @@ class MilvusKB(KnowledgeBase):
             self.files_meta[file_id]["updated_at"] = utc_isoformat()
             if operator_id:
                 self.files_meta[file_id]["updated_by"] = operator_id
-            await self._save_metadata()
 
             # Read processing params inside lock to ensure we get the latest values
-            params = file_meta.get("processing_params", {}) or {}
+            params = resolve_chunk_processing_params(
+                kb_additional_params=self.databases_meta.get(db_id, {}).get("metadata"),
+                file_processing_params=file_meta.get("processing_params"),
+            )
+            self.files_meta[file_id]["processing_params"] = params
+            await self._save_metadata()
             logger.debug(f"[index_file] file_id={file_id}, processing_params={params}")
 
         # Add to processing queue
@@ -299,6 +303,7 @@ class MilvusKB(KnowledgeBase):
             chunks = self._split_text_into_chunks(markdown_content, file_id, filename, params)
             logger.info(
                 f"Split {filename} into {len(chunks)} chunks with params: "
+                f"chunk_preset_id={params.get('chunk_preset_id')}, "
                 f"chunk_size={params.get('chunk_size')}, "
                 f"chunk_overlap={params.get('chunk_overlap')}, "
                 f"qa_separator={params.get('qa_separator')}"
@@ -334,7 +339,7 @@ class MilvusKB(KnowledgeBase):
                 self.files_meta[file_id]["updated_at"] = utc_isoformat()
                 if operator_id:
                     self.files_meta[file_id]["updated_by"] = operator_id
-                await self._save_metadata()
+                await self._persist_file(file_id)
                 return self.files_meta[file_id]
 
         except Exception as e:
@@ -345,14 +350,124 @@ class MilvusKB(KnowledgeBase):
                 self.files_meta[file_id]["updated_at"] = utc_isoformat()
                 if operator_id:
                     self.files_meta[file_id]["updated_by"] = operator_id
-                await self._save_metadata()
+                await self._persist_file(file_id)
             raise
 
         finally:
             # Remove from processing queue
             self._remove_from_processing_queue(file_id)
 
+    async def update_content(self, db_id: str, file_ids: list[str], params: dict | None = None) -> list[dict]:
+        """更新内容 - 根据file_ids重新解析文件并更新向量库"""
+        if db_id not in self.databases_meta:
+            raise ValueError(f"Database {db_id} not found")
 
+        collection = await self._get_milvus_collection(db_id)
+        if not collection:
+            raise ValueError(f"Failed to get Milvus collection for {db_id}")
+
+        embed_info = self.databases_meta[db_id].get("embed_info", {})
+        embedding_function = self._get_async_embedding_function(embed_info)
+
+        # 处理默认参数
+        if params is None:
+            params = {}
+        content_type = params.get("content_type", "file")
+        processed_items_info = []
+
+        for file_id in file_ids:
+            # 从元数据中获取文件信息
+            async with self._metadata_lock:
+                if file_id not in self.files_meta:
+                    logger.warning(f"File {file_id} not found in metadata, skipping")
+                    continue
+
+                file_meta = self.files_meta[file_id]
+                file_path = file_meta.get("path")
+                filename = file_meta.get("filename")
+
+                if not file_path:
+                    logger.warning(f"File path not found for {file_id}, skipping")
+                    continue
+
+            # 添加到处理队列
+            self._add_to_processing_queue(file_id)
+
+            try:
+                # 更新状态为处理中
+                async with self._metadata_lock:
+                    resolved_params = resolve_chunk_processing_params(
+                        kb_additional_params=self.databases_meta.get(db_id, {}).get("metadata"),
+                        file_processing_params=self.files_meta[file_id].get("processing_params"),
+                        request_params=params,
+                    )
+                    self.files_meta[file_id]["processing_params"] = resolved_params
+                    self.files_meta[file_id]["status"] = "processing"
+                    await self._persist_file(file_id)
+
+                # 重新解析文件为 markdown
+                if content_type != "file":
+                    raise ValueError("URL 内容解析已禁用")
+                markdown_content = await process_file_to_markdown(file_path, params=params)
+
+                # 先删除现有的 Milvus 数据（仅删除chunks，保留元数据）
+                await self.delete_file_chunks_only(db_id, file_id)
+
+                # 重新生成 chunks
+                chunks = self._split_text_into_chunks(markdown_content, file_id, filename, resolved_params)
+                logger.info(f"Split {filename} into {len(chunks)} chunks")
+
+                if chunks:
+                    texts = [chunk["content"] for chunk in chunks]
+                    embeddings = await embedding_function(texts)
+
+                    entities = [
+                        [chunk["id"] for chunk in chunks],
+                        [chunk["content"] for chunk in chunks],
+                        [chunk["source"] for chunk in chunks],
+                        [chunk["chunk_id"] for chunk in chunks],
+                        [chunk["file_id"] for chunk in chunks],
+                        [chunk["chunk_index"] for chunk in chunks],
+                        embeddings,
+                    ]
+
+                    def _insert_records():
+                        collection.insert(entities)
+
+                    await asyncio.to_thread(_insert_records)
+
+                logger.info(f"Updated {content_type} {file_path} in Milvus. Done.")
+
+                # 更新元数据状态
+                async with self._metadata_lock:
+                    self.files_meta[file_id]["status"] = "done"
+                    await self._persist_file(file_id)
+
+                # 从处理队列中移除
+                self._remove_from_processing_queue(file_id)
+
+                # 返回更新后的文件信息
+                updated_file_meta = file_meta.copy()
+                updated_file_meta["status"] = "done"
+                updated_file_meta["file_id"] = file_id
+                processed_items_info.append(updated_file_meta)
+
+            except Exception as e:
+                logger.error(f"更新{content_type} {file_path} 失败: {e}, {traceback.format_exc()}")
+                async with self._metadata_lock:
+                    self.files_meta[file_id]["status"] = "failed"
+                    await self._persist_file(file_id)
+
+                # 从处理队列中移除
+                self._remove_from_processing_queue(file_id)
+
+                # 返回失败的文件信息
+                failed_file_meta = file_meta.copy()
+                failed_file_meta["status"] = "failed"
+                failed_file_meta["file_id"] = file_id
+                processed_items_info.append(failed_file_meta)
+
+        return processed_items_info
 
     async def aquery(self, query_text: str, db_id: str, agent_call: bool = False, **kwargs) -> list[dict]:
         """异步查询知识库"""
@@ -591,9 +706,6 @@ class MilvusKB(KnowledgeBase):
         # 先删除 Milvus 中的 chunks 数据
         await self.delete_file_chunks_only(db_id, file_id)
 
-        # 清理 MinIO 中的文件
-        await self._cleanup_minio_files(file_id)
-
         # 使用锁确保元数据操作的原子性
         async with self._metadata_lock:
             if file_id in self.files_meta:
@@ -601,7 +713,6 @@ class MilvusKB(KnowledgeBase):
                 from src.repositories.knowledge_file_repository import KnowledgeFileRepository
 
                 await KnowledgeFileRepository().delete(file_id)
-                await self._save_metadata()
 
     async def get_file_basic_info(self, db_id: str, file_id: str) -> dict:
         """获取文件基本信息（仅元数据）"""

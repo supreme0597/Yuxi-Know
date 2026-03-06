@@ -3,6 +3,10 @@ import os
 from abc import ABC, abstractmethod
 from typing import Any
 
+from src.knowledge.chunking.ragflow_like.presets import (
+    ensure_chunk_defaults_in_additional_params,
+    resolve_chunk_processing_params,
+)
 from src.utils import logger
 from src.utils.datetime_utils import coerce_any_to_utc_datetime, utc_isoformat
 
@@ -76,6 +80,7 @@ class KnowledgeBase(ABC):
         self.databases_meta = {}
         for db_id, meta in global_databases_meta.items():
             if meta.get("kb_type") == self.kb_type:
+                normalized_additional_params = ensure_chunk_defaults_in_additional_params(meta.get("additional_params"))
                 self.databases_meta[db_id] = {
                     "name": meta.get("name"),
                     "description": meta.get("description"),
@@ -83,7 +88,7 @@ class KnowledgeBase(ABC):
                     "embed_info": meta.get("embed_info"),
                     "llm_info": meta.get("llm_info"),
                     "query_params": meta.get("query_params"),
-                    "metadata": meta.get("additional_params", {}),
+                    "metadata": normalized_additional_params,
                     "created_at": meta.get("created_at"),
                 }
 
@@ -91,7 +96,14 @@ class KnowledgeBase(ABC):
         self.files_meta = {}
         for file_id, meta in files_meta.items():
             if meta.get("database_id") in self.databases_meta:
-                self.files_meta[file_id] = meta
+                db_id = meta.get("database_id")
+                kb_additional_params = self.databases_meta.get(db_id, {}).get("metadata") or {}
+                normalized_meta = dict(meta)
+                normalized_meta["processing_params"] = resolve_chunk_processing_params(
+                    kb_additional_params=kb_additional_params,
+                    file_processing_params=meta.get("processing_params"),
+                )
+                self.files_meta[file_id] = normalized_meta
 
         # 过滤评估基准
         self.benchmarks_meta = {}
@@ -199,6 +211,11 @@ class KnowledgeBase(ABC):
         # Prepare metadata
         metadata = await prepare_item_metadata(item, content_type, db_id, params=params)
         file_id = metadata["file_id"]
+        kb_additional_params = self.databases_meta.get(db_id, {}).get("metadata") or {}
+        metadata["processing_params"] = resolve_chunk_processing_params(
+            kb_additional_params=kb_additional_params,
+            file_processing_params=metadata.get("processing_params"),
+        )
 
         # Initial status
         metadata["status"] = FileStatus.UPLOADED
@@ -208,7 +225,7 @@ class KnowledgeBase(ABC):
 
         # Save to metadata
         self.files_meta[file_id] = metadata
-        await self._save_metadata()
+        await self._persist_file(file_id)
 
         return metadata
 
@@ -256,7 +273,7 @@ class KnowledgeBase(ABC):
         self.files_meta[file_id]["updated_at"] = utc_isoformat()
         if operator_id:
             self.files_meta[file_id]["updated_by"] = operator_id
-        await self._save_metadata()
+        await self._persist_file(file_id)
 
         # Add to processing queue
         self._add_to_processing_queue(file_id)
@@ -293,7 +310,7 @@ class KnowledgeBase(ABC):
             self.files_meta[file_id]["updated_at"] = utc_isoformat()
             if operator_id:
                 self.files_meta[file_id]["updated_by"] = operator_id
-            await self._save_metadata()
+            await self._persist_file(file_id)
 
             return self.files_meta[file_id]
 
@@ -306,7 +323,7 @@ class KnowledgeBase(ABC):
             self.files_meta[file_id]["updated_at"] = utc_isoformat()
             if operator_id:
                 self.files_meta[file_id]["updated_by"] = operator_id
-            await self._save_metadata()
+            await self._persist_file(file_id)
 
             raise
 
@@ -323,13 +340,16 @@ class KnowledgeBase(ABC):
         if not params:
             return
 
-        # Merge or overwrite? Usually merge is safer, or replace.
-        # User might want to change chunk size.
         current_params = self.files_meta[file_id].get("processing_params", {}) or {}
+        kb_additional_params = self.databases_meta.get(db_id, {}).get("metadata") or {}
 
         logger.debug(f"[update_file_params] file_id={file_id}, current_params={current_params}, new_params={params}")
 
-        current_params.update(params)
+        current_params = resolve_chunk_processing_params(
+            kb_additional_params=kb_additional_params,
+            file_processing_params=current_params,
+            request_params=params,
+        )
 
         self.files_meta[file_id]["processing_params"] = current_params
         self.files_meta[file_id]["updated_at"] = utc_isoformat()
@@ -338,7 +358,7 @@ class KnowledgeBase(ABC):
 
         logger.debug(f"[update_file_params] file_id={file_id}, updated_params={current_params}")
 
-        await self._save_metadata()
+        await self._persist_file(file_id)
 
     async def _save_markdown_to_minio(self, db_id: str, file_id: str, content: str) -> str:
         """Save markdown content to MinIO and return HTTP URL"""
@@ -450,6 +470,8 @@ class KnowledgeBase(ABC):
         """
         from src.utils import hashstr
 
+        kwargs = ensure_chunk_defaults_in_additional_params(kwargs)
+
         # 从 kwargs 中获取 is_private 配置
         is_private = kwargs.get("is_private", False)
         prefix = "kb_private_" if is_private else "kb_"
@@ -467,7 +489,7 @@ class KnowledgeBase(ABC):
             "metadata": kwargs,
             "created_at": utc_isoformat(),
         }
-        await self._save_metadata()
+        await self._persist_kb(db_id)
 
         # 创建工作目录
         working_dir = os.path.join(self.work_dir, db_id)
@@ -491,16 +513,44 @@ class KnowledgeBase(ABC):
             操作结果
         """
         if db_id in self.databases_meta:
+            from src.knowledge.utils.kb_utils import parse_minio_url
             from src.repositories.knowledge_base_repository import KnowledgeBaseRepository
+            from src.storage.minio import get_minio_client
 
-            # 删除相关文件记录
+            minio_client = get_minio_client()
+
+            # 1. 删除文件元数据中记录的 MinIO 文件
             files_to_delete = [fid for fid, finfo in self.files_meta.items() if finfo.get("database_id") == db_id]
             for file_id in files_to_delete:
+                file_path = self.files_meta[file_id].get("path")
+                if file_path and file_path.startswith(("http://", "https://")):
+                    try:
+                        bucket_name, object_name = parse_minio_url(file_path)
+                        await minio_client.adelete_file(bucket_name, object_name)
+                    except Exception as e:
+                        logger.warning(f"Failed to delete MinIO file {file_path}: {e}")
+
+                # 删除解析后的 markdown 文件 (kb-parsed/{db_id}/{file_id}/parsed.md)
+                parsed_object = f"{db_id}/{file_id}/parsed.md"
+                await minio_client.adelete_file(minio_client.KB_BUCKETS["parsed"], parsed_object)
+
                 del self.files_meta[file_id]
 
-            # 删除数据库记录
+            # 2. 并行删除所有知识库 bucket 中该 db_id 下的文件
+            prefix = f"{db_id}/"
+            await asyncio.gather(
+                minio_client.adelete_objects_by_prefix(minio_client.KB_BUCKETS["parsed"], prefix),
+                minio_client.adelete_objects_by_prefix(minio_client.KB_BUCKETS["documents"], prefix),
+                minio_client.adelete_objects_by_prefix(minio_client.KB_BUCKETS["images"], prefix),
+                # 直接删除 ref bucket（两种命名格式）
+                minio_client.adelete_bucket(minio_client.get_ref_bucket_name(db_id)),
+                minio_client.adelete_bucket(minio_client.get_ref_bucket_name_full(db_id)),
+            )
+
+            # 3. 删除数据库记录
             del self.databases_meta[db_id]
-            await KnowledgeBaseRepository().delete(db_id)
+            kb_repo = KnowledgeBaseRepository()
+            await kb_repo.delete(db_id)
             await self._save_metadata()
 
         # 删除工作目录
@@ -532,7 +582,7 @@ class KnowledgeBase(ABC):
             "path": folder_name,
             "file_type": "folder",
         }
-        await self._save_metadata()
+        await self._persist_file(folder_id)
         return self.files_meta[folder_id]
 
 
@@ -875,7 +925,7 @@ class KnowledgeBase(ABC):
                 current = parent_meta.get("parent_id")
 
         meta["parent_id"] = new_parent_id
-        await self._save_metadata()
+        await self._persist_file(file_id)
         return meta
 
     @abstractmethod
@@ -1019,7 +1069,7 @@ class KnowledgeBase(ABC):
                 "embed_info": kb.embed_info,
                 "llm_info": kb.llm_info,
                 "query_params": kb.query_params,
-                "metadata": kb.additional_params or {},
+                "metadata": ensure_chunk_defaults_in_additional_params(kb.additional_params),
                 "created_at": utc_isoformat(kb.created_at) if kb.created_at else utc_isoformat(),
             }
             for kb in databases
@@ -1027,6 +1077,7 @@ class KnowledgeBase(ABC):
 
         self.files_meta = {}
         for kb in databases:
+            kb_additional_params = self.databases_meta.get(kb.db_id, {}).get("metadata") or {}
             for record in await file_repo.list_by_db_id(kb.db_id):
                 self.files_meta[record.file_id] = {
                     "file_id": record.file_id,
@@ -1040,7 +1091,10 @@ class KnowledgeBase(ABC):
                     "content_hash": record.content_hash,
                     "size": record.file_size,
                     "content_type": record.content_type,
-                    "processing_params": record.processing_params,
+                    "processing_params": resolve_chunk_processing_params(
+                        kb_additional_params=kb_additional_params,
+                        file_processing_params=record.processing_params,
+                    ),
                     "is_folder": record.is_folder,
                     "error": record.error_message,
                     "created_by": record.created_by,
@@ -1157,3 +1211,78 @@ class KnowledgeBase(ABC):
                 }
                 if existing is None:
                     await eval_repo.create_benchmark(payload)
+
+    async def _persist_file(self, file_id: str) -> None:
+        """只保存单个文件到数据库，避免全量遍历"""
+        from src.repositories.knowledge_file_repository import KnowledgeFileRepository
+
+        file_repo = KnowledgeFileRepository()
+
+        if file_id not in self.files_meta:
+            return
+
+        meta = self.files_meta[file_id]
+        db_id = meta.get("database_id")
+        if not db_id:
+            return
+
+        await file_repo.upsert(
+            file_id=file_id,
+            data={
+                "db_id": db_id,
+                "parent_id": meta.get("parent_id"),
+                "filename": meta.get("filename") or "",
+                "original_filename": meta.get("original_filename"),
+                "file_type": meta.get("file_type"),
+                "path": meta.get("path"),
+                "minio_url": meta.get("minio_url"),
+                "markdown_file": meta.get("markdown_file"),
+                "status": meta.get("status"),
+                "content_hash": meta.get("content_hash"),
+                "file_size": meta.get("size"),
+                "content_type": meta.get("content_type"),
+                "processing_params": meta.get("processing_params"),
+                "is_folder": meta.get("is_folder", False),
+                "error_message": meta.get("error"),
+                "created_by": str(meta.get("created_by")) if meta.get("created_by") else None,
+                "updated_by": str(meta.get("updated_by")) if meta.get("updated_by") else None,
+            },
+        )
+
+    async def _persist_kb(self, db_id: str) -> None:
+        """只保存单个知识库到数据库，避免全量遍历"""
+        from src.repositories.knowledge_base_repository import KnowledgeBaseRepository
+
+        kb_repo = KnowledgeBaseRepository()
+
+        if db_id not in self.databases_meta:
+            return
+
+        meta = self.databases_meta[db_id]
+        existing = await kb_repo.get_by_id(db_id)
+        payload = {
+            "db_id": db_id,
+            "name": meta.get("name") or db_id,
+            "description": meta.get("description"),
+            "kb_type": meta.get("kb_type") or self.kb_type,
+            "embed_info": meta.get("embed_info"),
+            "llm_info": meta.get("llm_info"),
+            "query_params": meta.get("query_params"),
+            "additional_params": meta.get("metadata") or {},
+        }
+
+        if existing is None:
+            await kb_repo.create(payload)
+        else:
+            await kb_repo.update(
+                db_id,
+                {
+                    "name": payload["name"],
+                    "description": payload["description"],
+                    "kb_type": payload["kb_type"],
+                    "embed_info": payload["embed_info"],
+                    "llm_info": payload["llm_info"],
+                    "query_params": payload["query_params"],
+                    "additional_params": payload["additional_params"],
+                },
+            )

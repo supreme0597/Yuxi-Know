@@ -195,6 +195,61 @@ export const agentApi = {
       },
       ...restOptions
     })
+  },
+
+  /**
+   * 创建异步运行任务（Run）
+   * @param {string} agentId - 智能体ID
+   * @param {Object} data - run 请求体
+   * @returns {Promise<Object>}
+   */
+  createAgentRun: (agentId, data) =>
+    apiPost(`/api/chat/agent/${agentId}/runs`, {
+      query: data.query,
+      config: data.config || {},
+      image_content: data.image_content || null
+    }),
+
+  /**
+   * 获取 Run 状态
+   * @param {string} runId - run ID
+   * @returns {Promise<Object>}
+   */
+  getAgentRun: (runId) => apiGet(`/api/chat/runs/${runId}`),
+
+  /**
+   * 取消 Run
+   * @param {string} runId - run ID
+   * @returns {Promise<Object>}
+   */
+  cancelAgentRun: (runId) => apiPost(`/api/chat/runs/${runId}/cancel`, {}),
+
+  /**
+   * 获取线程活跃 Run
+   * @param {string} threadId - 线程ID
+   * @returns {Promise<Object>}
+   */
+  getThreadActiveRun: (threadId) => apiGet(`/api/chat/thread/${threadId}/active_run`),
+
+  /**
+   * 打开 Run 事件 SSE 连接（调用方负责关闭）
+   * @param {string} runId - run ID
+   * @param {string|number} afterSeq - 起始 seq/cursor
+   * @param {Object} options - { signal }
+   * @returns {Promise<Response>}
+   */
+  streamAgentRunEvents: (runId, afterSeq = '0', options = {}) => {
+    const { signal } = options
+    return fetch(
+      `/api/chat/runs/${runId}/events?after_seq=${encodeURIComponent(String(afterSeq))}`,
+      {
+        method: 'GET',
+        headers: {
+          ...useUserStore().getAuthHeaders()
+        },
+        signal
+      }
+    )
   }
 }
 
@@ -231,10 +286,12 @@ export const threadApi = {
   /**
    * 获取对话线程列表
    * @param {string} agentId - 智能体ID
+   * @param {number} limit - 返回数量限制，默认100
+   * @param {number} offset - 偏移量，默认0
    * @returns {Promise} - 对话线程列表
    */
-  getThreads: (agentId) => {
-    const url = `/api/chat/threads?agent_id=${agentId}`
+  getThreads: (agentId, limit = 100, offset = 0) => {
+    const url = `/api/chat/threads?agent_id=${agentId}&limit=${limit}&offset=${offset}`
     return apiGet(url)
   },
 

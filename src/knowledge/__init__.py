@@ -2,16 +2,16 @@ import os
 
 from ..config import config
 from .factory import KnowledgeBaseFactory
+from .graphs.upload_graph_service import UploadGraphService
 from .implementations.dify import DifyKB
 from .implementations.lightrag import LightRagKB
 from .implementations.milvus import MilvusKB
 from .manager import KnowledgeBaseManager
-from .services.upload_graph_service import UploadGraphService
 
 # 注册知识库类型
 KnowledgeBaseFactory.register("milvus", MilvusKB, {"description": "基于 Milvus 的生产级向量知识库，适合高性能部署"})
 KnowledgeBaseFactory.register("lightrag", LightRagKB, {"description": "基于图检索的知识库，支持实体关系构建和复杂查询"})
-KnowledgeBaseFactory.register("dify", DifyKB, {"description": "基于 Dify API 的云端知识库服务，支持灵活配置"})
+KnowledgeBaseFactory.register("dify", DifyKB, {"description": "连接 Dify Dataset 的只读检索知识库"})
 
 # 创建知识库管理器
 work_dir = os.path.join(config.save_dir, "knowledge_base_data")

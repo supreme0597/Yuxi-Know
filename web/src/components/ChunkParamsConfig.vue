@@ -4,7 +4,27 @@
       <p>调整分块参数可以控制文本的切分方式，影响检索质量和文档加载效率。</p>
     </div>
     <a-form :model="tempChunkParams" name="chunkConfig" autocomplete="off" layout="vertical">
-      <div class="chunk-row">
+      <a-form-item v-if="showPreset" name="chunk_preset_id">
+        <template #label>
+          <span class="chunk-preset-label">
+            分块策略
+            <a-tooltip :title="presetDescription">
+              <QuestionCircleOutlined class="chunk-preset-help-icon" />
+            </a-tooltip>
+          </span>
+        </template>
+        <a-select
+          v-model:value="tempChunkParams.chunk_preset_id"
+          :options="presetOptions"
+          style="width: 100%"
+        />
+        <p class="param-description">
+          预设策略对齐 RAGFlow：General、QA、Book、Laws。
+          <span v-if="allowPresetFollowDefault">留空时沿用知识库默认策略。</span>
+        </p>
+      </a-form-item>
+
+      <div class="chunk-row" v-if="showChunkSizeOverlap">
         <a-form-item label="Chunk Size" name="chunk_size">
           <a-input-number
             v-model:value="tempChunkParams.chunk_size"
@@ -42,7 +62,15 @@
 </template>
 
 <script setup>
-defineProps({
+import { computed } from 'vue'
+import { QuestionCircleOutlined } from '@ant-design/icons-vue'
+import {
+  CHUNK_PRESET_OPTIONS,
+  CHUNK_PRESET_LABEL_MAP,
+  getChunkPresetDescription
+} from '@/utils/chunk_presets'
+
+const props = defineProps({
   tempChunkParams: {
     type: Object,
     required: true
@@ -50,8 +78,45 @@ defineProps({
   showQaSplit: {
     type: Boolean,
     default: true
+  },
+  showChunkSizeOverlap: {
+    type: Boolean,
+    default: true
+  },
+  showPreset: {
+    type: Boolean,
+    default: true
+  },
+  allowPresetFollowDefault: {
+    type: Boolean,
+    default: false
+  },
+  databasePresetId: {
+    type: String,
+    default: 'general'
   }
 })
+
+const presetOptions = computed(() => {
+  const options = []
+  const defaultPresetLabel = CHUNK_PRESET_LABEL_MAP[props.databasePresetId] || 'General'
+
+  if (props.allowPresetFollowDefault) {
+    options.push({
+      value: '',
+      label: `沿用知识库默认（${defaultPresetLabel}）`
+    })
+  }
+
+  options.push(...CHUNK_PRESET_OPTIONS.map(({ value, label }) => ({ value, label })))
+
+  return options
+})
+
+const effectivePresetId = computed(
+  () => props.tempChunkParams.chunk_preset_id || props.databasePresetId || 'general'
+)
+const presetDescription = computed(() => getChunkPresetDescription(effectivePresetId.value))
 </script>
 
 <style scoped>
@@ -91,5 +156,17 @@ defineProps({
   color: var(--gray-400);
   margin: 4px 0 0 0;
   line-height: 1.4;
+}
+
+.chunk-preset-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chunk-preset-help-icon {
+  color: var(--gray-500);
+  cursor: help;
+  font-size: 14px;
 }
 </style>

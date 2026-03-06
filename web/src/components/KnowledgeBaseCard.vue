@@ -40,6 +40,9 @@
           {{ getKbTypeLabel(database.kb_type || 'lightrag') }}
         </a-tag>
         <a-tag color="blue" size="small">{{ database.embed_info?.name || 'N/A' }}</a-tag>
+        <a-tag color="cyan" size="small">{{
+          chunkPresetLabelMap[database.additional_params?.chunk_preset_id || 'general'] || 'General'
+        }}</a-tag>
       </div>
     </div>
   </div>
@@ -70,7 +73,11 @@
         />
       </a-form-item>
 
-      <a-form-item label="自动生成问题" name="auto_generate_questions">
+      <a-form-item
+        v-if="database.kb_type !== 'dify'"
+        label="自动生成问题"
+        name="auto_generate_questions"
+      >
         <a-switch
           v-model:checked="editForm.auto_generate_questions"
           checked-children="开启"
@@ -80,6 +87,36 @@
           >上传文件后自动生成测试问题</span
         >
       </a-form-item>
+
+      <a-form-item v-if="database.kb_type !== 'dify'" name="chunk_preset_id">
+        <template #label>
+          <span class="chunk-preset-label">
+            分块策略
+            <a-tooltip :title="editPresetDescription">
+              <QuestionCircleOutlined class="chunk-preset-help-icon" />
+            </a-tooltip>
+          </span>
+        </template>
+        <a-select v-model:value="editForm.chunk_preset_id" :options="chunkPresetOptions" />
+      </a-form-item>
+
+      <template v-if="database.kb_type === 'dify'">
+        <a-form-item label="Dify API URL" name="dify_api_url">
+          <a-input
+            v-model:value="editForm.dify_api_url"
+            placeholder="例如: https://api.dify.ai/v1"
+          />
+        </a-form-item>
+        <a-form-item label="Dify Token" name="dify_token">
+          <a-input-password
+            v-model:value="editForm.dify_token"
+            placeholder="请输入 Dify API Token"
+          />
+        </a-form-item>
+        <a-form-item label="Dataset ID" name="dify_dataset_id">
+          <a-input v-model:value="editForm.dify_dataset_id" placeholder="请输入 Dify dataset_id" />
+        </a-form-item>
+      </template>
 
       <!-- 仅对 LightRAG 类型显示 LLM 配置 -->
       <a-form-item v-if="database.kb_type === 'lightrag'" label="语言模型 (LLM)" name="llm_info">
@@ -117,13 +154,18 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, h, onMounted, watch } from 'vue'
+import { ref, reactive, computed, h, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDatabaseStore } from '@/stores/database'
 import { useUserStore } from '@/stores/user'
 import { getKbTypeLabel, getKbTypeColor } from '@/utils/kb_utils'
+import {
+  CHUNK_PRESET_OPTIONS,
+  CHUNK_PRESET_LABEL_MAP,
+  getChunkPresetDescription
+} from '@/utils/chunk_presets'
 import { message } from 'ant-design-vue'
-import { LeftOutlined } from '@ant-design/icons-vue'
+import { LeftOutlined, QuestionCircleOutlined } from '@ant-design/icons-vue'
 import { Pencil, Trash2, Copy } from 'lucide-vue-next'
 import { departmentApi } from '@/apis/department_api'
 import ModelSelectorComponent from '@/components/ModelSelectorComponent.vue'
@@ -195,7 +237,7 @@ const copyDatabaseId = async () => {
   try {
     await navigator.clipboard.writeText(database.value.db_id)
     message.success('知识库ID已复制到剪贴板')
-  } catch (err) {
+  } catch {
     // 降级方案
     const textArea = document.createElement('textarea')
     textArea.value = database.value.db_id
@@ -220,11 +262,19 @@ const editForm = reactive({
   name: '',
   description: '',
   auto_generate_questions: false,
+  chunk_preset_id: 'general',
   llm_info: {
     provider: '',
     model_name: ''
-  }
+  },
+  dify_api_url: '',
+  dify_token: '',
+  dify_dataset_id: ''
 })
+
+const chunkPresetOptions = CHUNK_PRESET_OPTIONS.map(({ label, value }) => ({ label, value }))
+const chunkPresetLabelMap = CHUNK_PRESET_LABEL_MAP
+const editPresetDescription = computed(() => getChunkPresetDescription(editForm.chunk_preset_id))
 
 const rules = {
   name: [{ required: true, message: '请输入知识库名称' }]
@@ -238,6 +288,10 @@ const showEditModal = () => {
   editForm.description = database.value.description || ''
   editForm.auto_generate_questions =
     database.value.additional_params?.auto_generate_questions || false
+  editForm.chunk_preset_id = database.value.additional_params?.chunk_preset_id || 'general'
+  editForm.dify_api_url = database.value.additional_params?.dify_api_url || ''
+  editForm.dify_token = database.value.additional_params?.dify_token || ''
+  editForm.dify_dataset_id = database.value.additional_params?.dify_dataset_id || ''
 
   // 如果是 LightRAG 类型，加载当前的 LLM 配置
   if (database.value.kb_type === 'lightrag') {
@@ -282,12 +336,35 @@ const handleEditSubmit = () => {
       const updateData = {
         name: editForm.name,
         description: editForm.description,
-        additional_params: {
-          auto_generate_questions: editForm.auto_generate_questions
-        },
+        additional_params: {},
         share_config: {
           is_shared: finalIsShared,
           accessible_departments: finalIsShared ? [] : finalDeptIds
+        }
+      }
+
+      if (database.value.kb_type === 'dify') {
+        if (
+          !editForm.dify_api_url?.trim() ||
+          !editForm.dify_token?.trim() ||
+          !editForm.dify_dataset_id?.trim()
+        ) {
+          message.error('请完整填写 Dify API URL、Token 和 Dataset ID')
+          return
+        }
+        if (!editForm.dify_api_url.trim().endsWith('/v1')) {
+          message.error('Dify API URL 必须以 /v1 结尾')
+          return
+        }
+        updateData.additional_params = {
+          dify_api_url: editForm.dify_api_url.trim(),
+          dify_token: editForm.dify_token.trim(),
+          dify_dataset_id: editForm.dify_dataset_id.trim()
+        }
+      } else {
+        updateData.additional_params = {
+          auto_generate_questions: editForm.auto_generate_questions,
+          chunk_preset_id: editForm.chunk_preset_id || 'general'
         }
       }
 
@@ -427,5 +504,17 @@ const deleteDatabase = () => {
   gap: 6px;
   align-items: center;
   flex-wrap: wrap;
+}
+
+.chunk-preset-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chunk-preset-help-icon {
+  color: var(--gray-500);
+  cursor: help;
+  font-size: 14px;
 }
 </style>

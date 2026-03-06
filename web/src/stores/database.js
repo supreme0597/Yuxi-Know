@@ -208,24 +208,36 @@ export const useDatabaseStore = defineStore('database', () => {
         state.batchDeleting = true
         let successCount = 0
         let failureCount = 0
-        let progressMessage = message.loading(`正在删除文件 0/${validFileIds.length}`, 0)
+        let processedCount = 0
+        const totalCount = validFileIds.length
+        const progressKey = `batch-delete-${Date.now()}`
+        message.loading({ content: `正在删除文件 0/${totalCount}`, key: progressKey, duration: 0 })
 
         try {
-          for (let i = 0; i < validFileIds.length; i++) {
-            const fileId = validFileIds[i]
+          const CHUNK_SIZE = 50
+          for (let i = 0; i < totalCount; i += CHUNK_SIZE) {
+            const chunk = validFileIds.slice(i, i + CHUNK_SIZE)
+
             try {
-              await deleteFile(fileId)
-              successCount++
-            } catch (error) {
-              console.error(`删除文件 ${fileId} 失败:`, error)
-              failureCount++
-            }
-            progressMessage?.()
-            if (i + 1 < validFileIds.length) {
-              progressMessage = message.loading(`正在删除文件 ${i + 1}/${validFileIds.length}`, 0)
+              const res = await documentApi.batchDeleteDocuments(databaseId.value, chunk)
+              successCount += res.deleted_count || 0
+              if (res.failed_items) {
+                failureCount += res.failed_items.length
+              }
+            } catch (err) {
+              console.error(`删除批次 ${i / CHUNK_SIZE + 1} 失败:`, err)
+              failureCount += chunk.length
+            } finally {
+              processedCount += chunk.length
+              message.loading({
+                content: `正在删除文件 ${processedCount}/${totalCount}`,
+                key: progressKey,
+                duration: 0
+              })
             }
           }
-          progressMessage?.()
+
+          message.destroy(progressKey)
           if (successCount > 0 && failureCount === 0) {
             message.success(`成功删除 ${successCount} 个文件`)
           } else if (successCount > 0 && failureCount > 0) {
@@ -233,12 +245,13 @@ export const useDatabaseStore = defineStore('database', () => {
           } else if (failureCount > 0) {
             message.error(`${failureCount} 个文件删除失败`)
           }
+
           selectedRowKeys.value = []
           await getDatabaseInfo(undefined, true) // Skip query params for batch deletion
         } catch (error) {
-          progressMessage?.()
+          message.destroy(progressKey)
           console.error('批量删除出错:', error)
-          message.error('批量删除过程中发生错误')
+          message.error(error.message || '批量删除过程中发生错误')
         } finally {
           state.batchDeleting = false
         }

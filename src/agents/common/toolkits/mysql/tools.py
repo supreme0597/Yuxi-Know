@@ -1,8 +1,8 @@
 from typing import Annotated, Any
 
-from langchain.tools import tool
 from pydantic import BaseModel, Field
 
+from src.agents.common.toolkits.registry import tool
 from src.utils import logger
 
 from .connection import (
@@ -46,15 +46,14 @@ def get_connection_manager() -> MySQLConnectionManager:
     return _connection_manager
 
 
-class TableListModel(BaseModel):
-    """获取表名列表的参数模型"""
-
-    pass
-
-
-@tool(name_or_callable="查询表名及说明", args_schema=TableListModel)
+@tool(
+    category="mysql",
+    tags=["数据库", "查询"],
+    display_name="列出MySQL表",
+    name_or_callable="mysql_list_tables",
+)
 def mysql_list_tables() -> str:
-    """获取数据库中的所有表名
+    """【查询表名及说明】获取数据库中的所有表名
 
     这个工具用来列出当前数据库中所有的表名，帮助你了解数据库的结构。
     """
@@ -107,9 +106,15 @@ class TableDescribeModel(BaseModel):
     table_name: str = Field(description="要查询的表名", example="users")
 
 
-@tool(name_or_callable="描述表", args_schema=TableDescribeModel)
+@tool(
+    category="mysql",
+    tags=["数据库", "结构"],
+    display_name="描述MySQL表结构",
+    name_or_callable="mysql_describe_table",
+    args_schema=TableDescribeModel,
+)
 def mysql_describe_table(table_name: Annotated[str, "要查询结构的表名"]) -> str:
-    """获取指定表的详细结构信息
+    """【描述表】获取指定表的详细结构信息
 
     这个工具用来查看表的字段信息、数据类型、是否允许NULL、默认值、键类型等。
     帮助你了解表的结构，以便编写正确的SQL查询。
@@ -203,12 +208,18 @@ class QueryModel(BaseModel):
     timeout: int | None = Field(default=60, description="查询超时时间（秒），默认60秒，最大600秒", ge=1, le=600)
 
 
-@tool(name_or_callable="执行 SQL 查询", args_schema=QueryModel)
+@tool(
+    category="mysql",
+    tags=["数据库", "SQL"],
+    display_name="执行MySQL查询",
+    name_or_callable="mysql_query",
+    args_schema=QueryModel,
+)
 def mysql_query(
     sql: Annotated[str, "要执行的SQL查询语句（只能是SELECT语句）"],
     timeout: Annotated[int | None, "查询超时时间（秒），默认60秒，最大600秒"] = 60,
 ) -> str:
-    """执行只读的SQL查询语句
+    """【执行 SQL 查询】执行只读的SQL查询语句
 
     这个工具用来执行SQL查询并返回结果。支持复杂的SELECT查询，包括JOIN、GROUP BY等。
     注意：只能执行查询操作，不能修改数据。

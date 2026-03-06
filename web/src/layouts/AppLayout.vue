@@ -2,12 +2,13 @@
 import { ref, reactive, onMounted, computed, provide } from 'vue'
 import { RouterLink, RouterView, useRoute } from 'vue-router'
 import { GithubOutlined } from '@ant-design/icons-vue'
-import { Bot, Waypoints, LibraryBig, BarChart3, CircleCheck } from 'lucide-vue-next'
+import { Bot, Waypoints, LibraryBig, BarChart3, CircleCheck, Blocks } from 'lucide-vue-next'
 
 import { useConfigStore } from '@/stores/config'
 import { useDatabaseStore } from '@/stores/database'
 import { useInfoStore } from '@/stores/info'
 import { useTaskerStore } from '@/stores/tasker'
+import { useUserStore } from '@/stores/user'
 import { storeToRefs } from 'pinia'
 import UserInfoComponent from '@/components/UserInfoComponent.vue'
 import DebugComponent from '@/components/DebugComponent.vue'
@@ -18,6 +19,7 @@ const configStore = useConfigStore()
 const databaseStore = useDatabaseStore()
 const infoStore = useInfoStore()
 const taskerStore = useTaskerStore()
+const userStore = useUserStore()
 const { activeCount: activeCountRef, isDrawerOpen } = storeToRefs(taskerStore)
 
 const layoutSettings = reactive({
@@ -86,32 +88,46 @@ console.log(route)
 const activeTaskCount = computed(() => activeCountRef.value || 0)
 
 // 下面是导航菜单部分，添加智能体项
-const mainList = [
-  {
-    name: '智能体',
-    path: '/agent',
-    icon: Bot,
-    activeIcon: Bot
-  },
-  {
-    name: '图谱',
-    path: '/graph',
-    icon: Waypoints,
-    activeIcon: Waypoints
-  },
-  {
-    name: '知识库',
-    path: '/database',
-    icon: LibraryBig,
-    activeIcon: LibraryBig
-  },
-  {
+const mainList = computed(() => {
+  const items = [
+    {
+      name: '智能体',
+      path: '/agent',
+      icon: Bot,
+      activeIcon: Bot
+    },
+    {
+      name: '图谱',
+      path: '/graph',
+      icon: Waypoints,
+      activeIcon: Waypoints
+    },
+    {
+      name: '知识库',
+      path: '/database',
+      icon: LibraryBig,
+      activeIcon: LibraryBig
+    }
+  ]
+
+  if (userStore.isSuperAdmin) {
+    items.push({
+      name: '扩展管理',
+      path: '/extensions',
+      icon: Blocks,
+      activeIcon: Blocks
+    })
+  }
+
+  items.push({
     name: 'Dashboard',
     path: '/dashboard',
     icon: BarChart3,
     activeIcon: BarChart3
-  }
-]
+  })
+
+  return items
+})
 
 // Provide settings modal methods to child components
 provide('settingsModal', {

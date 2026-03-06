@@ -108,15 +108,19 @@
           <div class="col-item">
             <div class="setting-label">入库参数配置</div>
             <div class="setting-content">
-              <template v-if="!isGraphBased">
-                <ChunkParamsConfig :temp-chunk-params="indexParams" :show-qa-split="true" />
-              </template>
-              <template v-else>
-                <div class="lightrag-tip">
-                  <Info :size="14" style="margin-right: 6px" />
-                  <span>LightRAG 将使用默认参数自动入库</span>
-                </div>
-              </template>
+              <ChunkParamsConfig
+                :temp-chunk-params="indexParams"
+                :show-qa-split="true"
+                :show-chunk-size-overlap="!isGraphBased"
+                :show-preset="true"
+                :allow-preset-follow-default="true"
+                :database-preset-id="
+                  store.database?.additional_params?.chunk_preset_id || 'general'
+                "
+              />
+              <p v-if="isGraphBased" class="param-description">
+                LightRAG 按分隔符预切分，超长片段仍会按 token 大小继续切分。
+              </p>
             </div>
           </div>
         </div>
@@ -564,8 +568,25 @@ const autoIndex = ref(false)
 const indexParams = ref({
   chunk_size: 1000,
   chunk_overlap: 200,
-  qa_separator: ''
+  qa_separator: '',
+  chunk_preset_id: ''
 })
+
+const buildAutoIndexParams = () => {
+  const payload = {}
+  if (indexParams.value.chunk_preset_id) {
+    payload.chunk_preset_id = indexParams.value.chunk_preset_id
+  }
+
+  if (isGraphBased.value) {
+    payload.qa_separator = indexParams.value.qa_separator || ''
+    return payload
+  }
+  return {
+    ...indexParams.value,
+    ...payload
+  }
+}
 
 // 计算属性：是否支持QA分割
 const isQaSplitSupported = computed(() => {
@@ -990,7 +1011,7 @@ const chunkData = async () => {
       const params = { ...chunkParams.value }
       if (autoIndex.value) {
         params.auto_index = true
-        Object.assign(params, indexParams.value)
+        Object.assign(params, buildAutoIndexParams())
       }
 
       // 构造 _preprocessed_map 和 items (minio urls)
@@ -1068,7 +1089,7 @@ const chunkData = async () => {
     const params = { ...chunkParams.value, content_hashes }
     if (autoIndex.value) {
       params.auto_index = true
-      Object.assign(params, indexParams.value)
+      Object.assign(params, buildAutoIndexParams())
     }
 
     await store.addFiles({
@@ -1602,17 +1623,6 @@ const chunkData = async () => {
   background: var(--gray-0);
   border: 1px solid var(--gray-200);
   border-radius: 6px;
-}
-
-.lightrag-tip {
-  display: flex;
-  align-items: center;
-  margin-top: 8px;
-  padding: 8px 12px;
-  background: var(--main-50);
-  border-radius: 6px;
-  font-size: 13px;
-  color: var(--gray-600);
 }
 
 .setting-label .ant-checkbox {

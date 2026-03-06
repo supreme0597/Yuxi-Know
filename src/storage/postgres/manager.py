@@ -164,6 +164,39 @@ class PostgresManager(metaclass=SingletonMeta):
             for stmt in stmts:
                 await conn.execute(text(stmt))
 
+    async def ensure_business_schema(self):
+        """确保业务 schema 包含后续新增字段（兼容已存在表）。"""
+        self._check_initialized()
+        stmts = [
+            "ALTER TABLE IF EXISTS skills ADD COLUMN IF NOT EXISTS tool_dependencies JSONB DEFAULT '[]'::jsonb",
+            "ALTER TABLE IF EXISTS skills ADD COLUMN IF NOT EXISTS mcp_dependencies JSONB DEFAULT '[]'::jsonb",
+            "ALTER TABLE IF EXISTS skills ADD COLUMN IF NOT EXISTS skill_dependencies JSONB DEFAULT '[]'::jsonb",
+            "ALTER TABLE IF EXISTS mcp_servers ADD COLUMN IF NOT EXISTS env JSONB",
+            """
+            CREATE TABLE IF NOT EXISTS agent_runs (
+                id VARCHAR(64) PRIMARY KEY,
+                thread_id VARCHAR(64) NOT NULL,
+                agent_id VARCHAR(64) NOT NULL,
+                user_id VARCHAR(64) NOT NULL,
+                status VARCHAR(32) NOT NULL DEFAULT 'pending',
+                request_id VARCHAR(64) NOT NULL UNIQUE,
+                input_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+                error_type VARCHAR(64),
+                error_message TEXT,
+                started_at TIMESTAMPTZ,
+                finished_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_agent_runs_user_created ON agent_runs(user_id, created_at DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_agent_runs_thread_created ON agent_runs(thread_id, created_at DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_agent_runs_status_updated ON agent_runs(status, updated_at)",
+        ]
+        async with self.async_engine.begin() as conn:
+            for stmt in stmts:
+                await conn.execute(text(stmt))
+
     @property
     def is_postgresql(self) -> bool:
         """检查是否是 PostgreSQL 数据库"""
