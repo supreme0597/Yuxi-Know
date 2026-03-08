@@ -47,30 +47,30 @@ class Config(BaseModel):
     # 模型配置
     # ============================================================
     default_model: str = Field(
-        default="siliconflow/deepseek-ai/DeepSeek-V3.2",
+        default="siliconflow/Pro/deepseek-ai/DeepSeek-V3.2",
         description="默认对话模型",
     )
     fast_model: str = Field(
-        default="siliconflow/THUDM/GLM-4-9B-0414",
+        default="siliconflow/Qwen/Qwen3.5-9B",
         description="快速响应模型",
     )
     embed_model: str = Field(
-        default="siliconflow/BAAI/bge-m3",
+        default="siliconflow/Pro/BAAI/bge-m3",
         description="默认 Embedding 模型",
     )
     reranker: str = Field(
-        default="siliconflow/BAAI/bge-reranker-v2-m3",
+        default="siliconflow/Pro/BAAI/bge-reranker-v2-m3",
         description="默认 Re-Ranker 模型",
     )
     content_guard_llm_model: str = Field(
-        default="siliconflow/Qwen/Qwen3-235B-A22B-Instruct-2507",
+        default="siliconflow/Qwen/Qwen3.5-9B",
         description="内容审查LLM模型",
     )
 
     # ============================================================
     # 智能体配置
     # ============================================================
-    default_agent_id: str = Field(default="", description="默认智能体ID")
+    default_agent_id: str = Field(default="ChatbotAgent", description="默认智能体ID")
 
     # ============================================================
     # 模型信息（只读，不持久化）
@@ -148,6 +148,11 @@ class Config(BaseModel):
                     setattr(self, key, value)
                 else:
                     logger.warning(f"Unknown config key: {key}")
+
+            # 确保默认智能体为 ChatbotAgent（兼容旧配置）
+            if not self.default_agent_id:
+                self.default_agent_id = "ChatbotAgent"
+                logger.info("default_agent_id not set, using default: ChatbotAgent")
 
         except Exception as e:
             logger.error(f"Failed to load config from {self._config_file}: {e}")
