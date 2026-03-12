@@ -78,7 +78,7 @@ async def _ensure_database_not_dify(db_id: str, operation: str) -> None:
     if not db_info:
         raise HTTPException(status_code=404, detail=f"知识库 {db_id} 不存在")
     if (db_info.get("kb_type") or "").lower() == "dify":
-        raise HTTPException(status_code=400, detail=f"Dify 知识库只支持检索，不支持{operation}")
+        raise HTTPException(status_code=400, detail=f"Dify 知识库不支持{operation}")
 
 
 # =============================================================================
@@ -620,7 +620,6 @@ async def index_documents(
 async def get_document_info(db_id: str, doc_id: str, current_user: User = Depends(get_admin_user)):
     """获取文档详细信息（包含基本信息和内容信息）"""
     logger.debug(f"GET document {doc_id} info in {db_id}")
-    await _ensure_database_not_dify(db_id, "文档查看")
 
     try:
         info = await knowledge_base.get_file_info(db_id, doc_id)
@@ -634,7 +633,6 @@ async def get_document_info(db_id: str, doc_id: str, current_user: User = Depend
 async def get_document_basic_info(db_id: str, doc_id: str, current_user: User = Depends(get_admin_user)):
     """获取文档基本信息（仅元数据）"""
     logger.debug(f"GET document {doc_id} basic info in {db_id}")
-    await _ensure_database_not_dify(db_id, "文档查看")
 
     try:
         info = await knowledge_base.get_file_basic_info(db_id, doc_id)
@@ -648,7 +646,6 @@ async def get_document_basic_info(db_id: str, doc_id: str, current_user: User = 
 async def get_document_content(db_id: str, doc_id: str, current_user: User = Depends(get_admin_user)):
     """获取文档内容信息（chunks和lines）"""
     logger.debug(f"GET document {doc_id} content in {db_id}")
-    await _ensure_database_not_dify(db_id, "文档查看")
 
     try:
         info = await knowledge_base.get_file_content(db_id, doc_id)
@@ -664,7 +661,6 @@ async def batch_delete_documents(
 ):
     """批量删除文档或文件夹"""
     logger.debug(f"BATCH DELETE documents {file_ids} in {db_id}")
-    await _ensure_database_not_dify(db_id, "批量文档删除")
 
     deleted_count = 0
     failed_items = []
@@ -676,6 +672,7 @@ async def batch_delete_documents(
             # Check if it is a folder
             is_folder = file_meta_info.get("meta", {}).get("is_folder", False)
             if is_folder:
+                await _ensure_database_not_dify(db_id, "文件夹删除")
                 await knowledge_base.delete_folder(db_id, doc_id)
                 deleted_count += 1
                 continue
@@ -713,13 +710,13 @@ async def batch_delete_documents(
 async def delete_document(db_id: str, doc_id: str, current_user: User = Depends(get_admin_user)):
     """删除文档或文件夹"""
     logger.debug(f"DELETE document {doc_id} info in {db_id}")
-    await _ensure_database_not_dify(db_id, "文档删除")
     try:
         file_meta_info = await knowledge_base.get_file_basic_info(db_id, doc_id)
 
         # Check if it is a folder
         is_folder = file_meta_info.get("meta", {}).get("is_folder", False)
         if is_folder:
+            await _ensure_database_not_dify(db_id, "文件夹删除")
             await knowledge_base.delete_folder(db_id, doc_id)
             return {"message": "文件夹删除成功"}
 

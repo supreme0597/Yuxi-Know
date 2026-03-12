@@ -396,42 +396,6 @@ class KnowledgeBase(ABC):
         content_bytes = await minio_client.adownload_file(bucket_name, object_name)
         return content_bytes.decode("utf-8")
 
-    async def _cleanup_minio_files(self, file_id: str) -> None:
-        """
-        清理 MinIO 中的文件（原始文件和解析后的 markdown）
-        
-        Args:
-            file_id: 文件ID
-        """
-        if file_id not in self.files_meta:
-            return
-            
-        file_meta = self.files_meta[file_id]
-        from src.knowledge.utils.kb_utils import is_minio_url, parse_minio_url
-        from src.storage.minio import get_minio_client
-        
-        minio_client = get_minio_client()
-        
-        # 删除原始文件（path）
-        file_path = file_meta.get("path", "")
-        if file_path and is_minio_url(file_path):
-            try:
-                bucket_name, object_name = parse_minio_url(file_path)
-                await minio_client.adelete_file(bucket_name, object_name)
-                logger.info(f"Deleted original file from MinIO: {file_path}")
-            except Exception as e:
-                logger.warning(f"Failed to delete original file from MinIO: {e}")
-        
-        # 删除解析后的 markdown 文件（markdown_file）
-        markdown_file = file_meta.get("markdown_file", "")
-        if markdown_file and is_minio_url(markdown_file):
-            try:
-                bucket_name, object_name = parse_minio_url(markdown_file)
-                await minio_client.adelete_file(bucket_name, object_name)
-                logger.info(f"Deleted parsed markdown from MinIO: {markdown_file}")
-            except Exception as e:
-                logger.warning(f"Failed to delete parsed markdown from MinIO: {e}")
-
     @abstractmethod
     async def index_file(self, db_id: str, file_id: str, operator_id: str | None = None) -> dict:
         """
@@ -585,8 +549,6 @@ class KnowledgeBase(ABC):
         await self._persist_file(folder_id)
         return self.files_meta[folder_id]
 
-
-
     @abstractmethod
     async def aquery(self, query_text: str, db_id: str, **kwargs) -> list[dict]:
         """
@@ -663,13 +625,12 @@ class KnowledgeBase(ABC):
             return query_params_meta.get("options", {})
         return {}
 
-    def get_database_info(self, db_id: str, include_files: bool = True) -> dict | None:
+    def get_database_info(self, db_id: str) -> dict | None:
         """
         获取数据库详细信息
 
         Args:
             db_id: 数据库ID
-            include_files: 是否包含文件列表（默认包含）
 
         Returns:
             数据库信息或None
@@ -685,43 +646,30 @@ class KnowledgeBase(ABC):
 
         # 获取文件信息
         db_files = {}
-        if include_files:
-            for file_id, file_info in self.files_meta.items():
-                if file_info.get("database_id") == db_id:
-                    created_at = self._normalize_timestamp(file_info.get("created_at"))
-                    db_files[file_id] = {
-                        "file_id": file_id,
-                        "filename": file_info.get("filename", ""),
-                        "path": file_info.get("path", ""),
-                        "markdown_file": file_info.get("markdown_file", ""),
-                        "type": file_info.get("file_type", ""),
-                        "status": file_info.get("status", "done"),
-                        "created_at": created_at,
-                        "processing_params": file_info.get("processing_params", None),
-                        "is_folder": file_info.get("is_folder", False),
-                        "parent_id": file_info.get("parent_id", None),
-                    }
-        else:
-            # 如果不包含文件，不需要遍历
-            pass
+        for file_id, file_info in self.files_meta.items():
+            if file_info.get("database_id") == db_id:
+                created_at = self._normalize_timestamp(file_info.get("created_at"))
+                db_files[file_id] = {
+                    "file_id": file_id,
+                    "filename": file_info.get("filename", ""),
+                    "path": file_info.get("path", ""),
+                    "markdown_file": file_info.get("markdown_file", ""),
+                    "type": file_info.get("file_type", ""),
+                    "status": file_info.get("status", "done"),
+                    "created_at": created_at,
+                    "processing_params": file_info.get("processing_params", None),
+                    "is_folder": file_info.get("is_folder", False),
+                    "parent_id": file_info.get("parent_id", None),
+                }
 
         # 按创建时间倒序排序文件列表
         sorted_files = dict(
             sorted(
                 db_files.items(),
-                key=lambda item: str(item[1].get("created_at") or ""),
+                key=lambda item: item[1].get("created_at") or "",
                 reverse=True,
             )
         )
-
-        meta["files"] = sorted_files
-        meta["row_count"] = len(sorted_files) if include_files else 0 # 简单设为0或保留 metadata 中的 count?
-        # 如果不include_files，row_count 可能是 0。用户可能需要 count。
-        # 但如果不遍历，无法准确计算（files_meta 是全局的）。
-        # 这里为了性能，如果不 include files，row_count 就算了，或者我可以单独遍历计数？
-        # 遍历计数比构建 dict 快一点，但还是 O(N)。
-        # 暂时设为 len(sorted_files) 也就是 0。
-
 
         meta["files"] = sorted_files
         meta["row_count"] = len(sorted_files)
@@ -767,7 +715,7 @@ class KnowledgeBase(ABC):
             sorted_files = dict(
                 sorted(
                     db_files.items(),
-                    key=lambda item: str(item[1].get("created_at") or ""),
+                    key=lambda item: item[1].get("created_at") or "",
                     reverse=True,
                 )
             )
