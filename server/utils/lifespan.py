@@ -1,12 +1,13 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
-from src.services.task_service import tasker
+from src.knowledge import knowledge_base
 from src.services.mcp_service import init_mcp_servers
 from src.services.run_queue_service import close_queue_clients, get_redis_client
+from src.services.task_service import tasker
 from src.storage.postgres.manager import pg_manager
-from src.knowledge import knowledge_base
 from src.utils import logger
 
 
@@ -42,6 +43,14 @@ async def lifespan(app: FastAPI):
         logger.warning(f"Run queue redis unavailable on startup: {e}")
 
     await tasker.start()
+
+    # =========================================================
+    # 2. 核心修复：在这里执行一次 setup()，建完表就拉倒
+    # =========================================================
+    checkpointer = AsyncPostgresSaver(pg_manager.langgraph_pool)
+    await checkpointer.setup()
+    print("LangGraph Checkpoint tables verified/created!")
+
     yield
     await tasker.shutdown()
     await close_queue_clients()

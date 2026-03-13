@@ -5,7 +5,6 @@ import importlib.util
 import os
 import tomllib as tomli
 from abc import abstractmethod
-from inspect import isawaitable
 from pathlib import Path
 
 from langgraph.checkpoint.memory import InMemorySaver
@@ -14,6 +13,7 @@ from langgraph.graph.state import CompiledStateGraph
 
 from src import config as sys_config
 from src.agents.common.context import BaseContext
+from src.storage.postgres.manager import pg_manager
 from src.utils import logger
 
 
@@ -211,23 +211,13 @@ class BaseAgent:
             logger.warning(f"langgraph postgres checkpointer 不可用，回退 sqlite: {e}")
             return None
 
-        conn_str = postgres_url.replace("+asyncpg", "")
         try:
-            saver_factory = getattr(AsyncPostgresSaver, "from_conn_string", None)
-            if callable(saver_factory):
-                saver = saver_factory(conn_str)
-            else:
-                saver = AsyncPostgresSaver(conn_str)  # type: ignore[call-arg]
+            saver = AsyncPostgresSaver(pg_manager.langgraph_pool)
 
             if hasattr(saver, "__aenter__") and hasattr(saver, "__aexit__"):
                 self._checkpointer_cm = saver
                 saver = await saver.__aenter__()
 
-            setup_fn = getattr(saver, "setup", None)
-            if callable(setup_fn):
-                result = setup_fn()
-                if isawaitable(result):
-                    await result
             logger.info(f"{self.name} 使用 postgres checkpointer")
             return saver
         except Exception as e:
