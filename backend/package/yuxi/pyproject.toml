@@ -2,7 +2,6 @@
 name = "yuxi"
 version = "0.6.0"
 description = "Yuxi 智能知识库与知识图谱平台核心后端包"
-readme = "../../../README.md"
 requires-python = ">=3.12,<3.14"
 dependencies = [
     "agent-sandbox>=0.0.26",
@@ -73,3 +72,11 @@ dependencies = [
     "unstructured>=0.17.2",
     "wcmatch>=8.0.0",
 ]
+
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["yuxi"]
+package-dir = {"yuxi" = "."}
