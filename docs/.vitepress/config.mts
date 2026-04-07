@@ -69,6 +69,7 @@ export default defineConfig({
           { text: '版本变更记录', link: '/develop-guides/changelog' },
           { text: '界面设计规范', link: '/develop-guides/design' },
           { text: '测试规范', link: '/develop-guides/testing-guidelines' },
+          { text: '内网认证配置', link: '/develop-guides/auth-config-guide' }
         ]
       }
     ],

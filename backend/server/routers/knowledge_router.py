@@ -66,7 +66,7 @@ def _validate_dify_additional_params(additional_params: dict | None) -> dict:
     params = dict(additional_params or {})
     missing_fields = [field for field in DIFY_REQUIRED_PARAMS if not str(params.get(field) or "").strip()]
     if missing_fields:
-        raise HTTPException(status_code=400, detail=f"Dify 参数缺失: {', '.join(missing_fields)}")
+        raise HTTPException(status_code=400, detail=f"Dify 参数缺失：{', '.join(missing_fields)}")
 
     api_url = str(params.get("dify_api_url") or "").strip()
     if not api_url.endswith("/v1"):
@@ -149,9 +149,9 @@ async def create_database(
             if not embed_model_name:
                 raise HTTPException(status_code=400, detail="embed_model_name 不能为空")
             if embed_model_name not in config.embed_model_names:
-                raise HTTPException(status_code=400, detail=f"不支持的 embedding 模型: {embed_model_name}")
+                raise HTTPException(status_code=400, detail=f"不支持的 embedding 模型：{embed_model_name}")
             embed_info = config.embed_model_names[embed_model_name]
-            # 将Pydantic模型转换为字典以便JSON序列化
+            # 将 Pydantic 模型转换为字典以便 JSON 序列化
             embed_info_dict = embed_info.model_dump() if hasattr(embed_info, "model_dump") else embed_info.dict()
 
         database_info = await knowledge_base.create_database(
@@ -174,7 +174,7 @@ async def create_database(
         raise
     except Exception as e:
         logger.error(f"创建数据库失败 {e}, {traceback.format_exc()}")
-        raise HTTPException(status_code=400, detail=f"创建数据库失败: {e}")
+        raise HTTPException(status_code=400, detail=f"创建数据库失败：{e}")
 
 
 @knowledge.get("/databases/accessible")
@@ -194,8 +194,8 @@ async def get_accessible_databases(current_user: User = Depends(get_required_use
 
         return {"databases": accessible}
     except Exception as e:
-        logger.error(f"获取可访问知识库列表失败: {e}, {traceback.format_exc()}")
-        return {"message": f"获取可访问知识库列表失败: {str(e)}", "databases": []}
+        logger.error(f"获取可访问知识库列表失败：{e}, {traceback.format_exc()}")
+        return {"message": f"获取可访问知识库列表失败：{str(e)}", "databases": []}
 
 
 @knowledge.get("/databases/{db_id}")
@@ -219,7 +219,7 @@ async def update_database_info(
 ):
     """更新知识库信息"""
     logger.debug(
-        f"[update_database_info] 接收到的参数: name={name}, llm_info={llm_info}, "
+        f"[update_database_info] 接收到的参数：name={name}, llm_info={llm_info}, "
         f"additional_params={additional_params}, share_config={share_config}"
     )
     try:
@@ -247,7 +247,7 @@ async def update_database_info(
         return {"message": "更新成功", "database": database}
     except Exception as e:
         logger.error(f"更新数据库失败 {e}, {traceback.format_exc()}")
-        raise HTTPException(status_code=400, detail=f"更新数据库失败: {e}")
+        raise HTTPException(status_code=400, detail=f"更新数据库失败：{e}")
 
 
 @knowledge.delete("/databases/{db_id}")
@@ -265,7 +265,7 @@ async def delete_database(db_id: str, current_user: User = Depends(get_admin_use
         return {"message": "删除成功"}
     except Exception as e:
         logger.error(f"删除数据库失败 {e}, {traceback.format_exc()}")
-        raise HTTPException(status_code=400, detail=f"删除数据库失败: {e}")
+        raise HTTPException(status_code=400, detail=f"删除数据库失败：{e}")
 
 
 @knowledge.get("/databases/{db_id}/export")
@@ -291,7 +291,7 @@ async def export_database(
         raise HTTPException(status_code=501, detail=str(e))
     except Exception as e:
         logger.error(f"导出数据库失败 {e}, {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"导出数据库失败: {e}")
+        raise HTTPException(status_code=500, detail=f"导出数据库失败：{e}")
 
 
 # =============================================================================
@@ -435,7 +435,7 @@ async def add_documents(
                             {
                                 "item": item,
                                 "status": "failed",
-                                "error": f"入库失败: {str(index_error)}",
+                                "error": f"入库失败：{str(index_error)}",
                                 "error_type": "index_failed",
                             }
                         )
@@ -446,7 +446,7 @@ async def add_documents(
         except Exception as task_error:
             # 处理整体任务的其他异常（如内存不足、网络错误等）
             logger.exception(f"Task processing failed: {task_error}")
-            await context.set_progress(100.0, f"任务处理失败: {str(task_error)}")
+            await context.set_progress(100.0, f"任务处理失败：{str(task_error)}")
             # 注意：不需要手动标记未处理的文件为失败，因为：
             # 1. 内层异常处理已记录所有处理过的文件（成功/失败）
             # 2. 未处理的文件没有进入 processed_items，前端会正确显示
@@ -537,7 +537,7 @@ async def parse_documents(db_id: str, file_ids: list[str] = Body(...), current_u
         )
         return {"message": "解析任务已提交", "status": "queued", "task_id": task.id}
     except Exception as e:
-        return {"message": f"提交失败: {e}", "status": "failed"}
+        return {"message": f"提交失败：{e}", "status": "failed"}
 
 
 @knowledge.post("/databases/{db_id}/documents/index")
@@ -574,7 +574,7 @@ async def index_documents(
                         logger.error(f"Failed to update params for {file_id}: {e}")
                         param_update_failed.add(file_id)
                         processed_items.append(
-                            {"file_id": file_id, "status": "failed", "error": f"参数更新失败: {str(e)}"}
+                            {"file_id": file_id, "status": "failed", "error": f"参数更新失败：{str(e)}"}
                         )
 
             for idx, file_id in enumerate(file_ids, 1):
@@ -615,7 +615,7 @@ async def index_documents(
         )
         return {"message": "入库任务已提交", "status": "queued", "task_id": task.id}
     except Exception as e:
-        return {"message": f"提交失败: {e}", "status": "failed"}
+        return {"message": f"提交失败：{e}", "status": "failed"}
 
 
 @knowledge.get("/databases/{db_id}/documents/{doc_id}")
@@ -648,7 +648,7 @@ async def get_document_basic_info(db_id: str, doc_id: str, current_user: User = 
 
 @knowledge.get("/databases/{db_id}/documents/{doc_id}/content")
 async def get_document_content(db_id: str, doc_id: str, current_user: User = Depends(get_admin_user)):
-    """获取文档内容信息（chunks和lines）"""
+    """获取文档内容信息（chunks 和 lines）"""
     logger.debug(f"GET document {doc_id} content in {db_id}")
     await _ensure_database_not_dify(db_id, "文档查看")
 
@@ -691,27 +691,27 @@ async def batch_delete_documents(
                     bucket_name, object_name = parse_minio_url(file_path)
                     await minio_client.adelete_file(bucket_name, object_name)
                 await minio_client.adelete_file(minio_client.KB_BUCKETS["parsed"], f"{db_id}/parsed/{doc_id}.md")
-                logger.debug(f"成功从MinIO删除文件: {file_path}")
+                logger.debug(f"成功从 MinIO 删除文件：{file_path}")
             except Exception as minio_error:
-                logger.warning(f"从MinIO删除文件失败: {minio_error}")
+                logger.warning(f"从 MinIO 删除文件失败：{minio_error}")
 
-            # 无论MinIO删除是否成功，都继续从知识库删除
+            # 无论 MinIO 删除是否成功，都继续从知识库删除
             await knowledge_base.delete_file(db_id, doc_id)
             deleted_count += 1
         except Exception as e:
-            logger.error(f"批量删除过程中删除文档 {doc_id} 失败: {e}, {traceback.format_exc()}")
+            logger.error(f"批量删除过程中删除文档 {doc_id} 失败：{e}, {traceback.format_exc()}")
             failed_items.append({"doc_id": doc_id, "error": str(e)})
 
     if failed_items:
         if deleted_count == 0:
-            raise HTTPException(status_code=400, detail=f"批量删除失败: 所有 {len(failed_items)} 个文件均未删除。")
+            raise HTTPException(status_code=400, detail=f"批量删除失败：所有 {len(failed_items)} 个文件均未删除。")
         return {
-            "message": f"部分删除成功: 已删除 {deleted_count} 个文件，失败 {len(failed_items)} 个",
+            "message": f"部分删除成功：已删除 {deleted_count} 个文件，失败 {len(failed_items)} 个",
             "deleted_count": deleted_count,
             "failed_items": failed_items,
         }
 
-    return {"message": f"批量删除成功: 已删除 {deleted_count} 个文件", "deleted_count": deleted_count}
+    return {"message": f"批量删除成功：已删除 {deleted_count} 个文件", "deleted_count": deleted_count}
 
 
 @knowledge.delete("/databases/{db_id}/documents/{doc_id}")
@@ -737,21 +737,21 @@ async def delete_document(db_id: str, doc_id: str, current_user: User = Depends(
                 bucket_name, object_name = parse_minio_url(file_path)
                 await minio_client.adelete_file(bucket_name, object_name)
             await minio_client.adelete_file(minio_client.KB_BUCKETS["parsed"], f"{db_id}/parsed/{doc_id}.md")
-            logger.debug(f"成功从MinIO删除文件: {file_path}")
+            logger.debug(f"成功从 MinIO 删除文件：{file_path}")
         except Exception as minio_error:
-            logger.warning(f"从MinIO删除文件失败: {minio_error}")
+            logger.warning(f"从 MinIO 删除文件失败：{minio_error}")
 
-        # 无论MinIO删除是否成功，都继续从知识库删除
+        # 无论 MinIO 删除是否成功，都继续从知识库删除
         await knowledge_base.delete_file(db_id, doc_id)
         return {"message": "删除成功"}
     except Exception as e:
         logger.error(f"删除文档失败 {e}, {traceback.format_exc()}")
-        raise HTTPException(status_code=400, detail=f"删除文档失败: {e}")
+        raise HTTPException(status_code=400, detail=f"删除文档失败：{e}")
 
 
 @knowledge.get("/databases/{db_id}/documents/{doc_id}/download")
 async def download_document(db_id: str, doc_id: str, request: Request, current_user: User = Depends(get_admin_user)):
-    """下载原始文件 - 根据path类型选择本地或MinIO下载"""
+    """下载原始文件 - 根据 path 类型选择本地或 MinIO 下载"""
     logger.debug(f"Download document {doc_id} from {db_id}")
     await _ensure_database_not_dify(db_id, "文档下载")
     try:
@@ -769,7 +769,7 @@ async def download_document(db_id: str, doc_id: str, request: Request, current_u
         logger.debug(f"File path from database: {file_path}")
         logger.debug(f"Original filename from database: {filename}")
 
-        # 解码URL编码的文件名（如果有的话）
+        # 解码 URL 编码的文件名（如果有的话）
         try:
             decoded_filename = unquote(filename, encoding="utf-8")
             logger.debug(f"Decoded filename: {decoded_filename}")
@@ -780,15 +780,15 @@ async def download_document(db_id: str, doc_id: str, request: Request, current_u
         _, ext = os.path.splitext(decoded_filename)
         media_type = media_types.get(ext.lower(), "application/octet-stream")
 
-        # 根据path类型选择下载方式
+        # 根据 path 类型选择下载方式
         from yuxi.knowledge.utils.kb_utils import is_minio_url
 
         if is_minio_url(file_path):
-            # MinIO下载
+            # MinIO 下载
             logger.debug(f"Downloading from MinIO: {file_path}")
 
             try:
-                # 使用通用函数解析MinIO URL
+                # 使用通用函数解析 MinIO URL
                 from yuxi.knowledge.utils.kb_utils import parse_minio_url
 
                 bucket_name, object_name = parse_minio_url(file_path)
@@ -806,7 +806,7 @@ async def download_document(db_id: str, doc_id: str, request: Request, current_u
 
             except Exception as e:
                 logger.error(f"Failed to download MinIO file: {e}")
-                raise StorageError(f"下载文件失败: {e}")
+                raise StorageError(f"下载文件失败：{e}")
 
             # 创建流式生成器
             async def minio_stream():
@@ -820,19 +820,19 @@ async def download_document(db_id: str, doc_id: str, request: Request, current_u
                     minio_response.close()
                     minio_response.release_conn()
 
-            # 创建StreamingResponse
+            # 创建 StreamingResponse
             response = StreamingResponse(
                 minio_stream(),
                 media_type=media_type,
             )
-            # 正确处理中文文件名的HTTP头部设置
+            # 正确处理中文文件名的 HTTP 头部设置
             try:
-                # 尝试使用ASCII编码（适用于英文文件名）
+                # 尝试使用 ASCII 编码（适用于英文文件名）
                 decoded_filename.encode("ascii")
                 # 如果成功，直接使用简单格式
                 response.headers["Content-Disposition"] = f'attachment; filename="{decoded_filename}"'
             except UnicodeEncodeError:
-                # 如果包含非ASCII字符（如中文），使用RFC 2231格式
+                # 如果包含非 ASCII 字符（如中文），使用 RFC 2231 格式
                 encoded_filename = quote(decoded_filename.encode("utf-8"))
                 response.headers["Content-Disposition"] = f"attachment; filename*=UTF-8''{encoded_filename}"
 
@@ -843,7 +843,7 @@ async def download_document(db_id: str, doc_id: str, request: Request, current_u
             logger.debug(f"Downloading from local filesystem: {file_path}")
 
             if not os.path.exists(file_path):
-                raise StorageError(f"文件不存在: {file_path}")
+                raise StorageError(f"文件不存在：{file_path}")
 
             # 获取文件大小
             file_size = os.path.getsize(file_path)
@@ -857,20 +857,20 @@ async def download_document(db_id: str, doc_id: str, request: Request, current_u
                             break
                         yield chunk
 
-            # 创建StreamingResponse
+            # 创建 StreamingResponse
             response = StreamingResponse(
                 file_stream(),
                 media_type=media_type,
             )
-            # 正确处理中文文件名的HTTP头部设置
+            # 正确处理中文文件名的 HTTP 头部设置
             try:
-                # 尝试使用ASCII编码（适用于英文文件名）
+                # 尝试使用 ASCII 编码（适用于英文文件名）
                 decoded_filename.encode("ascii")
                 # 如果成功，直接使用简单格式
                 response.headers["Content-Disposition"] = f'attachment; filename="{decoded_filename}"'
                 response.headers["Content-Length"] = str(file_size)
             except UnicodeEncodeError:
-                # 如果包含非ASCII字符（如中文），使用RFC 2231格式
+                # 如果包含非 ASCII 字符（如中文），使用 RFC 2231 格式
                 encoded_filename = quote(decoded_filename.encode("utf-8"))
                 response.headers["Content-Disposition"] = f"attachment; filename*=UTF-8''{encoded_filename}"
                 response.headers["Content-Length"] = str(file_size)
@@ -880,8 +880,8 @@ async def download_document(db_id: str, doc_id: str, request: Request, current_u
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"下载文件失败: {e}, {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"下载失败: {e}")
+        logger.error(f"下载文件失败：{e}, {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"下载失败：{e}")
 
 
 # =============================================================================
@@ -900,7 +900,7 @@ async def query_knowledge_base(
         return {"result": result, "status": "success"}
     except Exception as e:
         logger.error(f"知识库查询失败 {e}, {traceback.format_exc()}")
-        return {"message": f"知识库查询失败: {e}", "status": "failed"}
+        return {"message": f"知识库查询失败：{e}", "status": "failed"}
 
 
 @knowledge.post("/databases/{db_id}/query-test")
@@ -914,7 +914,7 @@ async def query_test(
         return result
     except Exception as e:
         logger.error(f"测试查询失败 {e}, {traceback.format_exc()}")
-        return {"message": f"测试查询失败: {e}", "status": "failed"}
+        return {"message": f"测试查询失败：{e}", "status": "failed"}
 
 
 @knowledge.put("/databases/{db_id}/query-params")
@@ -942,13 +942,13 @@ async def update_knowledge_base_query_params(
             options.update(params)
             await kb_instance._save_metadata()
 
-            logger.info(f"更新知识库 {db_id} 查询参数: {params}")
+            logger.info(f"更新知识库 {db_id} 查询参数：{params}")
 
         return {"message": "success", "data": params}
 
     except Exception as e:
-        logger.error(f"更新知识库查询参数失败: {e}")
-        raise HTTPException(status_code=500, detail=f"更新查询参数失败: {str(e)}")
+        logger.error(f"更新知识库查询参数失败：{e}")
+        raise HTTPException(status_code=500, detail=f"更新查询参数失败：{str(e)}")
 
 
 @knowledge.get("/databases/{db_id}/query-params")
@@ -986,7 +986,7 @@ def _merge_saved_options(params: dict, saved_options: dict) -> dict:
 
 
 # =============================================================================
-# === AI生成示例问题 ===
+# === AI 生成示例问题 ===
 # =============================================================================
 
 
@@ -999,16 +999,16 @@ SAMPLE_QUESTIONS_SYSTEM_PROMPT = """你是一个专业的知识库问答测试�
 2. 问题要涵盖不同方面和难度
 3. 问题要简洁明了，适合用于检索测试
 4. 问题要多样化，包括事实查询、概念解释、操作指导等
-5. 问题长度控制在10-30字之间
-6. 直接返回JSON数组格式，不要其他说明
+5. 问题长度控制在 10-30 字之间
+6. 直接返回 JSON 数组格式，不要其他说明
 
 返回格式：
 ```json
 {
   "questions": [
-    "问题1？",
-    "问题2？",
-    "问题3？"
+    "问题 1？",
+    "问题 2？",
+    "问题 3？"
   ]
 }
 ```
@@ -1022,10 +1022,10 @@ async def generate_sample_questions(
     current_user: User = Depends(get_admin_user),
 ):
     """
-    AI生成针对知识库的测试问题
+    AI 生成针对知识库的测试问题
 
     Args:
-        db_id: 知识库ID
+        db_id: 知识库 ID
         request_body: 请求体，包含 count 字段
 
     Returns:
@@ -1059,14 +1059,14 @@ async def generate_sample_questions(
                 }
             )
 
-        # 构建AI提示词
+        # 构建 AI 提示词
         system_prompt = SAMPLE_QUESTIONS_SYSTEM_PROMPT
 
         # 构建用户消息
         files_text = "\n".join(
             [
                 f"- {f['filename']} ({f['type']})"
-                for f in files_info[:20]  # 最多列举20个文件
+                for f in files_info[:20]  # 最多列举 20 个文件
             ]
         )
 
@@ -1079,20 +1079,20 @@ async def generate_sample_questions(
 
             请根据这些文件的名称和类型，生成{count}个有价值的测试问题。""")
 
-        # 调用AI生成
-        logger.info(f"开始生成知识库问题，知识库: {db_name}, 文件数量: {len(files_info)}, 问题数量: {count}")
+        # 调用 AI 生成
+        logger.info(f"开始生成知识库问题，知识库：{db_name}, 文件数量：{len(files_info)}, 问题数量：{count}")
 
         # 选择模型并调用
         model = select_model()
         messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_message}]
         response = await model.call(messages, stream=False)
 
-        # 解析AI返回的JSON
+        # 解析 AI 返回的 JSON
         try:
-            # 提取JSON内容
+            # 提取 JSON 内容
             content = response.content if hasattr(response, "content") else str(response)
 
-            # 尝试从markdown代码块中提取JSON
+            # 尝试从 markdown 代码块中提取 JSON
             if "```json" in content:
                 json_start = content.find("```json") + 7
                 json_end = content.find("```", json_start)
@@ -1106,7 +1106,7 @@ async def generate_sample_questions(
             questions = questions_data.get("questions", [])
 
             if not questions or not isinstance(questions, list):
-                raise ValueError("AI返回的问题格式不正确")
+                raise ValueError("AI 返回的问题格式不正确")
 
             logger.info(f"成功生成{len(questions)}个问题")
 
@@ -1117,7 +1117,7 @@ async def generate_sample_questions(
                 await KnowledgeBaseRepository().update(db_id, {"sample_questions": questions})
                 logger.info(f"成功保存 {len(questions)} 个问题到知识库 {db_id}")
             except Exception as save_error:
-                logger.error(f"保存问题失败: {save_error}")
+                logger.error(f"保存问题失败：{save_error}")
 
             return {
                 "message": "success",
@@ -1128,14 +1128,14 @@ async def generate_sample_questions(
             }
 
         except json.JSONDecodeError as e:
-            logger.error(f"AI返回的JSON解析失败: {e}, 原始内容: {content}")
-            raise HTTPException(status_code=500, detail=f"AI返回格式错误: {str(e)}")
+            logger.error(f"AI 返回的 JSON 解析失败：{e}, 原始内容：{content}")
+            raise HTTPException(status_code=500, detail=f"AI 返回格式错误：{str(e)}")
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"生成知识库问题失败: {e}, {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"生成问题失败: {str(e)}")
+        logger.error(f"生成知识库问题失败：{e}, {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"生成问题失败：{str(e)}")
 
 
 @knowledge.get("/databases/{db_id}/sample-questions")
@@ -1144,7 +1144,7 @@ async def get_sample_questions(db_id: str, current_user: User = Depends(get_admi
     获取知识库的测试问题
 
     Args:
-        db_id: 知识库ID
+        db_id: 知识库 ID
 
     Returns:
         问题列表
@@ -1170,8 +1170,8 @@ async def get_sample_questions(db_id: str, current_user: User = Depends(get_admi
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"获取知识库问题失败: {e}, {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"获取问题失败: {str(e)}")
+        logger.error(f"获取知识库问题失败：{e}, {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"获取问题失败：{str(e)}")
 
 
 # =============================================================================
@@ -1214,6 +1214,216 @@ async def move_document(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# =============================================================================
+# === 认证配置管理分组 ===
+# =============================================================================
+
+
+@knowledge.post("/auth-configs")
+async def create_auth_config(
+    domain_pattern: str = Body(..., embed=True, description="域名 pattern，支持通配符 *.example.com"),
+    auth_type: str = Body(..., embed=True, description="认证类型：none, basic, bearer, cookie, cookie_login, custom"),
+    credentials: dict = Body(..., embed=True, description="认证凭据"),
+    request_modifiers: dict | None = Body(None, embed=True, description="请求修饰配置"),
+    description: str | None = Body(None, embed=True, description="认证配置描述"),
+    current_user: User = Depends(get_admin_user),
+):
+    """
+    创建认证配置
+
+    credentials 结构根据 auth_type 不同:
+
+    basic: {"username": "...", "password": "..."}
+    bearer: {"token": "..."}
+    cookie: {"session_id": "...", "employee_id": "..."}
+    cookie_login: {
+        "login_url": "...",
+        "username": "...",
+        "password": "...",
+        "employee_id": "..."
+    }
+    custom: 任意 key-value 对，通过 request_modifiers 注入请求
+    """
+    try:
+        from yuxi.repositories.auth_config_repository import AuthConfigRepository
+
+        repo = AuthConfigRepository()
+
+        # 检查域名是否已存在
+        existing = await repo.get_by_domain(domain_pattern)
+        if existing and existing.domain_pattern == domain_pattern:
+            raise HTTPException(
+                status_code=409,
+                detail=f"域名 '{domain_pattern}' 的认证配置已存在",
+            )
+
+        data = {
+            "domain_pattern": domain_pattern,
+            "auth_type": auth_type,
+            "credentials": credentials,
+            "request_modifiers": request_modifiers,
+            "description": description,
+            "created_by": current_user.user_id,
+        }
+
+        config = await repo.create(data)
+
+        return {
+            "message": "认证配置创建成功",
+            "config": {
+                "id": config.id,
+                "domain_pattern": config.domain_pattern,
+                "auth_type": config.auth_type,
+                "description": config.description,
+                "credentials_masked": repo.get_credentials_masked(config),
+                "created_at": config.created_at.isoformat() if config.created_at else None,
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"创建认证配置失败：{e}, {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"创建认证配置失败：{str(e)}")
+
+
+@knowledge.get("/auth-configs")
+async def list_auth_configs(current_user: User = Depends(get_admin_user)):
+    """获取认证配置列表"""
+    try:
+        from yuxi.repositories.auth_config_repository import AuthConfigRepository
+
+        repo = AuthConfigRepository()
+        configs = await repo.get_all()
+
+        return {
+            "message": "success",
+            "configs": [
+                {
+                    "id": config.id,
+                    "domain_pattern": config.domain_pattern,
+                    "auth_type": config.auth_type,
+                    "description": config.description,
+                    "credentials_masked": repo.get_credentials_masked(config),
+                    "created_at": config.created_at.isoformat() if config.created_at else None,
+                    "updated_at": config.updated_at.isoformat() if config.updated_at else None,
+                }
+                for config in configs
+            ],
+        }
+    except Exception as e:
+        logger.error(f"获取认证配置列表失败：{e}, {traceback.format_exc()}")
+        return {"message": f"获取认证配置列表失败：{str(e)}", "configs": []}
+
+
+@knowledge.get("/auth-configs/{config_id}")
+async def get_auth_config(config_id: int, current_user: User = Depends(get_admin_user)):
+    """获取认证配置详情"""
+    try:
+        from yuxi.repositories.auth_config_repository import AuthConfigRepository
+
+        repo = AuthConfigRepository()
+        config = await repo.get_by_id(config_id)
+
+        if not config:
+            raise HTTPException(status_code=404, detail=f"认证配置 {config_id} 不存在")
+
+        return {
+            "message": "success",
+            "config": {
+                "id": config.id,
+                "domain_pattern": config.domain_pattern,
+                "auth_type": config.auth_type,
+                "description": config.description,
+                "credentials_masked": repo.get_credentials_masked(config),
+                "request_modifiers": config.request_modifiers,
+                "created_at": config.created_at.isoformat() if config.created_at else None,
+                "updated_at": config.updated_at.isoformat() if config.updated_at else None,
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取认证配置详情失败：{e}, {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"获取认证配置详情失败：{str(e)}")
+
+
+@knowledge.put("/auth-configs/{config_id}")
+async def update_auth_config(
+    config_id: int,
+    domain_pattern: str | None = Body(None, embed=True),
+    auth_type: str | None = Body(None, embed=True),
+    credentials: dict | None = Body(None, embed=True),
+    request_modifiers: dict | None = Body(None, embed=True),
+    description: str | None = Body(None, embed=True),
+    current_user: User = Depends(get_admin_user),
+):
+    """更新认证配置"""
+    try:
+        from yuxi.repositories.auth_config_repository import AuthConfigRepository
+
+        repo = AuthConfigRepository()
+
+        config = await repo.get_by_id(config_id)
+        if not config:
+            raise HTTPException(status_code=404, detail=f"认证配置 {config_id} 不存在")
+
+        data = {}
+        if domain_pattern is not None:
+            data["domain_pattern"] = domain_pattern
+        if auth_type is not None:
+            data["auth_type"] = auth_type
+        if credentials is not None:
+            data["credentials"] = credentials
+        if request_modifiers is not None:
+            data["request_modifiers"] = request_modifiers
+        if description is not None:
+            data["description"] = description
+
+        updated_config = await repo.update(config_id, data)
+
+        return {
+            "message": "认证配置更新成功",
+            "config": {
+                "id": updated_config.id,
+                "domain_pattern": updated_config.domain_pattern,
+                "auth_type": updated_config.auth_type,
+                "description": updated_config.description,
+                "credentials_masked": repo.get_credentials_masked(updated_config),
+                "updated_at": updated_config.updated_at.isoformat() if updated_config.updated_at else None,
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"更新认证配置失败：{e}, {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"更新认证配置失败：{str(e)}")
+
+
+@knowledge.delete("/auth-configs/{config_id}")
+async def delete_auth_config(config_id: int, current_user: User = Depends(get_admin_user)):
+    """删除认证配置"""
+    try:
+        from yuxi.repositories.auth_config_repository import AuthConfigRepository
+
+        repo = AuthConfigRepository()
+        success = await repo.delete(config_id)
+
+        if not success:
+            raise HTTPException(status_code=404, detail=f"认证配置 {config_id} 不存在")
+
+        return {"message": "认证配置删除成功"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"删除认证配置失败：{e}, {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"删除认证配置失败：{str(e)}")
+
+
+# =============================================================================
+# === fetch-url 改造 - 支持认证 ===
+# =============================================================================
+
+
 @knowledge.post("/files/fetch-url")
 async def fetch_url(
     url: str = Body(..., embed=True),
@@ -1222,17 +1432,52 @@ async def fetch_url(
 ):
     """
     抓取 URL 内容并上传到 MinIO
+
+    支持内网系统认证配置，自动根据域名匹配认证方式。
     """
     logger.debug(f"Fetching URL: {url} for db_id: {db_id}")
     try:
-        from yuxi.knowledge.utils.url_fetcher import fetch_url_content
         from yuxi.storage.minio import get_minio_client
         from yuxi.knowledge.utils import calculate_content_hash
+        from yuxi.plugins.auth import AuthFetcherRegistry, AuthConfig
+        from yuxi.repositories.auth_config_repository import AuthConfigRepository
+        from yuxi.plugins.auth.base import RequestModifiers
+        from urllib.parse import urlparse
 
-        # 1. 下载内容 (包含白名单校验、大小限制、类型检查)
-        content_bytes, final_url = await fetch_url_content(url)
+        # 1. 获取域名并查找匹配的认证配置
+        parsed_url = urlparse(url)
+        domain = parsed_url.hostname or ""
 
-        # 2. 计算 Hash
+        auth_config: AuthConfig | None = None
+        if domain:
+            repo = AuthConfigRepository()
+            db_config = await repo.get_by_domain(domain)
+            if db_config:
+                # 将数据库配置转换为 AuthConfig
+                credentials = repo.get_credentials(db_config)
+                request_modifiers = None
+                if db_config.request_modifiers:
+                    request_modifiers = RequestModifiers(**db_config.request_modifiers)
+
+                auth_config = AuthConfig(
+                    domain_pattern=db_config.domain_pattern,
+                    auth_type=db_config.auth_type,
+                    credentials=credentials,
+                    request_modifiers=request_modifiers,
+                    description=db_config.description,
+                )
+                logger.info(f"Using auth config for domain {domain}: {db_config.auth_type}")
+
+        # 2. 使用认证器获取内容
+        if auth_config:
+            fetcher = AuthFetcherRegistry.create(auth_config)
+            content_bytes, final_url = await fetcher.fetch(url)
+        else:
+            # 无认证配置，使用原有的 fetch_url_content
+            from yuxi.knowledge.utils.url_fetcher import fetch_url_content
+            content_bytes, final_url = await fetch_url_content(url)
+
+        # 3. 计算 Hash
         content_hash = await calculate_content_hash(content_bytes)
 
         # 检查是否已存在相同内容的文件
@@ -1244,7 +1489,7 @@ async def fetch_url(
                     detail="数据库中已经存在了相同内容文件",
                 )
 
-        # 3. 上传到 MinIO
+        # 4. 上传到 MinIO
         minio_client = get_minio_client()
         bucket_name = MinIOClient.KB_BUCKETS["documents"]
         await asyncio.to_thread(minio_client.ensure_bucket_exists, bucket_name)
@@ -1259,7 +1504,7 @@ async def fetch_url(
             content_type="text/html",
         )
 
-        # 检测同名文件（URL即为文件名）
+        # 检测同名文件（URL 即为文件名）
         same_name_files = []
         has_same_name = False
         if db_id:
@@ -1276,6 +1521,7 @@ async def fetch_url(
             "size": len(content_bytes),
             "has_same_name": has_same_name,
             "same_name_files": same_name_files,
+            "auth_used": auth_config.auth_type if auth_config else "none",
         }
 
     except HTTPException:
@@ -1324,7 +1570,7 @@ async def upload_file(
             detail="数据库中已经存在了相同内容文件，File with the same content already exists in this database",
         )
 
-    # 直接上传到MinIO，添加时间戳区分版本
+    # 直接上传到 MinIO，添加时间戳区分版本
     import time
 
     timestamp = int(time.time() * 1000)
@@ -1334,7 +1580,7 @@ async def upload_file(
     folder = db_id if db_id else "unknown"
     object_name = f"{folder}/upload/{minio_filename}"
 
-    # 上传到MinIO
+    # 上传到 MinIO
     minio_url = await aupload_file_to_minio(bucket_name, object_name, file_bytes)
 
     # 检测同名文件（基于原始文件名）
@@ -1343,15 +1589,15 @@ async def upload_file(
 
     return {
         "message": "File successfully uploaded",
-        "file_path": minio_url,  # MinIO路径作为主要路径
-        "minio_path": minio_url,  # MinIO路径
+        "file_path": minio_url,  # MinIO 路径作为主要路径
+        "minio_path": minio_url,  # MinIO 路径
         "db_id": db_id,
         "content_hash": content_hash,
         "filename": filename,  # 原始文件名（小写）
         "original_filename": basename,  # 原始文件名（去掉后缀）
-        "minio_filename": minio_filename,  # MinIO中的文件名（带时间戳）
+        "minio_filename": minio_filename,  # MinIO 中的文件名（带时间戳）
         "object_name": object_name,
-        "bucket_name": bucket_name,  # MinIO存储桶名称
+        "bucket_name": bucket_name,  # MinIO 存储桶名称
         "same_name_files": same_name_files,  # 同名文件列表
         "has_same_name": has_same_name,  # 是否包含同名文件标志
     }
@@ -1369,7 +1615,7 @@ async def mark_it_down(file: UploadFile = File(...), current_user: User = Depend
     import tempfile
 
     if not file.filename:
-        return {"message": "文件解析失败: 无法识别文件名", "markdown_content": ""}
+        return {"message": "文件解析失败：无法识别文件名", "markdown_content": ""}
 
     suffix = os.path.splitext(file.filename)[1].lower()
     temp_path = None
@@ -1424,35 +1670,35 @@ async def get_knowledge_base_statistics(current_user: User = Depends(get_admin_u
 
 
 # =============================================================================
-# === Embedding模型状态检查分组 ===
+# === Embedding 模型状态检查分组 ===
 # =============================================================================
 
 
 @knowledge.get("/embedding-models/{model_id}/status")
 async def get_embedding_model_status(model_id: str, current_user: User = Depends(get_admin_user)):
-    """获取指定embedding模型的状态"""
+    """获取指定 embedding 模型的状态"""
     logger.debug(f"Checking embedding model status: {model_id}")
     try:
         status = await test_embedding_model_status(model_id)
         return {"status": status, "message": "success"}
     except Exception as e:
-        logger.error(f"获取embedding模型状态失败 {model_id}: {e}, {traceback.format_exc()}")
+        logger.error(f"获取 embedding 模型状态失败 {model_id}: {e}, {traceback.format_exc()}")
         return {
-            "message": f"获取embedding模型状态失败: {e}",
+            "message": f"获取 embedding 模型状态失败：{e}",
             "status": {"model_id": model_id, "status": "error", "message": str(e)},
         }
 
 
 @knowledge.get("/embedding-models/status")
 async def get_all_embedding_models_status(current_user: User = Depends(get_admin_user)):
-    """获取所有embedding模型的状态"""
+    """获取所有 embedding 模型的状态"""
     logger.debug("Checking all embedding models status")
     try:
         status = await test_all_embedding_models_status()
         return {"status": status, "message": "success"}
     except Exception as e:
-        logger.error(f"获取所有embedding模型状态失败: {e}, {traceback.format_exc()}")
-        return {"message": f"获取所有embedding模型状态失败: {e}", "status": {"models": {}, "total": 0, "available": 0}}
+        logger.error(f"获取所有 embedding 模型状态失败：{e}, {traceback.format_exc()}")
+        return {"message": f"获取所有 embedding 模型状态失败：{e}", "status": {"models": {}, "total": 0, "available": 0}}
 
 
 # =============================================================================
@@ -1489,8 +1735,8 @@ async def generate_description(
     prompt = textwrap.dedent(f"""
         请帮我优化以下知识库的描述。
 
-        知识库名称: {name}
-        当前描述: {current_description}
+        知识库名称：{name}
+        当前描述：{current_description}
 
         要求:
         1. 这个描述将作为智能体工具的描述使用
@@ -1510,5 +1756,5 @@ async def generate_description(
         logger.debug(f"Generated description: {description}")
         return {"description": description, "status": "success"}
     except Exception as e:
-        logger.error(f"生成描述失败: {e}, {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"生成描述失败: {e}")
+        logger.error(f"生成描述失败：{e}, {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"生成描述失败：{e}")

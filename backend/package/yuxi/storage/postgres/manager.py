@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.orm import declarative_base
 from yuxi.storage.postgres.models_business import Base as BusinessBase
 from yuxi.storage.postgres.models_knowledge import Base as KnowledgeBase
+from yuxi.storage.postgres.models_auth import AuthConfigModel
 from yuxi.utils import logger
 
 from server.utils.singleton import SingletonMeta
@@ -99,7 +100,8 @@ class PostgresManager(metaclass=SingletonMeta):
         async with self.async_engine.begin() as conn:
             await conn.run_sync(KnowledgeBase.metadata.create_all)
             await conn.run_sync(BusinessBase.metadata.create_all)
-        logger.info("PostgreSQL tables created/checked (knowledge + business)")
+            await conn.run_sync(AuthConfigModel.metadata.create_all)
+        logger.info("PostgreSQL tables created/checked (knowledge + business + auth)")
 
     async def create_business_tables(self):
         """创建所有业务数据表"""
