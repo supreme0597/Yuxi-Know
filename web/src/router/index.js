@@ -115,6 +115,20 @@ const router = createRouter({
       ]
     },
     {
+      path: '/project-kanban',
+      name: 'ProjectKanban',
+      component: BlankLayout,
+      meta: { public: true },
+      children: [
+        {
+          path: '',
+          name: 'ProjectKanbanMain',
+          component: () => import('../views/ProjectKanbanView.vue'),
+          meta: { keepAlive: true, requiresAuth: false, public: true }
+        }
+      ]
+    },
+    {
       path: '/skills',
       name: 'skills',
       redirect: '/extensions'

@@ -1,4 +1,6 @@
 .yuxi/
+web/project-manager
+.workbuddy
 
 *.egg-info
 
