@@ -49,7 +49,17 @@ import { Tooltip } from 'ant-design-vue'
 import AIButton from '../common/AIButton.vue'
 import StatusBadge from '../common/StatusBadge.vue'
 import SubProjectCard from './SubProjectCard.vue'
-import { groupMeta, getSubProjects } from '../data/groupData'
+import { projectData } from '../data/projectData'
+import { groupData } from '../data/groupData'
+
+/** 获取某个项目群的子项目详情 */
+function getSubProjects(groupKey) {
+  const meta = groupData[groupKey]
+  if (!meta?.offerings) return []
+  return meta.offerings
+    .map(id => projectData[id] ? { id, ...projectData[id] } : null)
+    .filter(Boolean)
+}
 
 const props = defineProps({
   groupKey: { type: String, required: true }
@@ -69,7 +79,7 @@ const Building2 = {
   }
 }
 
-const meta = computed(() => groupMeta[props.groupKey] || {})
+const meta = computed(() => groupData[props.groupKey] || {})
 
 const subProjects = computed(() => getSubProjects(props.groupKey))
 
@@ -77,7 +87,7 @@ const statusText = computed(() => {
   const s = meta.value.status
   if (s === 'normal') return '正常'
   if (s === 'warning') return '关注'
-  if (s === 'critical') return '异常'
+  if (s === 'critical') return '紧急'
   return s
 })
 </script>

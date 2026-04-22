@@ -50,7 +50,24 @@
 <script setup>
 import { computed } from 'vue'
 import StatusBadge from '../common/StatusBadge.vue'
-import { getRiskDimensions } from '../data/groupData'
+import { projectData } from '../data/projectData'
+import { groupData } from '../data/groupData'
+
+/** 获取某个项目群的风险维度摘要（5维：可信/范围/进度/质量/资源） */
+function getRiskDimensions(project) {
+  const dims = []
+  const trustScore = project.trustDetails?.overallScore ?? 0
+  dims.push({ key: 'trust', label: '可信', status: trustScore >= 80 ? 'normal' : trustScore >= 60 ? 'warning' : 'danger' })
+  const scopeStatus = project.scope?.status || 'green'
+  dims.push({ key: 'scope', label: '范围', status: scopeStatus === 'green' ? 'normal' : scopeStatus === 'yellow' ? 'warning' : 'danger' })
+  const scheduleStatus = project.schedule?.status || 'green'
+  dims.push({ key: 'schedule', label: '进度', status: scheduleStatus === 'green' ? 'normal' : scheduleStatus === 'yellow' ? 'warning' : 'danger' })
+  const qualityStatus = project.quality?.status || 'green'
+  dims.push({ key: 'quality', label: '质量', status: qualityStatus === 'green' ? 'normal' : qualityStatus === 'yellow' ? 'warning' : 'danger' })
+  const resourceStatus = project.resource?.status || 'green'
+  dims.push({ key: 'resource', label: '资源', status: resourceStatus === 'green' ? 'normal' : resourceStatus === 'yellow' ? 'warning' : 'danger' })
+  return dims
+}
 
 const props = defineProps({
   project: { type: Object, required: true }
@@ -63,11 +80,20 @@ const dimensions = computed(() => getRiskDimensions(props.project))
 const phases = computed(() => props.project.milestone?.phases || [])
 
 const milestoneStatus = computed(() => {
-  const s = props.project.milestone?.statusColor || props.project.milestone?.status || 'green'
-  return s
+  const color = props.project.milestone?.statusColor
+  if (color) return color
+  const text = props.project.milestone?.status
+  const map = { '正常': 'green', '关注': 'yellow', '关键风险': 'red' }
+  return map[text] || 'green'
 })
 
-const milestoneText = computed(() => props.project.milestone?.status || '')
+const milestoneText = computed(() => {
+  const text = props.project.milestone?.status
+  if (text) return text
+  const color = props.project.milestone?.statusColor
+  const map = { green: '正常', yellow: '关注', red: '关键风险' }
+  return map[color] || '正常'
+})
 </script>
 
 <style scoped>
@@ -206,8 +232,8 @@ const milestoneText = computed(() => props.project.milestone?.status || '')
   background: #10b981;
 }
 .pk-sub__phase--active .pk-sub__phase-dot {
-  background: #3b82f6;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+  background: #059669;
+  box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.25);
 }
 .pk-sub__phase--pending .pk-sub__phase-dot {
   background: var(--gray-300);

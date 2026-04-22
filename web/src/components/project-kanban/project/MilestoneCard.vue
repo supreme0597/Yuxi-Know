@@ -2,8 +2,8 @@
   <DataCard
     title="里程碑进度"
     :icon="CalendarIcon"
-    icon-color="#3b82f6"
-    :status-text="data?.status || ''"
+    icon-color="#059669"
+    :status-text="statusText"
     :status-color="data?.statusColor || 'info'"
     wide
     @ai-click="$emit('ai-click', 'milestone')"
@@ -40,7 +40,9 @@
     <!-- AI总结 -->
     <div v-if="data?.aiSummary" class="pk-card__ai-summary" @click.stop="$emit('ai-click', 'milestone')">
       <span class="pk-card__ai-spark">✨</span>
-      <span>{{ data.aiSummary }}</span>
+      <Tooltip :title="data.aiSummary" placement="topLeft" :mouseEnterDelay="0.3">
+        <span class="pk-card__ai-text">{{ data.aiSummary }}</span>
+      </Tooltip>
     </div>
 
     <!-- TOP3风险 -->
@@ -50,6 +52,7 @@
 
 <script setup>
 import { computed, h } from 'vue'
+import { Tooltip } from 'ant-design-vue'
 import DataCard from '../common/DataCard.vue'
 import StatGrid from '../common/StatGrid.vue'
 import RiskList from '../common/RiskList.vue'
@@ -69,6 +72,9 @@ const props = defineProps({
 
 defineEmits(['ai-click', 'risk-click'])
 
+const statusMap = { green: '正常', normal: '正常', yellow: '关注', warning: '关注', orange: '警告', red: '关键风险', critical: '关键风险' }
+const statusText = computed(() => statusMap[props.data?.statusColor] || '正常')
+
 const statItems = computed(() => {
   const phases = props.data?.phases || []
   return [
@@ -82,7 +88,7 @@ const statItems = computed(() => {
 function phaseColor(status) {
   const map = {
     completed: '#10b981',
-    active: '#3b82f6',
+    active: '#059669',
     pending: '#e5e7eb'
   }
   return map[status] || '#e5e7eb'
@@ -159,5 +165,12 @@ function phaseColor(status) {
 .pk-card__ai-spark {
   flex-shrink: 0;
   font-size: 12px;
+}
+.pk-card__ai-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 </style>

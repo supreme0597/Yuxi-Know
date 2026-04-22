@@ -35,19 +35,20 @@ const props = defineProps({
   percentage: { type: Number, default: 0 },
   size: { type: Number, default: 56 },
   strokeWidth: { type: Number, default: 4 },
-  color: { type: String, default: '' }
+  color: { type: String, default: '' },
+  label: { type: String, default: '' }
 })
 
 const radius = computed(() => (props.size - props.strokeWidth * 2) / 2)
 const circumference = computed(() => 2 * Math.PI * radius.value)
 const offset = computed(() => circumference.value - (props.percentage / 100) * circumference.value)
-const displayValue = computed(() => `${props.percentage}%`)
+const displayValue = computed(() => props.label || `${props.percentage}%`)
 
 const ringColor = computed(() => {
   if (props.color) return props.color
-  if (props.percentage >= 80) return '#10b981'
-  if (props.percentage >= 50) return '#f59e0b'
-  return '#ef4444'
+  if (props.percentage >= 80) return '#059669'
+  if (props.percentage >= 50) return '#d97706'
+  return '#dc2626'
 })
 </script>
 

@@ -27,7 +27,7 @@ defineProps({
   display: flex;
   align-items: center;
   gap: 0;
-  padding: 8px 0;
+  padding: 4px 0;
 }
 .pk-stat-item {
   flex: 1;
@@ -37,7 +37,7 @@ defineProps({
   gap: 2px;
 }
 .pk-stat-item__value {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--gray-800);
 }

@@ -128,11 +128,41 @@
         />
       </div>
 
-      <!-- 部门级 占位 -->
-      <div v-else class="pk-kanban__placeholder">
-        <div class="pk-kanban__placeholder-icon">🚧</div>
-        <p class="pk-kanban__placeholder-text">{{ activeTabLabel }}视图开发中</p>
-        <p class="pk-kanban__placeholder-desc">敬请期待</p>
+      <!-- 部门级视图内容 -->
+      <div v-else class="pk-kanban__body">
+        <!-- 上方四卡片 -->
+        <div class="pk-kanban__dept-grid">
+          <DeptMilestoneCard
+            :data="deptData.department.milestone"
+            @ai-click="handleDeptAIClick"
+            @risk-click="handleDeptMilestoneItemClick"
+          />
+          <DeptAHBCard
+            :data="deptData.department.ahb"
+            @ai-click="handleDeptAIClick"
+            @category-click="handleDeptAHBCategoryClick"
+          />
+          <DeptBudgetCard
+            :data="deptData.department.budget"
+            @ai-click="handleDeptAIClick"
+            @project-click="handleDeptBudgetProjectClick"
+          />
+          <DeptTaskCard
+            :data="deptData.department.task"
+            @ai-click="handleDeptAIClick"
+            @task-click="handleDeptTaskClick"
+          />
+        </div>
+
+        <!-- 下方全宽综合风险卡片 -->
+        <DeptGroupsOverviewCard
+          :data="deptData.department.groupsOverview"
+          @ai-click="handleDeptAIClick"
+          @dim-click="handleDeptDimClick"
+          @group-click="handleDeptGroupClick"
+          @risk-click="handleDeptRiskClick"
+          @question-click="handleDeptQuestionClick"
+        />
       </div>
     </div>
 
@@ -148,8 +178,8 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import { projectData, projectList } from '@/components/project-kanban/data/projectData'
-import { groupSummary, groupMeta, groupKeys } from '@/components/project-kanban/data/groupData'
+import { projectData } from '@/components/project-kanban/data/projectData'
+import { groupData } from '@/components/project-kanban/data/groupData'
 import { useAISidepanel } from '@/components/project-kanban/composables/useAISidepanel'
 import ProjectSelector from '@/components/project-kanban/project/ProjectSelector.vue'
 import MilestoneCard from '@/components/project-kanban/project/MilestoneCard.vue'
@@ -162,6 +192,12 @@ import WorkflowDomainsCard from '@/components/project-kanban/project/WorkflowDom
 import AISummaryBar from '@/components/project-kanban/project/AISummaryBar.vue'
 import GroupCard from '@/components/project-kanban/group/GroupCard.vue'
 import AISidepanel from '@/components/project-kanban/common/AISidepanel.vue'
+import { deptData } from '@/components/project-kanban/data/deptData'
+import DeptMilestoneCard from '@/components/project-kanban/dept/DeptMilestoneCard.vue'
+import DeptAHBCard from '@/components/project-kanban/dept/DeptAHBCard.vue'
+import DeptBudgetCard from '@/components/project-kanban/dept/DeptBudgetCard.vue'
+import DeptTaskCard from '@/components/project-kanban/dept/DeptTaskCard.vue'
+import DeptGroupsOverviewCard from '@/components/project-kanban/dept/DeptGroupsOverviewCard.vue'
 
 const tabs = [
   { key: 'dept', label: '部门级' },
@@ -170,8 +206,20 @@ const tabs = [
 ]
 
 const activeTab = ref('project')
-const currentProjectId = ref(projectList[0]?.id || '')
 const sidepanel = useAISidepanel()
+
+// 派生数据
+const projectList = computed(() => Object.keys(projectData).map(key => ({
+  id: key,
+  name: projectData[key].name,
+  group: projectData[key].group,
+  progress: projectData[key].progress
+})))
+
+const groupKeys = computed(() => Object.keys(groupData).filter(k => k !== 'summary'))
+const groupSummaryData = computed(() => groupData.summary || {})
+
+const currentProjectId = ref(projectList.value[0]?.id || '')
 
 const currentProject = computed(() => projectData[currentProjectId.value] || null)
 
@@ -212,20 +260,27 @@ const allQuestions = computed(() => {
 })
 
 const criticalCount = computed(() => {
+  if (activeTab.value === 'dept') {
+    const go = deptData.department.groupsOverview
+    return (go?.projectRisk?.criticalCount ?? 0) + (go?.downstream?.monthlyNew ?? 0)
+  }
   if (activeTab.value === 'group') {
-    return groupSummary.risks.filter(r => r.level === 'critical' || r.level === 'danger').length
+    return groupData.summary.risks.filter(r => r.level === 'critical' || r.level === 'danger').length
   }
   return allRisks.value.filter(r => r.level === 'critical' || r.level === 'danger').length
 })
 const warningCount = computed(() => {
+  if (activeTab.value === 'dept') {
+    const go = deptData.department.groupsOverview
+    return (go?.projectRisk?.warningCount ?? 0) + (go?.trustSummary?.warningCount ?? 0)
+  }
   if (activeTab.value === 'group') {
-    return groupSummary.risks.filter(r => r.level === 'warning').length
+    return groupData.summary.risks.filter(r => r.level === 'warning').length
   }
   return allRisks.value.filter(r => r.level === 'warning').length
 })
 
 // 项目群级 computed
-const groupSummaryData = computed(() => groupSummary)
 
 function handleAIClick(section) {
   sidepanel.open(section, currentProject.value)
@@ -294,7 +349,7 @@ function handleGroupRiskClick(risk) {
   const source = risk.source
   const project = source ? projectData[source] : null
   if (project) {
-    sidepanel.open('aiSummary', project, { risk, questions: groupSummary.quickQuestions })
+    sidepanel.open('aiSummary', project, { risk, questions: groupData.summary.quickQuestions })
   }
 }
 
@@ -305,6 +360,46 @@ function handleGroupQuestionClick(question) {
 
 function handleGroupSummaryClick() {
   sidepanel.open('groupSummary', groupSummary, { groupCount: groupKeys.length })
+}
+
+// 部门级事件
+function handleDeptAIClick(section) {
+  sidepanel.open(section, deptData)
+}
+
+// 里程碑子卡片点击 — 传入 timeline item
+function handleDeptMilestoneItemClick(item) {
+  sidepanel.open('milestone-dept', deptData, { timelineItem: item })
+}
+
+// 项目群综合风险中的风险点击 — 传入 risk + groupCard 上下文
+function handleDeptRiskClick(risk, groupCard) {
+  sidepanel.open('groups-overview', deptData, { risk, groupCard })
+}
+
+function handleDeptAHBCategoryClick(category) {
+  sidepanel.open('ahb', deptData, { category })
+}
+
+function handleDeptBudgetProjectClick(project) {
+  sidepanel.open('budget-dept', deptData, { project })
+}
+
+function handleDeptTaskClick(taskOrder) {
+  sidepanel.open('task-dept', deptData, { taskOrder })
+}
+
+function handleDeptDimClick(dimension) {
+  // 维度子卡片点击：用 groups-overview builder 的 dimension 分支
+  sidepanel.open('groups-overview', deptData, { dimension })
+}
+
+function handleDeptGroupClick(groupCard) {
+  sidepanel.open('groupRisk', deptData, { groupCard })
+}
+
+function handleDeptQuestionClick(question) {
+  sidepanel.open('deptQuestion', deptData, { hideData: true, autoSend: question })
 }
 </script>
 
@@ -379,7 +474,7 @@ function handleGroupSummaryClick() {
 
 /* Content wrapper - centered with max-width */
 .pk-kanban__content {
-  max-width: 1200px;
+  max-width: 1440px;
   margin: 0 auto;
   padding: 0 32px;
 }
@@ -454,6 +549,20 @@ function handleGroupSummaryClick() {
   gap: 16px;
 }
 
+/* Dept grid - 4 columns for department view */
+.pk-kanban__dept-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  min-width: 0;
+}
+
+/* 防止子卡片内容溢出 grid */
+.pk-kanban__dept-grid > * {
+  min-width: 0;
+  overflow: hidden;
+}
+
 /* Groups grid */
 .pk-kanban__groups {
   display: grid;
@@ -487,11 +596,23 @@ function handleGroupSummaryClick() {
 }
 
 /* Responsive */
+@media (max-width: 1280px) {
+  .pk-kanban__dept-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 @media (max-width: 1024px) {
   .pk-kanban__grid {
     grid-template-columns: 1fr;
   }
   .pk-kanban__groups {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .pk-kanban__dept-grid {
     grid-template-columns: 1fr;
   }
 }

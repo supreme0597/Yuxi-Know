@@ -61,6 +61,17 @@
                 </div>
               </div>
 
+              <!-- 关键进度列表（长文本如 objectives/phases） -->
+              <div v-if="panelData.keyPoints?.length" class="ai-sidepanel__keypoints">
+                <div class="ai-sidepanel__section-title">
+                  <Target :size="13" style="color: #6366f1" />
+                  <span>关键进度</span>
+                </div>
+                <ul class="ai-sidepanel__keypoints-list">
+                  <li v-for="(point, i) in panelData.keyPoints" :key="i">{{ point }}</li>
+                </ul>
+              </div>
+
               <!-- AI 分析推理 -->
               <div v-if="panelData.reasoning" class="ai-sidepanel__reasoning">
                 <div class="ai-sidepanel__section-title">
@@ -203,7 +214,7 @@
 <script setup>
 import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { message as antMessage } from 'ant-design-vue'
-import { Lightbulb, X, Sparkles, AlertTriangle, ChevronDown, MessageCircle, Search, Info, CheckCircle } from 'lucide-vue-next'
+import { Lightbulb, X, Sparkles, AlertTriangle, ChevronDown, MessageCircle, Search, Info, CheckCircle, Target } from 'lucide-vue-next'
 import KanbanChatArea from './KanbanChatArea.vue'
 import AgentInputArea from '@/components/AgentInputArea.vue'
 import AgentPanel from '@/components/AgentPanel.vue'
@@ -331,6 +342,7 @@ const panelData = reactive({
   title: '',
   subtitle: '',
   progress: [],
+  keyPoints: [],
   reasoning: '',
   risks: [],
   quickQuestions: []
@@ -339,7 +351,7 @@ const panelData = reactive({
 const expandedRisks = reactive(new Set())
 
 const hasPanelData = computed(() => {
-  return panelData.progress?.length || panelData.reasoning || panelData.risks?.length
+  return panelData.progress?.length || panelData.keyPoints?.length || panelData.reasoning || panelData.risks?.length
 })
 
 watch(() => [props.visible, props.data], ([vis, data]) => {
@@ -347,6 +359,7 @@ watch(() => [props.visible, props.data], ([vis, data]) => {
     panelData.title = data.title || 'AI 分析'
     panelData.subtitle = data.subtitle || ''
     panelData.progress = data.progress || []
+    panelData.keyPoints = data.keyPoints || []
     panelData.reasoning = data.reasoning || ''
     panelData.risks = data.risks || []
     panelData.quickQuestions = data.quickQuestions || []
@@ -640,14 +653,37 @@ function formatReasoning(text) {
 .ai-sidepanel__progress-label {
   font-size: 11px;
   color: var(--gray-500, #6b7280);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .ai-sidepanel__progress-value {
   font-size: 13px;
   font-weight: 600;
   color: var(--gray-800, #1f2937);
+  min-width: 0;
+  word-break: break-word;
 }
 .ai-sidepanel__progress-value--danger { color: #ef4444; }
 .ai-sidepanel__progress-value--warning { color: #d97706; }
+
+/* Key Points */
+.ai-sidepanel__keypoints-list {
+  margin: 0;
+  padding: 0 0 0 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ai-sidepanel__keypoints-list li {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--gray-700, #374151);
+  position: relative;
+}
+.ai-sidepanel__keypoints-list li::marker {
+  color: #6366f1;
+  font-size: 10px;
+}
 
 /* Section Title */
 .ai-sidepanel__section-title {

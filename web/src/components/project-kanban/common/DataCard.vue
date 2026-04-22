@@ -28,7 +28,9 @@
       <!-- AI 一句话总结 (可选) -->
       <div v-if="aiSummary" class="pk-card__ai-summary" @click.stop="$emit('ai-click')">
         <span class="pk-card__ai-spark">✨</span>
-        <span>{{ aiSummary }}</span>
+        <Tooltip :title="aiSummary" placement="topLeft" :mouseEnterDelay="0.3">
+          <span class="pk-card__ai-text">{{ aiSummary }}</span>
+        </Tooltip>
       </div>
       <div v-else-if="$slots.aiSummary" class="pk-card__ai-summary" @click.stop="$emit('ai-click')">
         <slot name="aiSummary" />
@@ -40,9 +42,11 @@
       </div>
     </div>
 
-    <!-- Footer: AI按钮 -->
-    <div v-if="showAI" class="pk-card__footer">
-      <AIButton :title="title" @click="$emit('ai-click')" />
+    <!-- Footer: AI按钮 或 自定义footer -->
+    <div v-if="showAI || $slots.footer" class="pk-card__footer">
+      <slot name="footer">
+        <AIButton :title="title" @click="$emit('ai-click')" />
+      </slot>
     </div>
   </div>
 </template>
@@ -50,6 +54,7 @@
 <script setup>
 import AIButton from './AIButton.vue'
 import StatusBadge from './StatusBadge.vue'
+import { Tooltip } from 'ant-design-vue'
 
 defineProps({
   title: { type: String, default: '' },
@@ -90,11 +95,11 @@ defineEmits(['ai-click'])
 }
 
 .pk-card__content {
-  padding: 16px;
+  padding: 12px 14px;
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .pk-card__header {
@@ -133,12 +138,12 @@ defineEmits(['ai-click'])
   display: flex;
   align-items: flex-start;
   gap: 4px;
-  padding: 6px 10px;
+  padding: 4px 8px;
   background: linear-gradient(135deg, #faf5ff, #eff6ff);
   border-radius: 6px;
   font-size: 11px;
   color: var(--gray-700);
-  line-height: 1.6;
+  line-height: 1.5;
   cursor: pointer;
   transition: background 0.2s ease, box-shadow 0.2s ease;
 }
@@ -150,9 +155,18 @@ defineEmits(['ai-click'])
   flex-shrink: 0;
   font-size: 12px;
 }
+.pk-card__ai-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 .pk-card__body {
   flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .pk-card__footer {

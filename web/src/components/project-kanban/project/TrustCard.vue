@@ -3,7 +3,7 @@
     title="可信管理"
     :icon="TrustIcon"
     icon-color="#6366f1"
-    :status-text="data?.status || ''"
+    :status-text="statusText"
     :status-color="trustStatusColor"
     :ai-summary="data?.aiSummary ? `✨ ${data.aiSummary}` : ''"
     wide
@@ -45,7 +45,19 @@
 import { computed, h } from 'vue'
 import DataCard from '../common/DataCard.vue'
 import RiskList from '../common/RiskList.vue'
-import { trustCategoryMap } from '../data/projectData'
+
+/** 可信管理子卡片 key 映射 */
+const trustCategoryMap = {
+  productDefinition: { label: '产品定义' },
+  design: { label: '设计' },
+  coding: { label: '编码' },
+  build: { label: '构建' },
+  testing: { label: '测试' },
+  e2eProtection: { label: 'E2E完整性保护' },
+  openSource: { label: '开源及第三方软件' },
+  vulnerability: { label: '漏洞管理' },
+  lifecycle: { label: '生命周期' }
+}
 
 const TrustIcon = {
   render() {
@@ -66,6 +78,13 @@ const trustStatusColor = computed(() => {
   if (score >= 80) return 'green'
   if (score >= 60) return 'yellow'
   return 'red'
+})
+
+const statusText = computed(() => {
+  const score = props.data?.overallScore || 0
+  if (score >= 80) return '正常'
+  if (score >= 60) return '关注'
+  return '关键风险'
 })
 
 const trustItems = computed(() => {

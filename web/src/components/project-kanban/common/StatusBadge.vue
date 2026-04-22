@@ -18,10 +18,13 @@ const statusClass = computed(() => {
   const map = {
     green: 'success',
     normal: 'success',
+    success: 'success',
     yellow: 'warning',
     warning: 'warning',
+    orange: 'warning',
     red: 'danger',
     critical: 'danger',
+    danger: 'danger',
     info: 'info'
   }
   return map[props.status] || 'info'
@@ -52,6 +55,6 @@ const statusClass = computed(() => {
 .pk-badge--warning .pk-badge__dot { background: #d97706; }
 .pk-badge--danger { background: #fef2f2; color: #dc2626; }
 .pk-badge--danger .pk-badge__dot { background: #dc2626; }
-.pk-badge--info { background: #dbeafe; color: #2563eb; }
-.pk-badge--info .pk-badge__dot { background: #2563eb; }
+.pk-badge--info { background: #d1fae5; color: #059669; }
+.pk-badge--info .pk-badge__dot { background: #059669; }
 </style>

@@ -39,7 +39,15 @@
 <script setup>
 import { computed } from 'vue'
 import AIButton from '../common/AIButton.vue'
-import { workflowDomainMap } from '../data/projectData'
+
+/** 五领域 workflow key 映射 */
+const workflowDomainMap = {
+  design: { label: '设计领域', tag: 'SE' },
+  dev: { label: '开发领域', tag: 'DEV' },
+  build: { label: '构建领域', tag: 'BUILD' },
+  test: { label: '测试领域', tag: 'QA' },
+  release: { label: '发布领域', tag: 'REL' }
+}
 
 const props = defineProps({
   data: { type: Object, default: null }

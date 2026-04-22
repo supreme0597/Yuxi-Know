@@ -35,8 +35,11 @@ const BudgetIcon = {
   }
 }
 
-defineProps({ data: { type: Object, default: null } })
+const props = defineProps({ data: { type: Object, default: null } })
 defineEmits(['ai-click', 'risk-click'])
+
+const statusMap = { green: '正常', normal: '正常', yellow: '关注', warning: '关注', orange: '警告', red: '关键风险', critical: '关键风险' }
+const statusText = computed(() => statusMap[props.data?.status] || '正常')
 </script>
 
 <style scoped>
