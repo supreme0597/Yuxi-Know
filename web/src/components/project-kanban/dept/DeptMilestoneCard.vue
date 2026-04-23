@@ -33,7 +33,7 @@
         <div v-if="nextPhase(item)" class="pk-milestone-sub__next">
           <!-- 弧形半圆仪表 -->
           <div class="pk-milestone-sub__arc" :class="'pk-milestone-sub__arc--' + arcStatus(nextPhase(item))">
-            <svg width="40" height="22" viewBox="0 0 40 22">
+            <svg width="100%" height="100%" viewBox="0 0 40 22" preserveAspectRatio="xMidYMax meet">
               <!-- 背景弧 -->
               <path d="M4 20 A16 16 0 0 1 36 20" fill="none" stroke="#e2e8f0" stroke-width="3" stroke-linecap="round" />
               <!-- 进度弧 -->
@@ -230,7 +230,7 @@ function nodeClass(phase, idx, item) {
 }
 
 .pk-milestone-sub__title {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
   color: #1e293b;
   overflow: hidden;
@@ -241,7 +241,7 @@ function nodeClass(phase, idx, item) {
 }
 
 .pk-milestone-sub__tag {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 600;
   padding: 1px 6px;
   border-radius: 4px;
@@ -266,8 +266,8 @@ function nodeClass(phase, idx, item) {
 /* 弧形半圆仪表容器 */
 .pk-milestone-sub__arc {
   position: relative;
-  width: 40px;
-  height: 22px;
+  width: 52px;
+  height: 26px;
   flex-shrink: 0;
 }
 
@@ -281,9 +281,10 @@ function nodeClass(phase, idx, item) {
   bottom: 0;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 700;
   color: #475569;
+  white-space: nowrap;
 }
 
 .pk-milestone-sub__arc--danger .pk-milestone-sub__arc-label { color: #b91c1c; }
@@ -298,7 +299,7 @@ function nodeClass(phase, idx, item) {
 }
 
 .pk-milestone-sub__next-name {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
   color: #334155;
   overflow: hidden;
@@ -307,7 +308,7 @@ function nodeClass(phase, idx, item) {
 }
 
 .pk-milestone-sub__next-date {
-  font-size: 9px;
+  font-size: 11px;
   color: #94a3b8;
   font-variant-numeric: tabular-nums;
 }
@@ -316,15 +317,15 @@ function nodeClass(phase, idx, item) {
 .pk-milestone-sub__track {
   position: relative;
   margin-top: auto;
-  /* 日期(8px行高) + gap(2px) + 圆点半径(6px) = 16px 为圆点中心 */
-  /* 总高度 = 8 + 2 + 12 + 2 + 8 = 32px, 留点余量 */
-  height: 36px;
+  /* 日期(10px行高) + gap(2px) + 圆点半径(7px) = 19px 为圆点中心 */
+  /* 总高度 = 10 + 2 + 14 + 2 + 10 = 38px, 留点余量 */
+  height: 40px;
 }
 
 /* 连线 — 精确穿过圆点中心 */
 .pk-milestone-sub__track-line {
   position: absolute;
-  top: 16px;
+  top: 18px;
   left: 10%;
   right: 10%;
   height: 1.5px;
@@ -345,17 +346,17 @@ function nodeClass(phase, idx, item) {
 
 /* 日期 */
 .pk-milestone-sub__node-date {
-  font-size: 8px;
+  font-size: 10px;
   color: #94a3b8;
   font-variant-numeric: tabular-nums;
   line-height: 1;
-  height: 8px;
+  height: 10px;
 }
 
 /* 圆点 */
 .pk-milestone-sub__node-dot {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   border: 2px solid #cbd5e1;
   background: #fff;
@@ -396,11 +397,11 @@ function nodeClass(phase, idx, item) {
 
 /* 阶段名 */
 .pk-milestone-sub__node-label {
-  font-size: 8px;
+  font-size: 9px;
   color: #6b7280;
   white-space: nowrap;
   text-align: center;
-  max-width: 40px;
+  max-width: 48px;
   overflow: hidden;
   text-overflow: ellipsis;
   line-height: 1.2;
@@ -420,6 +421,123 @@ function nodeClass(phase, idx, item) {
 @media (max-width: 600px) {
   .pk-milestone-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 1600px) {
+  .pk-milestone-sub__title {
+    font-size: 14px;
+  }
+  .pk-milestone-sub__tag {
+    font-size: 12px;
+  }
+  .pk-milestone-sub__arc {
+    width: 56px;
+    height: 28px;
+  }
+  .pk-milestone-sub__arc-label {
+    font-size: 12px;
+  }
+  .pk-milestone-sub__next-name {
+    font-size: 14px;
+  }
+  .pk-milestone-sub__next-date {
+    font-size: 12px;
+  }
+  .pk-milestone-sub__node-date {
+    font-size: 11px;
+  }
+  .pk-milestone-sub__node-dot {
+    width: 16px;
+    height: 16px;
+  }
+  .pk-milestone-sub__node-label {
+    font-size: 10px;
+    max-width: 52px;
+  }
+  .pk-milestone-sub__track {
+    height: 42px;
+  }
+  .pk-milestone-sub__track-line {
+    top: 20px;
+  }
+}
+
+@media (min-width: 1920px) {
+  .pk-milestone-sub__title {
+    font-size: 15px;
+  }
+  .pk-milestone-sub__tag {
+    font-size: 13px;
+  }
+  .pk-milestone-sub__arc {
+    width: 60px;
+    height: 30px;
+  }
+  .pk-milestone-sub__arc-label {
+    font-size: 13px;
+  }
+  .pk-milestone-sub__next-name {
+    font-size: 15px;
+  }
+  .pk-milestone-sub__next-date {
+    font-size: 13px;
+  }
+  .pk-milestone-sub__node-date {
+    font-size: 12px;
+  }
+  .pk-milestone-sub__node-dot {
+    width: 18px;
+    height: 18px;
+  }
+  .pk-milestone-sub__node-label {
+    font-size: 11px;
+    max-width: 56px;
+  }
+  .pk-milestone-sub__track {
+    height: 46px;
+  }
+  .pk-milestone-sub__track-line {
+    top: 22px;
+  }
+}
+
+@media (min-width: 2560px) {
+  .pk-milestone-sub__title {
+    font-size: 16px;
+  }
+  .pk-milestone-sub__tag {
+    font-size: 13px;
+  }
+  .pk-milestone-sub__arc {
+    width: 64px;
+    height: 32px;
+  }
+  .pk-milestone-sub__arc-label {
+    font-size: 14px;
+  }
+  .pk-milestone-sub__next-name {
+    font-size: 16px;
+  }
+  .pk-milestone-sub__next-date {
+    font-size: 14px;
+  }
+  .pk-milestone-sub__node-date {
+    font-size: 13px;
+  }
+  .pk-milestone-sub__node-dot {
+    width: 20px;
+    height: 20px;
+  }
+  .pk-milestone-sub__node-label {
+    font-size: 12px;
+    max-width: 60px;
+  }
+  .pk-milestone-sub__track {
+    height: 50px;
+  }
+  .pk-milestone-sub__track-line {
+    top: 24px;
   }
 }
 </style>

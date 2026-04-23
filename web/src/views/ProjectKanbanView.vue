@@ -537,7 +537,7 @@ function handleIndustryHighlight(industry) {
   margin: 0;
 }
 .pk-kanban__subtitle {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--gray-400);
   margin: 0;
 }
@@ -550,7 +550,7 @@ function handleIndustryHighlight(industry) {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--gray-400);
 }
 .pk-kanban__ai-dot {
@@ -586,7 +586,7 @@ function handleIndustryHighlight(industry) {
 }
 .pk-kanban__tab {
   padding: 8px 20px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   color: var(--gray-500);
   background: transparent;
@@ -610,7 +610,7 @@ function handleIndustryHighlight(industry) {
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--gray-400);
   padding-right: 8px;
 }
@@ -707,6 +707,136 @@ function handleIndustryHighlight(industry) {
 @media (max-width: 768px) {
   .pk-kanban__dept-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+/* 宽屏自适应放大 */
+@media (min-width: 1600px) {
+  .pk-kanban__content {
+    max-width: 1520px;
+    padding: 0 36px;
+  }
+  .pk-kanban__header {
+    padding: 18px 36px;
+  }
+  .pk-kanban__title {
+    font-size: 17px;
+  }
+  .pk-kanban__subtitle {
+    font-size: 13px;
+  }
+  .pk-kanban__ai-status {
+    font-size: 13px;
+  }
+  .pk-kanban__tabs {
+    padding: 8px;
+    margin-top: 28px;
+  }
+  .pk-kanban__tab {
+    padding: 9px 22px;
+    font-size: 15px;
+  }
+  .pk-kanban__tabs-stats {
+    font-size: 13px;
+  }
+  .pk-kanban__body {
+    padding: 28px 0;
+    gap: 18px;
+  }
+  .pk-kanban__grid {
+    gap: 18px;
+  }
+  .pk-kanban__dept-grid {
+    gap: 14px;
+  }
+  .pk-kanban__groups {
+    gap: 22px;
+  }
+}
+
+@media (min-width: 1920px) {
+  .pk-kanban__content {
+    max-width: 1720px;
+    padding: 0 44px;
+  }
+  .pk-kanban__header {
+    padding: 20px 44px;
+  }
+  .pk-kanban__title {
+    font-size: 18px;
+  }
+  .pk-kanban__subtitle {
+    font-size: 14px;
+  }
+  .pk-kanban__ai-status {
+    font-size: 14px;
+  }
+  .pk-kanban__tabs {
+    padding: 8px;
+    margin-top: 32px;
+  }
+  .pk-kanban__tab {
+    padding: 10px 24px;
+    font-size: 16px;
+  }
+  .pk-kanban__tabs-stats {
+    font-size: 14px;
+  }
+  .pk-kanban__body {
+    padding: 32px 0;
+    gap: 20px;
+  }
+  .pk-kanban__grid {
+    gap: 20px;
+  }
+  .pk-kanban__dept-grid {
+    gap: 16px;
+  }
+  .pk-kanban__groups {
+    gap: 24px;
+  }
+}
+
+@media (min-width: 2560px) {
+  .pk-kanban__content {
+    max-width: 2100px;
+    padding: 0 56px;
+  }
+  .pk-kanban__header {
+    padding: 24px 56px;
+  }
+  .pk-kanban__title {
+    font-size: 19px;
+  }
+  .pk-kanban__subtitle {
+    font-size: 15px;
+  }
+  .pk-kanban__ai-status {
+    font-size: 15px;
+  }
+  .pk-kanban__tabs {
+    padding: 10px;
+    margin-top: 36px;
+  }
+  .pk-kanban__tab {
+    padding: 10px 28px;
+    font-size: 17px;
+  }
+  .pk-kanban__tabs-stats {
+    font-size: 15px;
+  }
+  .pk-kanban__body {
+    padding: 36px 0;
+    gap: 24px;
+  }
+  .pk-kanban__grid {
+    gap: 24px;
+  }
+  .pk-kanban__dept-grid {
+    gap: 20px;
+  }
+  .pk-kanban__groups {
+    gap: 28px;
   }
 }
 </style>

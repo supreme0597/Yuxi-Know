@@ -35,8 +35,8 @@
           >
             <DonutChart
               :percentage="to.progress"
-              :size="36"
-              :stroke-width="3.5"
+              :size="44"
+              :stroke-width="4"
               :color="ringFgColor(to)"
               :label="`${to.progress}%`"
             />
@@ -194,7 +194,7 @@ function ringFgColor(to) {
   align-items: center;
   justify-content: flex-end;
   padding-right: 8px;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--gray-500);
   background: #f5f6f8;
@@ -235,7 +235,7 @@ function ringFgColor(to) {
 
 /* 节点名称 */
 .pk-task-node__name {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
   color: var(--gray-700);
   text-align: center;
@@ -250,7 +250,7 @@ function ringFgColor(to) {
 
 /* 截止日期 */
 .pk-task-node__date {
-  font-size: 9px;
+  font-size: 11px;
   color: var(--gray-400);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
@@ -271,6 +271,42 @@ function ringFgColor(to) {
   .pk-task-lane__label {
     width: 32px;
     font-size: 9px;
+  }
+}
+
+@media (min-width: 1600px) {
+  .pk-task-lane__label {
+    font-size: 13px;
+  }
+  .pk-task-node__name {
+    font-size: 12px;
+  }
+  .pk-task-node__date {
+    font-size: 12px;
+  }
+}
+
+@media (min-width: 1920px) {
+  .pk-task-lane__label {
+    font-size: 14px;
+  }
+  .pk-task-node__name {
+    font-size: 13px;
+  }
+  .pk-task-node__date {
+    font-size: 13px;
+  }
+}
+
+@media (min-width: 2560px) {
+  .pk-task-lane__label {
+    font-size: 15px;
+  }
+  .pk-task-node__name {
+    font-size: 14px;
+  }
+  .pk-task-node__date {
+    font-size: 14px;
   }
 }
 </style>

@@ -56,12 +56,39 @@ const statusText = computed(() => statusMap[props.data?.status] || '正常')
   gap: 2px;
 }
 .pk-budget__detail-label {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--gray-500);
 }
 .pk-budget__detail-value {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--gray-800);
+}
+
+@media (min-width: 1600px) {
+  .pk-budget__detail-label {
+    font-size: 13px;
+  }
+  .pk-budget__detail-value {
+    font-size: 16px;
+  }
+}
+
+@media (min-width: 1920px) {
+  .pk-budget__detail-label {
+    font-size: 14px;
+  }
+  .pk-budget__detail-value {
+    font-size: 17px;
+  }
+}
+
+@media (min-width: 2560px) {
+  .pk-budget__detail-label {
+    font-size: 15px;
+  }
+  .pk-budget__detail-value {
+    font-size: 19px;
+  }
 }
 </style>

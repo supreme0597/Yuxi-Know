@@ -40,7 +40,7 @@ defineEmits(['click'])
   animation: pk-ai-pulse 2s ease-in-out infinite;
 }
 .pk-ai-btn__text {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: #fff;
   letter-spacing: 0.5px;

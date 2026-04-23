@@ -65,7 +65,7 @@ const options = computed(() =>
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 .pk-selector__label {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   color: var(--gray-700);
   white-space: nowrap;
@@ -74,7 +74,7 @@ const options = computed(() =>
   min-width: 200px;
 }
 .pk-selector__info {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--gray-400);
 }
 
@@ -89,7 +89,7 @@ const options = computed(() =>
   align-items: center;
   gap: 4px;
   padding: 4px 10px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--gray-600);
   background: var(--gray-50);
   border: 1px solid var(--gray-200);
@@ -101,5 +101,68 @@ const options = computed(() =>
   color: var(--main-color);
   border-color: var(--main-200);
   background: var(--main-50);
+}
+
+@media (min-width: 1600px) {
+  .pk-selector {
+    padding: 14px 18px;
+    gap: 14px;
+  }
+  .pk-selector__label {
+    font-size: 15px;
+  }
+  .pk-selector__info {
+    font-size: 13px;
+  }
+  .pk-sweet-toolbar {
+    gap: 7px;
+  }
+  .pk-sweet-btn {
+    padding: 5px 12px;
+    font-size: 13px;
+    gap: 5px;
+  }
+}
+
+@media (min-width: 1920px) {
+  .pk-selector {
+    padding: 16px 20px;
+    gap: 16px;
+  }
+  .pk-selector__label {
+    font-size: 16px;
+  }
+  .pk-selector__info {
+    font-size: 14px;
+  }
+  .pk-sweet-toolbar {
+    gap: 8px;
+  }
+  .pk-sweet-btn {
+    padding: 6px 14px;
+    font-size: 14px;
+    gap: 5px;
+  }
+}
+
+@media (min-width: 2560px) {
+  .pk-selector {
+    padding: 18px 24px;
+    gap: 18px;
+  }
+  .pk-selector__label {
+    font-size: 17px;
+  }
+  .pk-selector__info {
+    font-size: 15px;
+  }
+  .pk-sweet-toolbar {
+    gap: 9px;
+  }
+  .pk-sweet-btn {
+    padding: 6px 16px;
+    font-size: 15px;
+    gap: 6px;
+  }
 }
 </style>

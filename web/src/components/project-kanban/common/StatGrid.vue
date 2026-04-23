@@ -51,7 +51,7 @@ defineEmits(['item-click'])
   background: rgba(99, 102, 241, 0.06);
 }
 .pk-stat-item__value {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--gray-800);
 }
@@ -60,7 +60,7 @@ defineEmits(['item-click'])
 .pk-stat-item__value.danger { color: #dc2626; }
 
 .pk-stat-item__label {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--gray-500);
 }
 .pk-stat-divider {
@@ -68,5 +68,41 @@ defineEmits(['item-click'])
   height: 24px;
   background: var(--gray-200);
   flex-shrink: 0;
+}
+
+@media (min-width: 1600px) {
+  .pk-stat-item__value {
+    font-size: 16px;
+  }
+  .pk-stat-item__label {
+    font-size: 13px;
+  }
+  .pk-stat-divider {
+    height: 28px;
+  }
+}
+
+@media (min-width: 1920px) {
+  .pk-stat-item__value {
+    font-size: 17px;
+  }
+  .pk-stat-item__label {
+    font-size: 14px;
+  }
+  .pk-stat-divider {
+    height: 30px;
+  }
+}
+
+@media (min-width: 2560px) {
+  .pk-stat-item__value {
+    font-size: 19px;
+  }
+  .pk-stat-item__label {
+    font-size: 15px;
+  }
+  .pk-stat-divider {
+    height: 32px;
+  }
 }
 </style>

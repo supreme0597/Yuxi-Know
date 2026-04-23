@@ -138,7 +138,7 @@ const statusText = computed(() => {
   flex-shrink: 0;
 }
 .pk-group__title {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--gray-800);
 }
@@ -155,7 +155,7 @@ const statusText = computed(() => {
   background: linear-gradient(135deg, #faf5ff, #eff6ff);
   border-radius: 8px;
   border: 1px solid rgba(99, 102, 241, 0.1);
-  font-size: 12px;
+  font-size: 13px;
   color: var(--gray-700);
   line-height: 1.6;
   cursor: pointer;
@@ -192,4 +192,84 @@ const statusText = computed(() => {
   border-top: 1px solid var(--gray-100);
 }
 
+@media (min-width: 1600px) {
+  .pk-group__content {
+    padding: 18px;
+    gap: 12px;
+  }
+  .pk-group__stripe {
+    height: 4px;
+  }
+  .pk-group__icon {
+    width: 36px;
+    height: 36px;
+  }
+  .pk-group__title {
+    font-size: 17px;
+  }
+  .pk-group__ai {
+    padding: 10px 14px;
+    font-size: 14px;
+  }
+  .pk-group__projects {
+    gap: 12px;
+  }
+  .pk-group__footer {
+    padding: 10px 18px 16px;
+  }
+}
+
+@media (min-width: 1920px) {
+  .pk-group__content {
+    padding: 20px;
+    gap: 14px;
+  }
+  .pk-group__stripe {
+    height: 4px;
+  }
+  .pk-group__icon {
+    width: 38px;
+    height: 38px;
+  }
+  .pk-group__title {
+    font-size: 18px;
+  }
+  .pk-group__ai {
+    padding: 10px 14px;
+    font-size: 15px;
+  }
+  .pk-group__projects {
+    gap: 14px;
+  }
+  .pk-group__footer {
+    padding: 10px 20px 16px;
+  }
+}
+
+@media (min-width: 2560px) {
+  .pk-group__content {
+    padding: 22px;
+    gap: 16px;
+  }
+  .pk-group__stripe {
+    height: 5px;
+  }
+  .pk-group__icon {
+    width: 40px;
+    height: 40px;
+  }
+  .pk-group__title {
+    font-size: 19px;
+  }
+  .pk-group__ai {
+    padding: 12px 16px;
+    font-size: 16px;
+  }
+  .pk-group__projects {
+    gap: 16px;
+  }
+  .pk-group__footer {
+    padding: 12px 22px 18px;
+  }
+}
 </style>

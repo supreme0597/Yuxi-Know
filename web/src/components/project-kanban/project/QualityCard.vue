@@ -68,7 +68,7 @@ const statusText = computed(() => statusMap[props.data?.status] || '正常')
 
 .pk-quality__value {
   display: block;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--gray-700);
 }
@@ -77,7 +77,34 @@ const statusText = computed(() => statusMap[props.data?.status] || '正常')
 .pk-quality__item--green .pk-quality__value { color: #16a34a; }
 
 .pk-quality__label {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--gray-400);
+}
+
+@media (min-width: 1600px) {
+  .pk-quality__value {
+    font-size: 16px;
+  }
+  .pk-quality__label {
+    font-size: 12px;
+  }
+}
+
+@media (min-width: 1920px) {
+  .pk-quality__value {
+    font-size: 17px;
+  }
+  .pk-quality__label {
+    font-size: 13px;
+  }
+}
+
+@media (min-width: 2560px) {
+  .pk-quality__value {
+    font-size: 19px;
+  }
+  .pk-quality__label {
+    font-size: 14px;
+  }
 }
 </style>

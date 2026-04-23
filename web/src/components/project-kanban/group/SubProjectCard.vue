@@ -121,15 +121,14 @@ const milestoneText = computed(() => {
   gap: 6px;
 }
 .pk-sub__id {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--gray-800);
-  font-family: 'SF Mono', 'Fira Code', monospace;
   letter-spacing: -0.3px;
 }
 .pk-sub__progress {
   margin-left: auto;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--main-600);
   cursor: pointer;
@@ -158,7 +157,7 @@ const milestoneText = computed(() => {
   display: flex;
   align-items: flex-start;
   gap: 4px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--gray-600);
   line-height: 1.5;
   padding: 6px 8px;
@@ -177,7 +176,7 @@ const milestoneText = computed(() => {
   flex-wrap: wrap;
 }
 .pk-sub__dim {
-  font-size: 10px;
+  font-size: 11px;
   padding: 2px 8px;
   border-radius: 4px;
   font-weight: 600;
@@ -253,5 +252,131 @@ const milestoneText = computed(() => {
 }
 .pk-sub__phase-line--done {
   background: #10b981;
+}
+
+@media (min-width: 1600px) {
+  .pk-sub {
+    padding: 16px 18px;
+    gap: 12px;
+  }
+  .pk-sub__id {
+    font-size: 15px;
+  }
+  .pk-sub__progress {
+    font-size: 14px;
+  }
+  .pk-sub__bar {
+    height: 6px;
+  }
+  .pk-sub__ai {
+    font-size: 13px;
+    padding: 7px 10px;
+  }
+  .pk-sub__dims {
+    gap: 7px;
+  }
+  .pk-sub__dim {
+    font-size: 12px;
+    padding: 3px 10px;
+  }
+  .pk-sub__timeline {
+    padding-top: 10px;
+    margin-top: 4px;
+  }
+  .pk-sub__phase-dot {
+    width: 8px;
+    height: 8px;
+  }
+  .pk-sub__phase-label {
+    font-size: 12px;
+  }
+  .pk-sub__phase-line {
+    width: 22px;
+    height: 2px;
+  }
+}
+
+@media (min-width: 1920px) {
+  .pk-sub {
+    padding: 18px 20px;
+    gap: 14px;
+  }
+  .pk-sub__id {
+    font-size: 16px;
+  }
+  .pk-sub__progress {
+    font-size: 15px;
+  }
+  .pk-sub__bar {
+    height: 6px;
+  }
+  .pk-sub__ai {
+    font-size: 14px;
+    padding: 8px 10px;
+  }
+  .pk-sub__dims {
+    gap: 8px;
+  }
+  .pk-sub__dim {
+    font-size: 13px;
+    padding: 3px 10px;
+  }
+  .pk-sub__timeline {
+    padding-top: 10px;
+    margin-top: 4px;
+  }
+  .pk-sub__phase-dot {
+    width: 8px;
+    height: 8px;
+  }
+  .pk-sub__phase-label {
+    font-size: 13px;
+  }
+  .pk-sub__phase-line {
+    width: 24px;
+    height: 3px;
+  }
+}
+
+@media (min-width: 2560px) {
+  .pk-sub {
+    padding: 20px 22px;
+    gap: 16px;
+  }
+  .pk-sub__id {
+    font-size: 17px;
+  }
+  .pk-sub__progress {
+    font-size: 16px;
+  }
+  .pk-sub__bar {
+    height: 7px;
+  }
+  .pk-sub__ai {
+    font-size: 15px;
+    padding: 8px 12px;
+  }
+  .pk-sub__dims {
+    gap: 9px;
+  }
+  .pk-sub__dim {
+    font-size: 14px;
+    padding: 4px 12px;
+  }
+  .pk-sub__timeline {
+    padding-top: 12px;
+    margin-top: 6px;
+  }
+  .pk-sub__phase-dot {
+    width: 9px;
+    height: 9px;
+  }
+  .pk-sub__phase-label {
+    font-size: 14px;
+  }
+  .pk-sub__phase-line {
+    width: 28px;
+    height: 3px;
+  }
 }
 </style>

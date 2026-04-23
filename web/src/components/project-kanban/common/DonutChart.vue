@@ -75,4 +75,22 @@ const ringColor = computed(() => {
   font-weight: 700;
   color: var(--gray-700);
 }
+
+@media (min-width: 1600px) {
+  .pk-donut__value {
+    font-size: 13px;
+  }
+}
+
+@media (min-width: 1920px) {
+  .pk-donut__value {
+    font-size: 14px;
+  }
+}
+
+@media (min-width: 2560px) {
+  .pk-donut__value {
+    font-size: 15px;
+  }
+}
 </style>

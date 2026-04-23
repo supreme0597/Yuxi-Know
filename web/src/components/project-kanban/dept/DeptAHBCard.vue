@@ -29,7 +29,7 @@
         <!-- 圆环 + 人力数据 -->
         <div class="pk-ahb-sub__body">
           <div class="pk-ahb-sub__ring">
-            <DonutChart :percentage="ringPercent(cat)" :size="44" :stroke-width="3.5" :color="ringColor(cat)" :label="deviationPercentText(cat)" />
+            <DonutChart :percentage="ringPercent(cat)" :size="52" :stroke-width="4" :color="ringColor(cat)" :label="deviationPercentText(cat)" />
           </div>
           <div class="pk-ahb-sub__amount">
             <span class="pk-ahb-sub__executed">{{ cat.total }}</span>
@@ -205,7 +205,7 @@ function compositionPercent(cat, type) {
 }
 
 .pk-ahb-sub__label {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--gray-700);
 }
@@ -228,7 +228,7 @@ function compositionPercent(cat, type) {
   display: flex;
   align-items: center;
   gap: 3px;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .pk-ahb-sub__executed { font-weight: 700; color: var(--gray-800); }
@@ -262,7 +262,7 @@ function compositionPercent(cat, type) {
 .pk-ahb-sub__legend {
   display: flex;
   justify-content: space-between;
-  font-size: 9px;
+  font-size: 11px;
   color: var(--gray-500);
 }
 
@@ -290,6 +290,42 @@ function compositionPercent(cat, type) {
   }
   .pk-ahb-sub {
     aspect-ratio: auto;
+  }
+}
+
+@media (min-width: 1600px) {
+  .pk-ahb-sub__label {
+    font-size: 13px;
+  }
+  .pk-ahb-sub__amount {
+    font-size: 13px;
+  }
+  .pk-ahb-sub__legend {
+    font-size: 12px;
+  }
+}
+
+@media (min-width: 1920px) {
+  .pk-ahb-sub__label {
+    font-size: 14px;
+  }
+  .pk-ahb-sub__amount {
+    font-size: 14px;
+  }
+  .pk-ahb-sub__legend {
+    font-size: 13px;
+  }
+}
+
+@media (min-width: 2560px) {
+  .pk-ahb-sub__label {
+    font-size: 15px;
+  }
+  .pk-ahb-sub__amount {
+    font-size: 15px;
+  }
+  .pk-ahb-sub__legend {
+    font-size: 14px;
   }
 }
 </style>

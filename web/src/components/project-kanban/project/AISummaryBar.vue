@@ -101,14 +101,14 @@ const topRisks = computed(() => {
   flex-shrink: 0;
 }
 .pk-ai-bar__col-title {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--gray-700);
 }
 
 /* Left: Summary */
 .pk-ai-bar__summary {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--gray-600);
   line-height: 1.7;
   margin: 0;
@@ -166,7 +166,7 @@ const topRisks = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   flex-shrink: 0;
   background: var(--gray-300);
@@ -189,7 +189,7 @@ const topRisks = computed(() => {
   min-width: 0;
 }
 .pk-ai-bar__risk-text {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--gray-800);
   line-height: 1.4;
@@ -204,7 +204,7 @@ const topRisks = computed(() => {
 .pk-ai-bar__question {
   width: 100%;
   text-align: left;
-  font-size: 11px;
+  font-size: 12px;
   padding: 6px 10px;
   background: var(--gray-50);
   color: var(--gray-700);
@@ -230,6 +230,123 @@ const topRisks = computed(() => {
   .pk-ai-bar__col + .pk-ai-bar__col {
     border-left: none;
     border-top: 1px solid var(--gray-150);
+  }
+}
+
+@media (min-width: 1600px) {
+  .pk-ai-bar__col {
+    padding: 18px 22px;
+    gap: 12px;
+  }
+  .pk-ai-bar__col-icon {
+    font-size: 14px;
+  }
+  .pk-ai-bar__col-title {
+    font-size: 14px;
+  }
+  .pk-ai-bar__summary {
+    font-size: 14px;
+  }
+  .pk-ai-bar__risk-list {
+    gap: 6px;
+  }
+  .pk-ai-bar__risk-item {
+    padding: 7px 12px;
+    min-height: 34px;
+  }
+  .pk-ai-bar__risk-rank {
+    width: 20px;
+    height: 20px;
+    font-size: 12px;
+  }
+  .pk-ai-bar__risk-text {
+    font-size: 13px;
+  }
+  .pk-ai-bar__question-list {
+    gap: 6px;
+  }
+  .pk-ai-bar__question {
+    font-size: 13px;
+    padding: 7px 12px;
+    min-height: 34px;
+  }
+}
+
+@media (min-width: 1920px) {
+  .pk-ai-bar__col {
+    padding: 20px 24px;
+    gap: 14px;
+  }
+  .pk-ai-bar__col-icon {
+    font-size: 15px;
+  }
+  .pk-ai-bar__col-title {
+    font-size: 15px;
+  }
+  .pk-ai-bar__summary {
+    font-size: 15px;
+  }
+  .pk-ai-bar__risk-list {
+    gap: 7px;
+  }
+  .pk-ai-bar__risk-item {
+    padding: 8px 12px;
+    min-height: 36px;
+  }
+  .pk-ai-bar__risk-rank {
+    width: 22px;
+    height: 22px;
+    font-size: 13px;
+  }
+  .pk-ai-bar__risk-text {
+    font-size: 14px;
+  }
+  .pk-ai-bar__question-list {
+    gap: 7px;
+  }
+  .pk-ai-bar__question {
+    font-size: 14px;
+    padding: 8px 12px;
+    min-height: 36px;
+  }
+}
+
+@media (min-width: 2560px) {
+  .pk-ai-bar__col {
+    padding: 22px 28px;
+    gap: 16px;
+  }
+  .pk-ai-bar__col-icon {
+    font-size: 16px;
+  }
+  .pk-ai-bar__col-title {
+    font-size: 16px;
+  }
+  .pk-ai-bar__summary {
+    font-size: 16px;
+  }
+  .pk-ai-bar__risk-list {
+    gap: 8px;
+  }
+  .pk-ai-bar__risk-item {
+    padding: 8px 14px;
+    min-height: 40px;
+  }
+  .pk-ai-bar__risk-rank {
+    width: 24px;
+    height: 24px;
+    font-size: 14px;
+  }
+  .pk-ai-bar__risk-text {
+    font-size: 15px;
+  }
+  .pk-ai-bar__question-list {
+    gap: 8px;
+  }
+  .pk-ai-bar__question {
+    font-size: 15px;
+    padding: 8px 14px;
+    min-height: 40px;
   }
 }
 </style>

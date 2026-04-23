@@ -72,7 +72,25 @@ const statusText = computed(() => statusMap[props.data?.status] || '正常')
 .pk-scope__item--blue .pk-scope__value { color: #2563eb; }
 
 .pk-scope__label {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--gray-500);
+}
+
+@media (min-width: 1600px) {
+  .pk-scope__label {
+    font-size: 13px;
+  }
+}
+
+@media (min-width: 1920px) {
+  .pk-scope__label {
+    font-size: 14px;
+  }
+}
+
+@media (min-width: 2560px) {
+  .pk-scope__label {
+    font-size: 15px;
+  }
 }
 </style>

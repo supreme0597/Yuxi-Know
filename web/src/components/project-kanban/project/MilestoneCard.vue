@@ -103,12 +103,12 @@ function phaseColor(status) {
   margin-top: 4px;
 }
 .pk-milestone__name {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--gray-700);
 }
 .pk-milestone__date {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--gray-400);
 }
 
@@ -140,7 +140,7 @@ function phaseColor(status) {
   margin-top: 4px;
 }
 .pk-milestone__label {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--gray-400);
   text-align: center;
   flex: 1;
@@ -153,7 +153,7 @@ function phaseColor(status) {
   padding: 6px 10px;
   background: linear-gradient(135deg, #faf5ff, #eff6ff);
   border-radius: 6px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--gray-700);
   cursor: pointer;
   transition: background 0.2s ease, box-shadow 0.2s ease;
@@ -172,5 +172,53 @@ function phaseColor(status) {
   -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+@media (min-width: 1600px) {
+  .pk-milestone__name {
+    font-size: 14px;
+  }
+  .pk-milestone__date {
+    font-size: 13px;
+  }
+  .pk-milestone__label {
+    font-size: 12px;
+  }
+  .pk-card__ai-summary {
+    font-size: 13px;
+    padding: 7px 12px;
+  }
+}
+
+@media (min-width: 1920px) {
+  .pk-milestone__name {
+    font-size: 15px;
+  }
+  .pk-milestone__date {
+    font-size: 14px;
+  }
+  .pk-milestone__label {
+    font-size: 13px;
+  }
+  .pk-card__ai-summary {
+    font-size: 14px;
+    padding: 8px 12px;
+  }
+}
+
+@media (min-width: 2560px) {
+  .pk-milestone__name {
+    font-size: 16px;
+  }
+  .pk-milestone__date {
+    font-size: 15px;
+  }
+  .pk-milestone__label {
+    font-size: 14px;
+  }
+  .pk-card__ai-summary {
+    font-size: 15px;
+    padding: 8px 14px;
+  }
 }
 </style>

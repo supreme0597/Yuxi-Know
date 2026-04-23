@@ -269,7 +269,7 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
 .pk-dim-card__icon { font-size: 14px; flex-shrink: 0; }
 
 .pk-dim-card__title {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--gray-800);
   flex: 1;
@@ -309,7 +309,7 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
 .pk-dim-card__stat-value--warning { color: #d97706; }
 
 .pk-dim-card__stat-label {
-  font-size: 9px;
+  font-size: 11px;
   color: var(--gray-400);
   white-space: nowrap;
   overflow: hidden;
@@ -321,7 +321,7 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 10px;
+  font-size: 12px;
   padding: 4px 6px;
   border-radius: 4px;
   line-height: 1.3;
@@ -376,7 +376,7 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
 }
 
 .pk-group-card__tag {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   padding: 3px 10px;
   border-radius: 6px;
@@ -398,7 +398,7 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
   gap: 8px;
   padding: 6px 10px;
   border-radius: 6px;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.4;
   cursor: pointer;
   transition: background 0.15s ease;
@@ -415,7 +415,7 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   flex-shrink: 0;
   background: var(--gray-300);
@@ -476,7 +476,7 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
   padding: 4px 10px;
   background: linear-gradient(135deg, #faf5ff, #eff6ff);
   border-radius: 6px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--gray-600);
   cursor: pointer;
   transition: all 0.15s ease;
@@ -511,6 +511,207 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
 @media (max-width: 600px) {
   .pk-overview-dims {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 1600px) {
+  .pk-overview-dims {
+    gap: 14px;
+    margin-top: 6px;
+  }
+  .pk-dim-card {
+    padding: 12px 14px;
+    gap: 8px;
+  }
+  .pk-dim-card__icon {
+    font-size: 15px;
+  }
+  .pk-dim-card__title {
+    font-size: 13px;
+  }
+  .pk-dim-card__dot {
+    width: 7px;
+    height: 7px;
+  }
+  .pk-dim-card__stat-value {
+    font-size: 17px;
+  }
+  .pk-dim-card__stat-label {
+    font-size: 11px;
+    max-width: 58px;
+  }
+  .pk-dim-card__sentence {
+    font-size: 12px;
+    padding: 5px 8px;
+  }
+  .pk-overview-groups {
+    gap: 14px;
+    margin-top: 14px;
+  }
+  .pk-group-card {
+    padding: 12px 14px;
+    gap: 10px;
+  }
+  .pk-group-card__tag {
+    font-size: 13px;
+    padding: 4px 12px;
+  }
+  .pk-group-risks {
+    gap: 6px;
+  }
+  .pk-group-risk-item {
+    padding: 7px 12px;
+    font-size: 13px;
+    min-height: 34px;
+  }
+  .pk-group-risk-rank {
+    width: 20px;
+    height: 20px;
+    font-size: 12px;
+  }
+  .pk-overview-footer {
+    padding: 10px 16px;
+  }
+  .pk-overview-intent {
+    gap: 7px;
+  }
+  .pk-overview-intent__tag {
+    padding: 5px 12px;
+    font-size: 13px;
+  }
+}
+
+@media (min-width: 1920px) {
+  .pk-overview-dims {
+    gap: 16px;
+    margin-top: 8px;
+  }
+  .pk-dim-card {
+    padding: 14px 16px;
+    gap: 10px;
+  }
+  .pk-dim-card__icon {
+    font-size: 16px;
+  }
+  .pk-dim-card__title {
+    font-size: 14px;
+  }
+  .pk-dim-card__dot {
+    width: 8px;
+    height: 8px;
+  }
+  .pk-dim-card__stat-value {
+    font-size: 18px;
+  }
+  .pk-dim-card__stat-label {
+    font-size: 12px;
+    max-width: 64px;
+  }
+  .pk-dim-card__sentence {
+    font-size: 13px;
+    padding: 6px 8px;
+  }
+  .pk-overview-groups {
+    gap: 16px;
+    margin-top: 16px;
+  }
+  .pk-group-card {
+    padding: 14px 16px;
+    gap: 12px;
+  }
+  .pk-group-card__tag {
+    font-size: 14px;
+    padding: 4px 12px;
+  }
+  .pk-group-risks {
+    gap: 7px;
+  }
+  .pk-group-risk-item {
+    padding: 8px 12px;
+    font-size: 14px;
+    min-height: 36px;
+  }
+  .pk-group-risk-rank {
+    width: 22px;
+    height: 22px;
+    font-size: 13px;
+  }
+  .pk-overview-footer {
+    padding: 10px 18px;
+  }
+  .pk-overview-intent {
+    gap: 8px;
+  }
+  .pk-overview-intent__tag {
+    padding: 6px 12px;
+    font-size: 14px;
+  }
+}
+
+@media (min-width: 2560px) {
+  .pk-overview-dims {
+    gap: 20px;
+    margin-top: 10px;
+  }
+  .pk-dim-card {
+    padding: 16px 18px;
+    gap: 12px;
+  }
+  .pk-dim-card__icon {
+    font-size: 18px;
+  }
+  .pk-dim-card__title {
+    font-size: 15px;
+  }
+  .pk-dim-card__dot {
+    width: 9px;
+    height: 9px;
+  }
+  .pk-dim-card__stat-value {
+    font-size: 20px;
+  }
+  .pk-dim-card__stat-label {
+    font-size: 13px;
+    max-width: 72px;
+  }
+  .pk-dim-card__sentence {
+    font-size: 14px;
+    padding: 6px 10px;
+  }
+  .pk-overview-groups {
+    gap: 20px;
+    margin-top: 20px;
+  }
+  .pk-group-card {
+    padding: 16px 18px;
+    gap: 14px;
+  }
+  .pk-group-card__tag {
+    font-size: 15px;
+    padding: 5px 14px;
+  }
+  .pk-group-risks {
+    gap: 8px;
+  }
+  .pk-group-risk-item {
+    padding: 8px 14px;
+    font-size: 15px;
+    min-height: 40px;
+  }
+  .pk-group-risk-rank {
+    width: 24px;
+    height: 24px;
+    font-size: 14px;
+  }
+  .pk-overview-footer {
+    padding: 12px 20px;
+  }
+  .pk-overview-intent {
+    gap: 9px;
+  }
+  .pk-overview-intent__tag {
+    padding: 6px 14px;
+    font-size: 15px;
   }
 }
 </style>

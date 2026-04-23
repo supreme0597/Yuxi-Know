@@ -49,7 +49,7 @@ const topRisks = computed(() => {
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--gray-600);
   margin-bottom: 6px;
@@ -65,7 +65,7 @@ const topRisks = computed(() => {
   gap: 6px;
   padding: 4px 8px;
   border-radius: 4px;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.4;
   cursor: pointer;
   transition: all 0.15s;
@@ -103,5 +103,35 @@ const topRisks = computed(() => {
 }
 .pk-risk-item--normal .pk-risk-item__dot {
   background: #059669;
+}
+
+@media (min-width: 1600px) {
+  .pk-risk-list__title {
+    font-size: 13px;
+  }
+  .pk-risk-item {
+    font-size: 13px;
+    padding: 5px 10px;
+  }
+}
+
+@media (min-width: 1920px) {
+  .pk-risk-list__title {
+    font-size: 14px;
+  }
+  .pk-risk-item {
+    font-size: 14px;
+    padding: 6px 10px;
+  }
+}
+
+@media (min-width: 2560px) {
+  .pk-risk-list__title {
+    font-size: 15px;
+  }
+  .pk-risk-item {
+    font-size: 15px;
+    padding: 6px 12px;
+  }
 }
 </style>

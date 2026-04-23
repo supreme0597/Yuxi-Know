@@ -30,7 +30,7 @@
         <!-- 圆环 + 金额 -->
         <div class="pk-budget-sub__body">
           <div class="pk-budget-sub__ring">
-            <DonutChart :percentage="proj.rate" :size="44" :stroke-width="3.5" />
+            <DonutChart :percentage="proj.rate" :size="52" :stroke-width="4" />
           </div>
           <div class="pk-budget-sub__amount">
             <span class="pk-budget-sub__executed">¥{{ proj.executed }}M</span>
@@ -167,7 +167,7 @@ function deviationClass(deviation) {
 }
 
 .pk-budget-sub__name {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--gray-700);
   overflow: hidden;
@@ -178,7 +178,7 @@ function deviationClass(deviation) {
 .pk-budget-sub__status {
   padding: 1px 6px;
   border-radius: 4px;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 600;
   flex-shrink: 0;
 }
@@ -204,7 +204,7 @@ function deviationClass(deviation) {
   display: flex;
   align-items: center;
   gap: 3px;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .pk-budget-sub__executed { font-weight: 700; color: var(--gray-800); }
@@ -247,7 +247,7 @@ function deviationClass(deviation) {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 8px;
+  font-size: 10px;
   color: var(--gray-400);
   padding: 0 2px;
 }
@@ -284,6 +284,51 @@ function deviationClass(deviation) {
   }
   .pk-budget-sub {
     aspect-ratio: auto;
+  }
+}
+
+@media (min-width: 1600px) {
+  .pk-budget-sub__name {
+    font-size: 13px;
+  }
+  .pk-budget-sub__status {
+    font-size: 12px;
+  }
+  .pk-budget-sub__amount {
+    font-size: 13px;
+  }
+  .pk-budget-sub__deviation-scale {
+    font-size: 11px;
+  }
+}
+
+@media (min-width: 1920px) {
+  .pk-budget-sub__name {
+    font-size: 14px;
+  }
+  .pk-budget-sub__status {
+    font-size: 13px;
+  }
+  .pk-budget-sub__amount {
+    font-size: 14px;
+  }
+  .pk-budget-sub__deviation-scale {
+    font-size: 12px;
+  }
+}
+
+@media (min-width: 2560px) {
+  .pk-budget-sub__name {
+    font-size: 15px;
+  }
+  .pk-budget-sub__status {
+    font-size: 13px;
+  }
+  .pk-budget-sub__amount {
+    font-size: 15px;
+  }
+  .pk-budget-sub__deviation-scale {
+    font-size: 13px;
   }
 }
 </style>

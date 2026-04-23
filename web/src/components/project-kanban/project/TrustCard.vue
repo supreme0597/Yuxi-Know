@@ -133,7 +133,7 @@ const trustItems = computed(() => {
   margin-bottom: 6px;
 }
 .pk-trust__subcard-title {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--gray-700);
 }
@@ -153,16 +153,16 @@ const trustItems = computed(() => {
   margin-bottom: 6px;
 }
 .pk-trust__metric-ok {
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 700;
   color: var(--gray-800);
 }
 .pk-trust__metric-sep {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--gray-400);
 }
 .pk-trust__metric-total {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--gray-500);
 }
 
@@ -180,4 +180,79 @@ const trustItems = computed(() => {
 .pk-trust__progress-fill--green { background: #10b981; }
 .pk-trust__progress-fill--yellow { background: #f59e0b; }
 .pk-trust__progress-fill--red { background: #ef4444; }
+
+@media (min-width: 1600px) {
+  .pk-trust__grid {
+    gap: 10px;
+  }
+  .pk-trust__subcard {
+    padding: 12px;
+  }
+  .pk-trust__subcard-title {
+    font-size: 13px;
+  }
+  .pk-trust__subcard-header {
+    margin-bottom: 8px;
+  }
+  .pk-trust__metric {
+    margin-bottom: 8px;
+  }
+  .pk-trust__metric-ok {
+    font-size: 18px;
+  }
+  .pk-trust__metric-sep,
+  .pk-trust__metric-total {
+    font-size: 14px;
+  }
+}
+
+@media (min-width: 1920px) {
+  .pk-trust__grid {
+    gap: 12px;
+  }
+  .pk-trust__subcard {
+    padding: 14px;
+  }
+  .pk-trust__subcard-title {
+    font-size: 14px;
+  }
+  .pk-trust__subcard-header {
+    margin-bottom: 10px;
+  }
+  .pk-trust__metric {
+    margin-bottom: 10px;
+  }
+  .pk-trust__metric-ok {
+    font-size: 19px;
+  }
+  .pk-trust__metric-sep,
+  .pk-trust__metric-total {
+    font-size: 15px;
+  }
+}
+
+@media (min-width: 2560px) {
+  .pk-trust__grid {
+    gap: 14px;
+  }
+  .pk-trust__subcard {
+    padding: 16px;
+  }
+  .pk-trust__subcard-title {
+    font-size: 15px;
+  }
+  .pk-trust__subcard-header {
+    margin-bottom: 12px;
+  }
+  .pk-trust__metric {
+    margin-bottom: 12px;
+  }
+  .pk-trust__metric-ok {
+    font-size: 21px;
+  }
+  .pk-trust__metric-sep,
+  .pk-trust__metric-total {
+    font-size: 16px;
+  }
+}
 </style>
