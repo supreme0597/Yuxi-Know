@@ -87,6 +87,7 @@
           :data="currentProject?.workflow"
           @domain-click="handleDomainClick"
           @ai-click="handleAIClick"
+          @risk-click="handleWorkflowRiskClick"
         />
 
         <!-- AI 分析总结条 -->
@@ -135,22 +136,31 @@
           <DeptMilestoneCard
             :data="deptData.department.milestone"
             @ai-click="handleDeptAIClick"
+            @summary-click="handleDeptSummaryClick"
             @risk-click="handleDeptMilestoneItemClick"
+            @phase-click="handleMilestonePhaseClick"
           />
           <DeptAHBCard
             :data="deptData.department.ahb"
             @ai-click="handleDeptAIClick"
+            @summary-click="handleDeptSummaryClick"
             @category-click="handleDeptAHBCategoryClick"
+            @metric-click="handleMetricClick"
           />
           <DeptBudgetCard
             :data="deptData.department.budget"
             @ai-click="handleDeptAIClick"
+            @summary-click="handleDeptSummaryClick"
             @project-click="handleDeptBudgetProjectClick"
+            @metric-click="handleMetricClick"
           />
           <DeptTaskCard
             :data="deptData.department.task"
             @ai-click="handleDeptAIClick"
+            @summary-click="handleDeptSummaryClick"
             @task-click="handleDeptTaskClick"
+            @metric-click="handleMetricClick"
+            @industry-click="handleIndustryHighlight"
           />
         </div>
 
@@ -259,26 +269,65 @@ const allQuestions = computed(() => {
   return [...(intent.risk || []), ...(intent.decision || [])].slice(0, 3)
 })
 
+// 从当前 tab 卡片的标签状态动态统计关键/关注数量
+const CRITICAL_STATUS = new Set(['red', 'critical', 'danger'])
+const WARNING_STATUS = new Set(['yellow', 'warning'])
+
 const criticalCount = computed(() => {
-  if (activeTab.value === 'dept') {
-    const go = deptData.department.groupsOverview
-    return (go?.projectRisk?.criticalCount ?? 0) + (go?.downstream?.monthlyNew ?? 0)
-  }
-  if (activeTab.value === 'group') {
-    return groupData.summary.risks.filter(r => r.level === 'critical' || r.level === 'danger').length
-  }
-  return allRisks.value.filter(r => r.level === 'critical' || r.level === 'danger').length
+  const statuses = getCardStatuses()
+  return statuses.filter(s => CRITICAL_STATUS.has(s)).length
 })
 const warningCount = computed(() => {
-  if (activeTab.value === 'dept') {
-    const go = deptData.department.groupsOverview
-    return (go?.projectRisk?.warningCount ?? 0) + (go?.trustSummary?.warningCount ?? 0)
-  }
-  if (activeTab.value === 'group') {
-    return groupData.summary.risks.filter(r => r.level === 'warning').length
-  }
-  return allRisks.value.filter(r => r.level === 'warning').length
+  const statuses = getCardStatuses()
+  return statuses.filter(s => WARNING_STATUS.has(s)).length
 })
+
+/** 获取当前 tab 中所有卡片的 status 标签值 */
+function getCardStatuses() {
+  if (activeTab.value === 'project') return getProjectCardStatuses()
+  if (activeTab.value === 'group') return getGroupCardStatuses()
+  return getDeptCardStatuses()
+}
+
+/** 项目级：6张数据卡片 + 5个领域状态 */
+function getProjectCardStatuses() {
+  const p = currentProject.value
+  if (!p) return []
+  const statuses = []
+  // 6张数据卡片的 status
+  statuses.push(p.milestone?.statusColor || 'green')
+  const trustScore = p.trustDetails?.overallScore || 0
+  statuses.push(trustScore >= 80 ? 'green' : trustScore >= 60 ? 'yellow' : 'red')
+  statuses.push(p.scope?.status || 'green')
+  statuses.push(p.quality?.status || 'green')
+  statuses.push(p.schedule?.status || 'green')
+  statuses.push(p.budget?.status || 'green')
+  // 5个领域
+  const wf = p.workflow || {}
+  for (const key of ['design', 'dev', 'build', 'test', 'release']) {
+    statuses.push(wf[key]?.status || 'green')
+  }
+  return statuses
+}
+
+/** 项目群级：各项目群 GroupCard 的 status */
+function getGroupCardStatuses() {
+  return groupKeys.value.map(k => groupData[k]?.status || 'normal')
+}
+
+/** 部门级：5张数据卡片的 statusType */
+function getDeptCardStatuses() {
+  const d = deptData.department
+  return [
+    d.milestone?.statusType || 'green',
+    d.ahb?.statusType || 'green',
+    d.budget?.statusType || 'green',
+    d.task?.statusType || 'green',
+    d.groupsOverview?.projectRisk
+      ? (d.groupsOverview.projectRisk.criticalCount > 0 ? 'red' : d.groupsOverview.projectRisk.warningCount > 0 ? 'yellow' : 'green')
+      : 'green'
+  ]
+}
 
 // 项目群级 computed
 
@@ -290,8 +339,12 @@ function handleTrustSubcardClick(category) {
   sidepanel.open('trustSubcard', currentProject.value, category)
 }
 
-function handleDomainClick(domain) {
-  sidepanel.open('workflow', currentProject.value, { domain })
+function handleDomainClick(domain, riskIndex) {
+  sidepanel.open('workflow', currentProject.value, { domain, riskIndex })
+}
+
+function handleWorkflowRiskClick({ domain, riskIndex }) {
+  sidepanel.open('workflow', currentProject.value, { domain, riskIndex })
 }
 
 function handleToolAction(action) {
@@ -310,18 +363,20 @@ function handleQuestionClick(question) {
 }
 
 function handleSummaryClick() {
-  sidepanel.open('subProject', currentProject.value)
+  sidepanel.open('summary-project', currentProject.value)
 }
 
 function handleSidepanelQuestion(question) {
+  // 侧边栏内猜你想问：AISidepanel.handleQuickQuestion 已自行发送到聊天
+  // 此处仅做日志记录
   console.log('[AI Question]', question)
 }
 
 // 项目群级事件
 function handleGroupAIClick(groupKey) {
-  const meta = groupMeta[groupKey]
+  const meta = groupData[groupKey]
   if (!meta) return
-  sidepanel.open('group', meta, { summary: groupSummary, groupCount: groupKeys.length })
+  sidepanel.open('group', meta, { summary: groupSummaryData.value, groupCount: groupKeys.length })
 }
 
 function handleSubProjectClick(subProject) {
@@ -329,7 +384,12 @@ function handleSubProjectClick(subProject) {
 }
 
 function handleSubProjectAIClick(subProject) {
-  sidepanel.open('subProject', subProject)
+  // 项目群子项目使用专用 builder
+  if (subProject.subProjects?.length || subProject.projectCount) {
+    sidepanel.open('project-group', subProject)
+  } else {
+    sidepanel.open('subProject', subProject)
+  }
 }
 
 function handleDimClick({ dim, project }) {
@@ -355,11 +415,11 @@ function handleGroupRiskClick(risk) {
 
 function handleGroupQuestionClick(question) {
   // 项目群级猜你想问：打开侧边栏 + 隐藏概览 + 自动发送
-  sidepanel.open('groupSummary', groupSummary, { groupCount: groupKeys.length, hideData: true, autoSend: question })
+  sidepanel.open('groupSummary', groupSummaryData.value, { groupCount: groupKeys.length, hideData: true, autoSend: question })
 }
 
 function handleGroupSummaryClick() {
-  sidepanel.open('groupSummary', groupSummary, { groupCount: groupKeys.length })
+  sidepanel.open('groupSummary', groupSummaryData.value, { groupCount: groupKeys.length })
 }
 
 // 部门级事件
@@ -367,14 +427,28 @@ function handleDeptAIClick(section) {
   sidepanel.open(section, deptData)
 }
 
+// 一句话总结点击 — 打开带焦点上下文的侧边栏（与 AI 按钮区分）
+function handleDeptSummaryClick(section) {
+  // 从 deptData 中获取该卡片的 aiSummary 作为焦点
+  const dept = deptData?.department || {}
+  const summaryMap = {
+    'milestone-dept': dept.milestone?.aiSummary || '',
+    'ahb': dept.ahb?.aiSummary || '',
+    'budget-dept': dept.budget?.aiSummary || '',
+    'task-dept': dept.task?.aiSummary || ''
+  }
+  const sentence = summaryMap[section] || ''
+  sidepanel.open(section, deptData, { sentence })
+}
+
 // 里程碑子卡片点击 — 传入 timeline item
 function handleDeptMilestoneItemClick(item) {
   sidepanel.open('milestone-dept', deptData, { timelineItem: item })
 }
 
-// 项目群综合风险中的风险点击 — 传入 risk + groupCard 上下文
+// 项目群综合风险中的风险点击 — 展示单条风险的 5W2H 详情
 function handleDeptRiskClick(risk, groupCard) {
-  sidepanel.open('groups-overview', deptData, { risk, groupCard })
+  sidepanel.open('group-risk-detail', deptData, { risk, groupCard })
 }
 
 function handleDeptAHBCategoryClick(category) {
@@ -400,6 +474,25 @@ function handleDeptGroupClick(groupCard) {
 
 function handleDeptQuestionClick(question) {
   sidepanel.open('deptQuestion', deptData, { hideData: true, autoSend: question })
+}
+
+// 指标点击（I任务）
+function handleMetricClick(cardType, metric) {
+  sidepanel.open('metric-detail', deptData, { cardType, metric })
+}
+
+// 里程碑阶段点击（K任务）
+function handleMilestonePhaseClick({ phase, offering, timelineItem }) {
+  sidepanel.open('milestone-phase', deptData, { phase, offering, timelineItem })
+}
+
+// 产业高亮（N任务）
+function handleIndustryHighlight(industry) {
+  const task = deptData.department.task
+  const matchingOrders = task.taskOrders.filter(t => t.industry === industry)
+  if (matchingOrders.length > 0) {
+    sidepanel.open('task-dept', deptData, { taskOrder: matchingOrders[0] })
+  }
 }
 </script>
 

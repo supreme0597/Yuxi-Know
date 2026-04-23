@@ -24,6 +24,7 @@
           :key="i"
           class="pk-domain__risk"
           :class="`pk-domain__risk--${risk.level}`"
+          @click.stop="$emit('risk-click', { domain: key, riskIndex: i })"
         >
           <span class="pk-domain__risk-dot"></span>
           <span>{{ risk.text || risk.title }}</span>
@@ -53,7 +54,7 @@ const props = defineProps({
   data: { type: Object, default: null }
 })
 
-defineEmits(['domain-click', 'ai-click'])
+defineEmits(['domain-click', 'ai-click', 'risk-click'])
 
 function domainStatus(key) {
   return props.data?.[key]?.status || 'green'
@@ -156,6 +157,11 @@ function topRisks(key) {
   gap: 4px;
   font-size: 10px;
   color: var(--gray-600);
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.pk-domain__risk:hover {
+  color: #6366f1;
 }
 .pk-domain__risk-dot {
   width: 4px;

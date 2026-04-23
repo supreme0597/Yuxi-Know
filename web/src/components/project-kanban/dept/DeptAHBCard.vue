@@ -7,9 +7,10 @@
     :status-color="statusColor"
     :ai-summary="data?.aiSummary"
     @ai-click="$emit('ai-click', 'ahb')"
+    @summary-click="$emit('summary-click', 'ahb')"
   >
     <template #stats>
-      <StatGrid :items="summaryItems" />
+      <StatGrid :items="summaryItems" @item-click="$emit('metric-click', 'ahb', $event)" />
     </template>
 
     <!-- 2x2 子卡片网格 -->
@@ -80,7 +81,7 @@ const props = defineProps({
   data: { type: Object, default: null }
 })
 
-defineEmits(['ai-click', 'category-click'])
+defineEmits(['ai-click', 'summary-click', 'category-click', 'metric-click'])
 
 const UsersIcon = {
   render() {
@@ -111,7 +112,7 @@ const summaryItems = computed(() => {
   return [
     { value: totalWorkload || '-', label: '总工作量' },
     { value: totalCapacity || '-', label: '总人力' },
-    { value: totalDeviation || '-', label: '总偏差', statusClass: totalDeviation < 0 ? 'warning' : '' },
+    { value: totalDeviation || '-', label: '总偏差', statusClass: totalDeviation < 0 ? 'warning' : '', clickable: true },
     { value: utilization + '%', label: '利用率' }
   ]
 })

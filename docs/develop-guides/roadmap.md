@@ -32,6 +32,10 @@
 ### 0.6.1
 
 <!-- 0.6.1 的内容请放在这里 -->
+- AI 侧边栏功能对齐 HTML 原版：部门级 builder 增加「焦点问题」（budget-dept/ahb 动态计算偏差生成）、任务令增加风险等级/延期状态、groups-overview 维度增加 online/downstream/trust 专用 progress、groupRisk 增加焦点风险+子项目逐项 progress；项目级增加 summary-project/project-group 两个新 builder、六个维度 builder 统一增加焦点风险、workflow 增加 riskIndex 精确导航；通用功能增加 StatGrid 指标点击、里程碑子卡片高亮+阶段详情、产业高亮、ECharts 雷达图（进度/质量/成本/风险四维综合评估）。详见 `docs/develop-guides/ai-sidepanel-migration-plan.md`
+- AI 侧边栏深度对齐设计稿：删除头部多余工具栏按钮（复制/刷新）；项目群综合风险 AI 按钮改为从 V3/V2/MCU 三个项目群汇总风险（带项目群名前缀）；项目群风险列表项点击展示单条风险 5W2H 详情（group-risk-detail builder）；里程碑子卡片侧边栏补全所有 phases 逐项展示；任务令 AI 按钮走 task-overview 独立概览视图（按产业分组统计）；一句话总结点击独立于 AI 按钮，携带焦点上下文打开侧边栏
+- AI 侧边栏里程碑子卡片深度对齐：子卡片点击侧边栏改为 OBP 里程碑节点结构化卡片展示（含技术目标objectives子列表、风险标签、风险原因提示框、当前状态currentPhase），替代纯文本keyPoints；节点点击侧边栏快捷问题改为从 offering 级别取（每个项目群不同，与设计稿一致）
+- AI 侧边栏 Z1/Z3 修复：任务令 AI 按钮侧边栏对齐设计稿 `_openTaskOrderAIOverview`（概览统计三格大数字+产业分组卡片带进度条+关键风险项列表+时间分布）；项目群风险列表项点击添加 `.stop` 阻止事件冒泡到 group-card，修复单条风险 5W2H 详情被覆盖的问题
 - 合并知识库导航入口：左侧导航仅保留“知识库”，文档知识库与图知识库在页面 header 中通过同一组轻量切换入口切换，保留原有列表与图谱内容区交互。
 - 抽象页面轻量切换 header：知识库与扩展管理页直接共用 `ViewSwitchHeader`，通过统一切换样式和 actions slot 收敛文档知识库、知识图谱、Tools、MCP、Subagents、Skills 等入口的信息层级；扩展管理各列表的刷新入口下沉到搜索框右侧，并统一搜索框与工具按钮的边框和圆角，同时强化切换项选中态的边框、阴影与字重层级，提升 header 中当前视图的辨识度。
 - 调整任务中心交互：入口移动到 GitHub 按钮下方，并将右侧抽屉展示改为居中弹窗，减少对主页面布局的占用。

@@ -154,6 +154,10 @@ async function sendMessage(text) {
   const threadState = getThreadState(threadId)
   if (!threadState) return
 
+  // 立即将用户消息添加到历史，无需等待后端刷新
+  const currentHistory = threadMessages.value[threadId] || []
+  threadMessages.value[threadId] = [...currentHistory, { type: 'human', content: text }]
+
   // 开始流式处理
   threadState.isStreaming = true
   resetOnGoingConv(threadId)

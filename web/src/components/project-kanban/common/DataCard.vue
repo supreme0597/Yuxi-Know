@@ -25,14 +25,14 @@
       <!-- 副标题/描述 (可选) -->
       <p v-if="description" class="pk-card__desc">{{ description }}</p>
 
-      <!-- AI 一句话总结 (可选) -->
-      <div v-if="aiSummary" class="pk-card__ai-summary" @click.stop="$emit('ai-click')">
+      <!-- AI 一句话总结 (可选) — 点击打开带焦点的分析，与 AI 按钮区分 -->
+      <div v-if="aiSummary" class="pk-card__ai-summary" @click.stop="$emit('summary-click')">
         <span class="pk-card__ai-spark">✨</span>
         <Tooltip :title="aiSummary" placement="topLeft" :mouseEnterDelay="0.3">
           <span class="pk-card__ai-text">{{ aiSummary }}</span>
         </Tooltip>
       </div>
-      <div v-else-if="$slots.aiSummary" class="pk-card__ai-summary" @click.stop="$emit('ai-click')">
+      <div v-else-if="$slots.aiSummary" class="pk-card__ai-summary" @click.stop="$emit('summary-click')">
         <slot name="aiSummary" />
       </div>
 
@@ -69,7 +69,7 @@ defineProps({
   showAI: { type: Boolean, default: true }
 })
 
-defineEmits(['ai-click'])
+defineEmits(['ai-click', 'summary-click'])
 </script>
 
 <style scoped>

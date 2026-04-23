@@ -56,7 +56,7 @@
             :key="i"
             class="pk-group-risk-item"
             :class="`pk-group-risk-item--${risk.level}`"
-            @click="$emit('risk-click', risk, gc)"
+            @click.stop="$emit('risk-click', risk, gc)"
           >
             <span class="pk-group-risk-rank">{{ i + 1 }}</span>
             <span class="pk-group-risk-text">{{ risk.text }}</span>

@@ -7,6 +7,7 @@
     :status-color="statusColor"
     :ai-summary="data?.aiSummary"
     @ai-click="$emit('ai-click', 'milestone-dept')"
+    @summary-click="$emit('summary-click', 'milestone-dept')"
   >
     <template #stats>
       <StatGrid :items="summaryItems" />
@@ -18,7 +19,8 @@
         v-for="(item, idx) in data.timeline"
         :key="idx"
         class="pk-milestone-sub"
-        @click="$emit('risk-click', item)"
+        :class="{ 'pk-milestone-sub--active': activeOffering === idx }"
+        @click="$emit('risk-click', item); activeOffering = idx"
       >
         <!-- 头部：项目名 + 状态标签 -->
         <div class="pk-milestone-sub__header">
@@ -64,7 +66,7 @@
               :style="{ left: nodeLeft(pi, item.phases.length) + '%' }"
             >
               <span class="pk-milestone-sub__node-date">{{ phase.date }}</span>
-              <span class="pk-milestone-sub__node-dot">
+              <span class="pk-milestone-sub__node-dot" @click.stop="$emit('phase-click', { phase, offering: item.category + ' ' + item.project, timelineItem: item })">
                 <svg v-if="phase.status === 'completed'" viewBox="0 0 12 12" width="8" height="8">
                   <path d="M2.5 6L5 8.5L9.5 3.5" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
@@ -79,7 +81,7 @@
 </template>
 
 <script setup>
-import { computed, h } from 'vue'
+import { computed, h, ref } from 'vue'
 import DataCard from '../common/DataCard.vue'
 import StatGrid from '../common/StatGrid.vue'
 
@@ -87,7 +89,9 @@ const props = defineProps({
   data: { type: Object, default: null }
 })
 
-defineEmits(['ai-click', 'risk-click'])
+defineEmits(['ai-click', 'summary-click', 'risk-click', 'phase-click'])
+
+const activeOffering = ref(-1)
 
 const FlagIcon = {
   render() {
@@ -211,6 +215,11 @@ function nodeClass(phase, idx, item) {
 .pk-milestone-sub:hover {
   border-color: #dde1e8;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.pk-milestone-sub--active {
+  border-color: #818cf8;
+  box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.15);
 }
 
 /* ===== 头部 ===== */
@@ -355,6 +364,7 @@ function nodeClass(phase, idx, item) {
   justify-content: center;
   transition: all 0.2s ease;
   flex-shrink: 0;
+  cursor: pointer;
 }
 
 /* 已完成 */

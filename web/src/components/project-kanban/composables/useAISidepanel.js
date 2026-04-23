@@ -60,14 +60,20 @@ const sectionBuilders = {
     const active = phases.filter(p => p.status === 'active').length
     const risks = ms.risks || []
 
+    // 焦点风险：取最高等级风险项
+    const topRisk = risks.find(r => normalizeLevel(r.level) === 'danger') || risks.find(r => normalizeLevel(r.level) === 'warning')
+    const progressItems = []
+    if (topRisk) {
+      progressItems.push({ label: '焦点风险', value: topRisk.title || topRisk.text || '', status: normalizeLevel(topRisk.level) === 'danger' ? 'danger' : 'warning' })
+    }
+    progressItems.push({ label: '总阶段', value: `${phases.length}个`, status: 'normal' })
+    progressItems.push({ label: '已完成', value: `${completed}个`, status: completed > 0 ? 'normal' : 'warning' })
+    progressItems.push({ label: '进行中', value: `${active}个`, status: active > 0 ? 'warning' : 'normal' })
+
     return {
       title: '里程碑分析',
       subtitle: project.name || '',
-      progress: [
-        { label: '总阶段', value: `${phases.length}个`, status: 'normal' },
-        { label: '已完成', value: `${completed}个`, status: completed > 0 ? 'normal' : 'warning' },
-        { label: '进行中', value: `${active}个`, status: active > 0 ? 'warning' : 'normal' }
-      ],
+      progress: progressItems,
       reasoning: ms.aiSummary || '',
       risks: formatRisks(risks),
       quickQuestions: ms.quickQuestions || []
@@ -101,14 +107,22 @@ const sectionBuilders = {
       return ra - rb
     })[0]
 
+    // 焦点风险：取最高等级风险项
+    const topRisk = risks.find(r => normalizeLevel(r.level) === 'danger') || risks.find(r => normalizeLevel(r.level) === 'warning')
+    const progressItems = []
+    if (topRisk) {
+      progressItems.push({ label: '焦点风险', value: topRisk.title || topRisk.text || '', status: normalizeLevel(topRisk.level) === 'danger' ? 'danger' : 'warning' })
+    }
+    progressItems.push({ label: '整体达标率', value: `${rate}%`, status: rate < 30 ? 'danger' : (rate < 70 ? 'warning' : 'normal') })
+    progressItems.push({ label: '通过/总数', value: `${totalOk}/${totalAll}`, status: 'normal' })
+    if (worstDim) {
+      progressItems.push({ label: '最弱维度', value: worstDim.label, status: 'warning' })
+    }
+
     return {
       title: '可信管理分析',
       subtitle: project.name || '',
-      progress: [
-        { label: '整体达标率', value: `${rate}%`, status: rate < 30 ? 'danger' : (rate < 70 ? 'warning' : 'normal') },
-        { label: '通过/总数', value: `${totalOk}/${totalAll}`, status: 'normal' },
-        ...(worstDim ? [{ label: '最弱维度', value: worstDim.label, status: 'warning' }] : [])
-      ],
+      progress: progressItems,
       reasoning: td.aiSummary || '',
       risks: formatRisks(risks),
       quickQuestions: td.quickQuestions || []
@@ -174,15 +188,21 @@ const sectionBuilders = {
     const total = (scope.baseline || 0) + (scope.pending || 0) + (scope.inProgress || 0)
     const risks = scope.risks || []
 
+    // 焦点风险
+    const topRisk = risks.find(r => normalizeLevel(r.level) === 'danger') || risks.find(r => normalizeLevel(r.level) === 'warning')
+    const progressItems = []
+    if (topRisk) {
+      progressItems.push({ label: '焦点风险', value: topRisk.title || topRisk.text || '', status: normalizeLevel(topRisk.level) === 'danger' ? 'danger' : 'warning' })
+    }
+    progressItems.push({ label: '需求总数', value: `${total}项`, status: 'normal' })
+    progressItems.push({ label: '已基线', value: `${scope.baseline || 0}项`, status: (scope.baseline || 0) > 0 ? 'normal' : 'warning' })
+    progressItems.push({ label: '进行中', value: `${scope.inProgress || 0}项`, status: 'normal' })
+    progressItems.push({ label: '待处理', value: `${scope.pending || 0}项`, status: (scope.pending || 0) > 0 ? 'warning' : 'normal' })
+
     return {
       title: '范围管理分析',
       subtitle: project.name || '',
-      progress: [
-        { label: '需求总数', value: `${total}项`, status: 'normal' },
-        { label: '已基线', value: `${scope.baseline || 0}项`, status: (scope.baseline || 0) > 0 ? 'normal' : 'warning' },
-        { label: '进行中', value: `${scope.inProgress || 0}项`, status: 'normal' },
-        { label: '待处理', value: `${scope.pending || 0}项`, status: (scope.pending || 0) > 0 ? 'warning' : 'normal' }
-      ],
+      progress: progressItems,
       reasoning: scope.aiSummary || '',
       risks: formatRisks(risks),
       quickQuestions: scope.quickQuestions || []
@@ -195,15 +215,21 @@ const sectionBuilders = {
     const risks = q.risks || []
     const di = q.di || 0
 
+    // 焦点风险
+    const topRisk = risks.find(r => normalizeLevel(r.level) === 'danger') || risks.find(r => normalizeLevel(r.level) === 'warning')
+    const progressItems = []
+    if (topRisk) {
+      progressItems.push({ label: '焦点风险', value: topRisk.title || topRisk.text || '', status: normalizeLevel(topRisk.level) === 'danger' ? 'danger' : 'warning' })
+    }
+    progressItems.push({ label: 'DI值', value: di, status: di > 100 ? 'danger' : (di > 50 ? 'warning' : 'normal') })
+    progressItems.push({ label: '缺陷数', value: `${q.defects || 0}个`, status: (q.defects || 0) > 10 ? 'danger' : 'normal' })
+    progressItems.push({ label: '告警数', value: `${q.warnings || 0}个`, status: (q.warnings || 0) > 0 ? 'warning' : 'normal' })
+    progressItems.push({ label: '解决率', value: `${q.resolveRate || 0}%`, status: (q.resolveRate || 0) < 80 ? 'warning' : 'normal' })
+
     return {
       title: '质量管理分析',
       subtitle: project.name || '',
-      progress: [
-        { label: 'DI值', value: di, status: di > 100 ? 'danger' : (di > 50 ? 'warning' : 'normal') },
-        { label: '缺陷数', value: `${q.defects || 0}个`, status: (q.defects || 0) > 10 ? 'danger' : 'normal' },
-        { label: '告警数', value: `${q.warnings || 0}个`, status: (q.warnings || 0) > 0 ? 'warning' : 'normal' },
-        { label: '解决率', value: `${q.resolveRate || 0}%`, status: (q.resolveRate || 0) < 80 ? 'warning' : 'normal' }
-      ],
+      progress: progressItems,
       reasoning: q.aiSummary || '',
       risks: formatRisks(risks),
       quickQuestions: q.quickQuestions || []
@@ -215,15 +241,21 @@ const sectionBuilders = {
     const s = project.schedule || {}
     const risks = s.risks || []
 
+    // 焦点风险
+    const topRisk = risks.find(r => normalizeLevel(r.level) === 'danger') || risks.find(r => normalizeLevel(r.level) === 'warning')
+    const progressItems = []
+    if (topRisk) {
+      progressItems.push({ label: '焦点风险', value: topRisk.title || topRisk.text || '', status: normalizeLevel(topRisk.level) === 'danger' ? 'danger' : 'warning' })
+    }
+    progressItems.push({ label: '迭代进度', value: `${s.iterProgress || 0}%`, status: (s.iterProgress || 0) >= 60 ? 'normal' : 'warning' })
+    progressItems.push({ label: '测试进度', value: `${s.testProgress || 0}%`, status: (s.testProgress || 0) >= 50 ? 'normal' : 'warning' })
+    progressItems.push({ label: '通过率', value: `${s.passRate || 0}%`, status: (s.passRate || 0) >= 90 ? 'normal' : 'danger' })
+    progressItems.push({ label: '失败数', value: `${s.failed || 0}个`, status: (s.failed || 0) > 0 ? 'danger' : 'normal' })
+
     return {
       title: '进度管理分析',
       subtitle: project.name || '',
-      progress: [
-        { label: '迭代进度', value: `${s.iterProgress || 0}%`, status: (s.iterProgress || 0) >= 60 ? 'normal' : 'warning' },
-        { label: '测试进度', value: `${s.testProgress || 0}%`, status: (s.testProgress || 0) >= 50 ? 'normal' : 'warning' },
-        { label: '通过率', value: `${s.passRate || 0}%`, status: (s.passRate || 0) >= 90 ? 'normal' : 'danger' },
-        { label: '失败数', value: `${s.failed || 0}个`, status: (s.failed || 0) > 0 ? 'danger' : 'normal' }
-      ],
+      progress: progressItems,
       reasoning: s.aiSummary || '',
       risks: formatRisks(risks),
       quickQuestions: s.quickQuestions || []
@@ -235,14 +267,20 @@ const sectionBuilders = {
     const b = project.budget || {}
     const risks = b.risks || []
 
+    // 焦点风险
+    const topRisk = risks.find(r => normalizeLevel(r.level) === 'danger') || risks.find(r => normalizeLevel(r.level) === 'warning')
+    const progressItems = []
+    if (topRisk) {
+      progressItems.push({ label: '焦点风险', value: topRisk.title || topRisk.text || '', status: normalizeLevel(topRisk.level) === 'danger' ? 'danger' : 'warning' })
+    }
+    progressItems.push({ label: '总预算', value: `${b.total || 0}M`, status: 'normal' })
+    progressItems.push({ label: '已执行', value: `${b.executed || 0}M`, status: 'normal' })
+    progressItems.push({ label: '执行率', value: `${b.executionRate || 0}%`, status: (b.executionRate || 0) > 90 ? 'warning' : 'normal' })
+
     return {
       title: '费用执行分析',
       subtitle: project.name || '',
-      progress: [
-        { label: '总预算', value: `${b.total || 0}M`, status: 'normal' },
-        { label: '已执行', value: `${b.executed || 0}M`, status: 'normal' },
-        { label: '执行率', value: `${b.executionRate || 0}%`, status: (b.executionRate || 0) > 90 ? 'warning' : 'normal' }
-      ],
+      progress: progressItems,
       reasoning: b.aiSummary || '',
       risks: formatRisks(risks),
       quickQuestions: b.quickQuestions || []
@@ -263,21 +301,31 @@ const sectionBuilders = {
       test: '测试领域', release: '发布领域'
     }
 
+    // 焦点风险 + 风险筛选逻辑 progress（Q+S任务）
+    const progressItems = []
+    const topRisk = risks.find(r => normalizeLevel(r.level) === 'danger') || risks.find(r => normalizeLevel(r.level) === 'warning')
+    if (topRisk) {
+      progressItems.push({ label: '焦点风险', value: topRisk.title || topRisk.text || '', status: normalizeLevel(topRisk.level) === 'danger' ? 'danger' : 'warning' })
+    }
+    progressItems.push({ label: '状态', value: statusText(data.status), status: data.status === 'green' ? 'normal' : (data.status === 'warning' ? 'warning' : 'danger') })
+    progressItems.push({ label: '风险数', value: `${risks.length}项`, status: risks.some(r => normalizeLevel(r.level) === 'danger') ? 'danger' : (risks.length > 0 ? 'warning' : 'normal') })
+
+    // riskIndex：标记需要自动展开的风险索引
+    const riskIndex = extra.riskIndex ?? -1
+
     return {
       title: `${domainLabels[domain] || domain}分析`,
       subtitle: project.name || '',
-      progress: [
-        { label: '状态', value: statusText(data.status), status: data.status === 'green' ? 'normal' : (data.status === 'warning' ? 'warning' : 'danger') }
-      ],
+      progress: progressItems,
       reasoning: data.aiSummary || '',
       risks: formatRisks(risks),
-      quickQuestions: data.quickQuestions || []
+      quickQuestions: data.quickQuestions || [],
+      ...(riskIndex >= 0 ? { expandedRiskIndex: riskIndex } : {})
     }
   },
 
-  // 项目群总览
-  groupSummary(groupMeta, extra) {
-    const summary = extra.summary || {}
+  // 项目群总览（projectData 即 groupData.summary）
+  groupSummary(summary, extra) {
     const risks = summary.risks || []
     return {
       title: '项目群智能评估',
@@ -288,7 +336,7 @@ const sectionBuilders = {
         { label: '关注风险', value: `${risks.filter(r => r.level === 'warning').length}项`, status: risks.some(r => r.level === 'warning') ? 'warning' : 'normal' }
       ],
       reasoning: summary.aiSummary || '',
-      risks: formatRisks(risks.slice(0, 5)),
+      risks: formatRisks(risks),
       quickQuestions: summary.quickQuestions || []
     }
   },
@@ -373,7 +421,8 @@ const sectionBuilders = {
       ],
       reasoning: project.aiSummary || project.trustDetails?.aiSummary || '',
       risks: formatRisks(allRisks),
-      quickQuestions: [...new Set(allQuestions)].slice(0, 5)
+      quickQuestions: [...new Set(allQuestions)].slice(0, 5),
+      radarData: computeRadarData(project)
     }
   },
 
@@ -494,25 +543,36 @@ const sectionBuilders = {
     const ms = deptData?.department?.milestone || {}
     const timeline = ms.timeline || []
 
-    // 点击单个 timeline 子卡片：展示该 offering 的详细分析
+    // 点击单个 timeline 子卡片：展示该 offering 的详细分析（与设计稿 highlightOffering 一致）
     if (extra?.timelineItem) {
       const item = extra.timelineItem
       const phases = item.phases || []
       // 从 phases[].risks 汇总风险
       const risks = phases.flatMap(p => p.risks || [])
-      // 关键进度：当前/下一个阶段的 objectives
-      const activePhase = phases.find(p => p.status === 'pending' || p.status === 'active') || phases[phases.length - 1]
-      const keyPoints = activePhase?.objectives || []
+
+      // 结构化 phases 数据（与设计稿一致：每个phase独立卡片，含objectives/riskReason）
+      const statusTextMap = { completed: '已完成', active: '进行中', pending: '待达成' }
+      const structuredPhases = phases.map(p => ({
+        name: p.name,
+        date: p.date,
+        status: p.status,
+        statusText: statusTextMap[p.status] || '待达成',
+        risk: p.risk || 'none',
+        objectives: p.objectives || [],
+        riskReason: p.riskReason || '',
+        aiSummary: p.aiSummary || ''
+      }))
 
       return {
         title: `里程碑 · ${item.category} ${item.project}`,
         subtitle: item.group || '部门级',
+        currentPhase: item.currentPhase || '',
         progress: [
           { label: '下一节点', value: item.nextMilestone || '-', status: item.deviation > 10 ? 'danger' : (item.deviation > 0 ? 'warning' : 'normal') },
           { label: '偏差', value: `${item.deviation > 0 ? '+' : ''}${item.deviation}%`, status: item.deviation > 10 ? 'danger' : (item.deviation > 0 ? 'warning' : 'normal') },
           { label: '状态', value: item.status || '-', status: item.deviation > 10 ? 'danger' : (item.deviation > 0 ? 'warning' : 'normal') }
         ],
-        keyPoints,
+        phases: structuredPhases,
         reasoning: item.aiSummary || ms.aiSummary || '',
         risks: formatRisks(risks),
         quickQuestions: item.quickQuestions || ms.quickQuestions || []
@@ -542,10 +602,13 @@ const sectionBuilders = {
     )]
     const normalCount = totalCount - riskProjectNames.length
 
-    // 焦点风险：风险最高的项目+阶段名（与设计稿一致：clickProject.project + ' ' + clickProject.phaseName）
-    const topRisk = allPhaseRisks.find(r => normalizeLevel(r.level) === 'danger')
-      || allPhaseRisks.find(r => normalizeLevel(r.level) === 'warning')
-    const focusText = topRisk ? `${topRisk._project} ${topRisk._phaseName}` : ''
+    // 一句话总结点击时，焦点使用 sentence 上下文
+    const sentence = extra?.sentence || ''
+    const focusText = sentence || (() => {
+      const topRisk = allPhaseRisks.find(r => normalizeLevel(r.level) === 'danger')
+        || allPhaseRisks.find(r => normalizeLevel(r.level) === 'warning')
+      return topRisk ? `${topRisk._project} ${topRisk._phaseName}` : ''
+    })()
     const focusLevel = ms.statusType === 'red' ? 'danger' : (ms.statusType === 'yellow' ? 'warning' : 'normal')
 
     const progressItems = []
@@ -601,15 +664,26 @@ const sectionBuilders = {
         })
       }
 
+      // 动态生成焦点问题（与 HTML 版一致：根据 deviation 判断人力缺口/富余）
+      const deviation = cat.deviation || 0
+      const focusText = deviation < 0
+        ? `${cat.label || ''} 人力缺口${Math.abs(deviation)}人月`
+        : `${cat.label || ''} 人力富余${deviation}人月`
+      const focusLevel = Math.abs(deviation) > 10 ? 'danger' : (Math.abs(deviation) > 5 ? 'warning' : 'normal')
+
+      const progressItems = []
+      if (Math.abs(deviation) > 5) {
+        progressItems.push({ label: '焦点问题', value: focusText, status: focusLevel })
+      }
+      progressItems.push({ label: '工作量', value: `${cat.workload || 0}人月`, status: 'normal' })
+      progressItems.push({ label: '人力', value: `${cat.total || 0}人月`, status: 'normal' })
+      progressItems.push({ label: '利用率', value: `${catUtil}%`, status: catUtil > 100 ? 'danger' : (catUtil > 90 ? 'warning' : 'normal') })
+      progressItems.push({ label: '偏差', value: `${deviation > 0 ? '+' : ''}${deviation}人月`, status: Math.abs(deviation) > 10 ? 'danger' : (Math.abs(deviation) > 5 ? 'warning' : 'normal') })
+
       return {
         title: `AHB人力 · ${cat.label || ''}`,
         subtitle: '部门级',
-        progress: [
-          { label: '工作量', value: `${cat.workload || 0}人月`, status: 'normal' },
-          { label: '人力', value: `${cat.total || 0}人月`, status: 'normal' },
-          { label: '利用率', value: `${catUtil}%`, status: catUtil > 100 ? 'danger' : (catUtil > 90 ? 'warning' : 'normal') },
-          { label: '偏差', value: `${cat.deviation > 0 ? '+' : ''}${cat.deviation || 0}人月`, status: Math.abs(cat.deviation || 0) > 10 ? 'danger' : (Math.abs(cat.deviation || 0) > 5 ? 'warning' : 'normal') }
-        ],
+        progress: progressItems,
         keyPoints,
         reasoning: cat.aiSummary || ahb.aiSummary || '',
         risks: formatRisks(catRisks),
@@ -621,8 +695,9 @@ const sectionBuilders = {
     const totalDeviation = catList.reduce((s, c) => s + (c.deviation || 0), 0)
 
     const progressItems = []
-    // 焦点问题：直接使用一句话总结文本（与设计稿一致，focus = aiSummary 全文）
-    const focusText = ahb.aiSummary || ''
+    // 一句话总结点击时，焦点使用 sentence 上下文；否则使用 aiSummary
+    const sentence = extra?.sentence || ''
+    const focusText = sentence || ahb.aiSummary || ''
     if (focusText) {
       const focusStatus = ahb.statusType === 'red' ? 'danger' : (ahb.statusType === 'yellow' ? 'warning' : 'normal')
       progressItems.push({ label: '焦点问题', value: focusText, status: focusStatus })
@@ -670,14 +745,24 @@ const sectionBuilders = {
       const proj = extra.project
       const rate = proj.budget > 0 ? Math.round((proj.executed || 0) / proj.budget * 100) : 0
       const projRisks = proj.risks || []
+
+      // 动态生成焦点问题（与 HTML 版一致：根据 deviation 判断超支/结余）
+      const deviation = proj.deviation || 0
+      const focusText = `${proj.name || '项目'} 费用执行${deviation > 0 ? '超支' : '结余'}${Math.abs(deviation)}%`
+      const focusLevel = Math.abs(deviation) > 20 ? 'danger' : (Math.abs(deviation) > 10 ? 'warning' : 'normal')
+
+      const progressItems = []
+      if (Math.abs(deviation) > 10) {
+        progressItems.push({ label: '焦点问题', value: focusText, status: focusLevel })
+      }
+      progressItems.push({ label: '预算', value: `${proj.budget || 0}M`, status: 'normal' })
+      progressItems.push({ label: '已执行', value: `${proj.executed || 0}M`, status: 'normal' })
+      progressItems.push({ label: '执行率', value: `${rate}%`, status: rate < 70 ? 'warning' : 'normal' })
+
       return {
         title: `费用执行 · ${proj.name || ''}`,
         subtitle: '部门级',
-        progress: [
-          { label: '预算', value: `${proj.budget || 0}M`, status: 'normal' },
-          { label: '已执行', value: `${proj.executed || 0}M`, status: 'normal' },
-          { label: '执行率', value: `${rate}%`, status: rate < 70 ? 'warning' : 'normal' }
-        ],
+        progress: progressItems,
         reasoning: proj.aiSummary || budget.aiSummary || '',
         risks: formatRisks(projRisks),
         quickQuestions: proj.quickQuestions || budget.quickQuestions || []
@@ -690,8 +775,9 @@ const sectionBuilders = {
 
     // 关键进度：与设计稿一致 — 焦点问题 + 预算总额 + 已执行 + 执行率
     const progressItems = []
-    // 焦点问题：直接使用一句话总结文本（与设计稿一致，focus = aiSummary 全文）
-    const focusText = budget.aiSummary || ''
+    // 一句话总结点击时，焦点使用 sentence 上下文；否则使用 aiSummary
+    const sentence = extra?.sentence || ''
+    const focusText = sentence || budget.aiSummary || ''
     if (focusText) {
       const focusStatus = budget.statusType === 'red' ? 'danger' : (budget.statusType === 'yellow' ? 'warning' : 'normal')
       progressItems.push({ label: '焦点问题', value: focusText, status: focusStatus })
@@ -729,14 +815,20 @@ const sectionBuilders = {
       // 关键进度：phases
       const keyPoints = (to.phases || []).map(p => `${p.name}(${p.date}): ${p.status === 'completed' ? '已完成' : p.status === 'active' ? '进行中' : '待启动'}`)
 
+      // 风险等级映射（与 HTML 版一致）
+      const riskMap = { high: '高', medium: '中', low: '低', none: '低' }
+      const riskLevel = to.risk || 'none'
+      const isOverdue = to.status === 'overdue'
+
       return {
         title: `任务令 · ${to.name || ''}`,
         subtitle: to.project || '部门级',
         progress: [
-          { label: '进度', value: `${to.progress || 0}%`, status: (to.progress || 0) >= 60 ? 'normal' : 'warning' },
-          { label: '行业', value: to.industry || '-', status: 'normal' },
-          { label: '负责人', value: to.owner || '-', status: 'normal' },
-          { label: '截止', value: to.deadline || '-', status: to.status === 'overdue' ? 'danger' : 'normal' }
+          { label: '任务令名称', value: to.name || '-', status: 'normal' },
+          { label: '截止日期', value: to.deadline || '-', status: isOverdue ? 'danger' : 'normal' },
+          { label: '完成进度', value: `${to.progress || 0}%`, status: (to.progress || 0) >= 100 ? 'normal' : ((to.progress || 0) < 50 ? 'danger' : 'warning') },
+          { label: '风险等级', value: riskMap[riskLevel] || '低', status: riskLevel === 'high' ? 'danger' : (riskLevel === 'medium' ? 'warning' : 'normal') },
+          { label: '延期状态', value: isOverdue ? '已延期' : '正常', status: isOverdue ? 'danger' : 'normal' }
         ],
         keyPoints,
         reasoning: task.aiSummary || '',
@@ -754,10 +846,12 @@ const sectionBuilders = {
     const totalCount = taskOrders.length
 
     const progressItems = []
-    // 焦点风险：最高风险任务令名称（与设计稿一致：topRiskOrder.name）
+    // 一句话总结点击时，焦点使用 sentence 上下文；否则使用最高风险任务令名称
+    const sentence = extra?.sentence || ''
     const topRiskOrder = criticalOrders[0] || warningOrders[0]
-    if (topRiskOrder) {
-      progressItems.push({ label: '焦点风险', value: topRiskOrder.name, status: criticalOrders.length > 0 ? 'danger' : 'warning' })
+    const focusText = sentence || (topRiskOrder ? topRiskOrder.name : '')
+    if (focusText) {
+      progressItems.push({ label: '焦点风险', value: focusText, status: criticalOrders.length > 0 ? 'danger' : 'warning' })
     }
     progressItems.push({ label: '任务令总数', value: `${totalCount}个`, status: 'normal' })
     if (criticalOrders.length > 0) {
@@ -791,17 +885,87 @@ const sectionBuilders = {
       if (dimKey === 'projectRisk') {
         dimData = go.projectRisk || {}
         risks = dimData.risks || []
-      } else if (dimKey === 'online') {
-        dimData = go.online || {}
-        risks = dimData.risks || []
-      } else if (dimKey === 'downstream') {
-        dimData = go.downstream || {}
-        risks = dimData.risks || []
-      } else if (dimKey === 'trust') {
-        dimData = go.trustSummary || {}
-        risks = dimData.risks || []
+        // projectRisk 维度使用通用 stats 映射
+        return {
+          title: `${dim.label || dimKey}分析`,
+          subtitle: '部门级',
+          progress: (dim.stats || []).map(s => ({
+            label: s.label,
+            value: s.value,
+            status: s.class?.includes('danger') ? 'danger' : (s.class?.includes('warning') ? 'warning' : 'normal')
+          })),
+          reasoning: dimData?.aiSummary || dim.sentence || '',
+          risks: formatRisks(risks),
+          quickQuestions: dimData?.quickQuestions || []
+        }
       }
 
+      // online 维度专用 builder（D任务）
+      if (dimKey === 'online') {
+        dimData = go.online || {}
+        risks = dimData.risks || []
+        const progressItems = []
+        if (dim.sentence) {
+          progressItems.push({ label: '焦点问题', value: dim.sentence, status: 'warning' })
+        }
+        progressItems.push({ label: '今年基线', value: `${dimData.yearlyBase || 0}个`, status: 'normal' })
+        progressItems.push({ label: '今年新增', value: `${dimData.yearlyNew || 0}个`, status: (dimData.yearlyNew || 0) > 0 ? 'warning' : 'normal' })
+        progressItems.push({ label: '本月新增', value: `${dimData.monthlyNew || 0}个`, status: (dimData.monthlyNew || 0) > 0 ? 'warning' : 'normal' })
+        return {
+          title: '网上表现详情分析',
+          subtitle: '部门级',
+          progress: progressItems,
+          reasoning: dimData.aiSummary || dim.sentence || '',
+          risks: formatRisks(risks),
+          quickQuestions: dimData.quickQuestions || ['关键问题的修复进展如何？', '是否有回归风险？', '监控告警是否正常？']
+        }
+      }
+
+      // downstream 维度专用 builder（E任务）
+      if (dimKey === 'downstream') {
+        dimData = go.downstream || {}
+        risks = dimData.risks || []
+        const progressItems = []
+        if (dim.sentence) {
+          progressItems.push({ label: '焦点问题', value: dim.sentence, status: 'danger' })
+        }
+        progressItems.push({ label: '今年基线', value: `${dimData.yearlyBase || 0}个`, status: 'normal' })
+        progressItems.push({ label: '今年新增', value: `${dimData.yearlyNew || 0}个`, status: (dimData.yearlyNew || 0) > 0 ? 'warning' : 'normal' })
+        progressItems.push({ label: '本月新增', value: `${dimData.monthlyNew || 0}个`, status: (dimData.monthlyNew || 0) > 0 ? 'danger' : 'normal' })
+        return {
+          title: '下游依赖详情分析',
+          subtitle: '部门级',
+          progress: progressItems,
+          reasoning: dimData.aiSummary || dim.sentence || '',
+          risks: formatRisks(risks),
+          quickQuestions: dimData.quickQuestions || ['关键阻塞问题的解决进展如何？', '有哪些依赖需要提前协调？', '是否需要升级到更高层协调？']
+        }
+      }
+
+      // trust 维度专用 builder（F任务）
+      if (dimKey === 'trust') {
+        dimData = go.trustSummary || {}
+        risks = dimData.risks || []
+        const progressItems = []
+        if (dim.sentence) {
+          progressItems.push({ label: '焦点问题', value: dim.sentence, status: 'warning' })
+        }
+        progressItems.push({ label: '达标率', value: `${dimData.overallRate || 0}%`, status: (dimData.overallRate || 0) < 80 ? 'danger' : 'normal' })
+        progressItems.push({ label: '预警项', value: `${dimData.warningCount || 0}个`, status: (dimData.warningCount || 0) > 0 ? 'warning' : 'normal' })
+        progressItems.push({ label: '未达标', value: `${dimData.failCount || 0}个`, status: (dimData.failCount || 0) > 0 ? 'danger' : 'normal' })
+        return {
+          title: '可信管理详情分析',
+          subtitle: '部门级',
+          progress: progressItems,
+          reasoning: dimData.aiSummary || dim.sentence || '',
+          risks: formatRisks(risks),
+          quickQuestions: dimData.quickQuestions || []
+        }
+      }
+
+      // 其他维度 fallback
+      dimData = go[dimKey] || {}
+      risks = dimData.risks || []
       return {
         title: `${dim.label || dimKey}分析`,
         subtitle: '部门级',
@@ -816,7 +980,7 @@ const sectionBuilders = {
       }
     }
 
-    // 点击单个项目群卡片中的风险
+    // 点击单个项目群卡片中的风险（已改为走 group-risk-detail builder，此分支保留作为 fallback）
     if (extra?.risk && extra?.groupCard) {
       const gc = extra.groupCard
       const risk = extra.risk
@@ -834,21 +998,45 @@ const sectionBuilders = {
       }
     }
 
-    // 默认：整体综合风险分析
+    // 默认：整体综合风险分析 — 从 V3/V2/MCU 汇总所有风险（与设计稿一致）
     const pr = go.projectRisk || {}
-    const risks = pr.risks || []
+    const groupIds = ['V3', 'V2', 'MCU']
+    // 从各项目群分别取 risks，带项目群名前缀
+    const allGroupRisks = []
+    groupIds.forEach(gId => {
+      const g = go[gId]
+      if (!g) return
+      const gRisks = g.risks || []
+      gRisks.forEach(r => {
+        allGroupRisks.push({
+          ...r,
+          title: `${g.name || gId} · ${r.title || ''}`
+        })
+      })
+    })
+
+    // 统计各级别风险数
+    const dangerRisks = allGroupRisks.filter(r => normalizeLevel(r.level) === 'danger')
+    const warningRisks = allGroupRisks.filter(r => normalizeLevel(r.level) === 'warning')
+    const normalRisks = allGroupRisks.filter(r => normalizeLevel(r.level) === 'normal')
+
+    // 焦点风险：最高等级风险项
+    const topRisk = dangerRisks[0] || warningRisks[0]
+    const progressItems = []
+    if (topRisk) {
+      progressItems.push({ label: '焦点风险', value: topRisk.title || '', status: normalizeLevel(topRisk.level) === 'danger' ? 'danger' : 'warning' })
+    }
+    progressItems.push({ label: '项目群数', value: `${pr.groupCount || groupIds.length}个`, status: 'normal' })
+    progressItems.push({ label: '高风险', value: `${dangerRisks.length}项`, status: dangerRisks.length > 0 ? 'danger' : 'normal' })
+    progressItems.push({ label: '中风险', value: `${warningRisks.length}项`, status: warningRisks.length > 0 ? 'warning' : 'normal' })
+    progressItems.push({ label: '正常', value: `${normalRisks.length}项`, status: 'normal' })
 
     return {
       title: '项目群综合风险分析',
       subtitle: '部门级',
-      progress: [
-        { label: '项目群数', value: `${pr.groupCount || 0}个`, status: 'normal' },
-        { label: '高风险', value: `${pr.criticalCount || 0}项`, status: (pr.criticalCount || 0) > 0 ? 'danger' : 'normal' },
-        { label: '中风险', value: `${pr.warningCount || 0}项`, status: (pr.warningCount || 0) > 0 ? 'warning' : 'normal' },
-        { label: '正常', value: `${pr.normalCount || 0}项`, status: 'normal' }
-      ],
+      progress: progressItems,
       reasoning: pr.aiSummary || '',
-      risks: formatRisks(risks),
+      risks: formatRisks(allGroupRisks),
       quickQuestions: pr.quickQuestions || []
     }
   },
@@ -876,17 +1064,137 @@ const sectionBuilders = {
     if (!gc) return { title: '项目群风险分析', reasoning: '暂无数据' }
 
     const risks = gc.risks || []
+    const progressItems = []
+
+    // 焦点风险
+    const topRisk = risks.find(r => normalizeLevel(r.level) === 'danger') || risks.find(r => normalizeLevel(r.level) === 'warning')
+    if (topRisk) {
+      progressItems.push({ label: '焦点风险', value: topRisk.title || '', status: normalizeLevel(topRisk.level) === 'danger' ? 'danger' : 'warning' })
+    }
+    progressItems.push({ label: '项目数', value: `${gc.projectCount || 0}个`, status: 'normal' })
+    progressItems.push({ label: '整体进度', value: `${gc.overallProgress || 0}%`, status: (gc.overallProgress || 0) >= 60 ? 'normal' : 'warning' })
+    progressItems.push({ label: '风险数', value: `${risks.length}项`, status: risks.some(r => r.level === 'critical') ? 'danger' : 'normal' })
+
+    // 子项目逐项 progress
+    const subProjects = gc.subProjects || []
+    subProjects.forEach(p => {
+      const pRiskCount = (p.risks || []).filter(r => normalizeLevel(r.level) !== 'normal').length
+      progressItems.push({
+        label: p.name || p.id || '',
+        value: `进度${p.progress || 0}%${pRiskCount > 0 ? `（${pRiskCount}个风险）` : ''}`,
+        status: pRiskCount > 0 ? 'danger' : 'normal'
+      })
+    })
+
     return {
       title: `${gc.name || '项目群'}风险分析`,
       subtitle: gc.targetProject || '部门级',
-      progress: [
-        { label: '项目数', value: `${gc.projectCount || 0}个`, status: 'normal' },
-        { label: '整体进度', value: `${gc.overallProgress || 0}%`, status: (gc.overallProgress || 0) >= 60 ? 'normal' : 'warning' },
-        { label: '风险数', value: `${risks.length}项`, status: risks.some(r => r.level === 'critical') ? 'danger' : 'normal' }
-      ],
+      progress: progressItems,
       reasoning: gc.aiSummary || '',
       risks: formatRisks(risks),
       quickQuestions: gc.quickQuestions || []
+    }
+  },
+
+  // 单条风险 5W2H 详情（项目群综合风险列表项点击）
+  'group-risk-detail'(deptData, extra) {
+    const risk = extra?.risk
+    const gc = extra?.groupCard
+    if (!risk) return { title: '风险详情', reasoning: '暂无数据' }
+
+    const level = normalizeLevel(risk.level)
+    const levelText = { danger: '高风险', warning: '中风险', normal: '低风险' }[level] || '风险'
+
+    // 基本信息（who/when/where — 从风险数据或项目群上下文推断）
+    const progressItems = [
+      { label: '风险级别', value: levelText, status: level === 'danger' ? 'danger' : (level === 'warning' ? 'warning' : 'normal') },
+      { label: '所属项目群', value: gc?.name || '-', status: 'normal' },
+      { label: '目标项目', value: gc?.targetProject || '-', status: 'normal' }
+    ]
+
+    // 格式化单条风险，确保 detail/impact/suggestion 完整
+    const formatted = formatSingleRisk(risk)
+
+    return {
+      title: `${gc?.name ? gc.name + ' · ' : ''}${risk.title || '风险详情'}`,
+      subtitle: gc?.targetProject || '部门级',
+      progress: progressItems,
+      reasoning: '',
+      risks: [formatted],
+      quickQuestions: gc?.quickQuestions || [
+        '该风险的主要影响是什么？',
+        '有哪些具体的应对措施？',
+        '需要协调哪些资源？'
+      ]
+    }
+  },
+
+  // 项目综合风险分析（R任务：点击底部总结条触发）
+  'summary-project'(project) {
+    const fieldLabels = {
+      milestone: '里程碑', trustDetails: '可信', scope: '范围',
+      schedule: '进度', resource: '资源', budget: '费用', quality: '质量'
+    }
+    const riskFields = Object.keys(fieldLabels)
+
+    const allRisks = []
+    const progressItems = []
+
+    riskFields.forEach(f => {
+      const fieldRisks = project[f]?.risks || []
+      if (fieldRisks.length > 0) allRisks.push(...fieldRisks)
+      const criticalCount = fieldRisks.filter(r => normalizeLevel(r.level) === 'danger').length
+      const warningCount = fieldRisks.filter(r => normalizeLevel(r.level) === 'warning').length
+      const label = fieldLabels[f] + '风险'
+      let valStr = ''
+      if (criticalCount > 0) valStr += `${criticalCount}严重 `
+      if (warningCount > 0) valStr += `${warningCount}关注`
+      if (!valStr) valStr = `${fieldRisks.length}项`
+      progressItems.push({ label, value: valStr, status: criticalCount > 0 ? 'danger' : (warningCount > 0 ? 'warning' : 'normal') })
+    })
+
+    // 焦点风险
+    const topRisk = allRisks.find(r => normalizeLevel(r.level) === 'danger')
+      || allRisks.find(r => normalizeLevel(r.level) === 'warning')
+    if (topRisk) {
+      progressItems.unshift({ label: '焦点风险', value: topRisk.title || '', status: normalizeLevel(topRisk.level) === 'danger' ? 'danger' : 'warning' })
+    }
+
+    return {
+      title: `${project.name || '项目'} 综合风险分析`,
+      subtitle: project.name || '',
+      progress: progressItems,
+      reasoning: project.aiSummary || '',
+      risks: formatRisks(allRisks),
+      quickQuestions: project.intentQuestions?.risk || [],
+      radarData: computeRadarData(project)
+    }
+  },
+
+  // 项目群专用 builder（U任务：点击项目群子项目触发）
+  'project-group'(groupData) {
+    const risks = groupData.risks || []
+    const subProjects = groupData.subProjects || []
+
+    const progressItems = []
+    // 焦点风险
+    const topRisk = risks.find(r => normalizeLevel(r.level) === 'danger') || risks.find(r => normalizeLevel(r.level) === 'warning')
+    if (topRisk) {
+      progressItems.push({ label: '焦点风险', value: topRisk.title || '', status: normalizeLevel(topRisk.level) === 'danger' ? 'danger' : 'warning' })
+    }
+    progressItems.push({ label: '子项目数', value: `${groupData.projectCount || subProjects.length}个`, status: 'normal' })
+    progressItems.push({ label: '整体进度', value: `${groupData.overallProgress || 0}%`, status: (groupData.overallProgress || 0) >= 60 ? 'normal' : 'warning' })
+    subProjects.forEach(p => {
+      progressItems.push({ label: p.name || '', value: `进度${p.progress || 0}%`, status: (p.progress || 0) >= 60 ? 'normal' : 'warning' })
+    })
+
+    return {
+      title: `${groupData.name || '项目群'}分析`,
+      subtitle: groupData.name || '',
+      progress: progressItems,
+      reasoning: groupData.aiSummary || '',
+      risks: formatRisks(risks),
+      quickQuestions: groupData.quickQuestions || []
     }
   },
 
@@ -904,6 +1212,165 @@ const sectionBuilders = {
       reasoning: '',
       risks: [],
       quickQuestions: questions
+    }
+  },
+
+  // 指标点击详情（I任务：StatGrid 指标可点击触发）
+  'metric-detail'(deptData, extra) {
+    const cardType = extra.cardType || ''
+    const metric = extra.metric || {}
+    const metricLabel = metric.label || ''
+    const metricValue = metric.value || ''
+
+    // 各卡片类型的指标配置
+    const metricConfigs = {
+      'budget-dept': {
+        '预警项目': { desc: '费用偏差超过10%的项目，需要重点关注执行情况', questions: ['预警项目的超支原因是什么？', '是否有预算调整计划？'] },
+        '项目数': { desc: '当前部门管理的费用项目总数', questions: ['各项目的预算分配情况如何？'] }
+      },
+      'ahb': {
+        '总偏差': { desc: '人力容量与工作量的差距，负值表示人力缺口', questions: ['人力缺口的主要方向是什么？', '如何调整人力配置？'] },
+        '总工作量': { desc: '各部门已分配的工作量总计', questions: ['工作量分配是否均衡？'] }
+      },
+      'task-dept': {
+        '高风险': { desc: '风险等级为高或已延期的任务令，需要紧急关注', questions: ['高风险任务令的阻塞因素是什么？', '是否需要资源倾斜？'] },
+        '待完成': { desc: '进度未达100%的任务令', questions: ['哪些任务令面临延期风险？'] }
+      }
+    }
+
+    const config = metricConfigs[cardType]?.[metricLabel] || {}
+    return {
+      title: `${metricLabel}详情`,
+      subtitle: '部门级',
+      progress: [
+        { label: metricLabel, value: String(metricValue), status: metric.statusClass === 'danger' ? 'danger' : (metric.statusClass === 'warning' ? 'warning' : 'normal') }
+      ],
+      reasoning: config.desc || `${metricLabel}当前值为${metricValue}`,
+      risks: [],
+      quickQuestions: config.questions || [`${metricLabel}指标的分析建议？`, `${metricLabel}数据的变化趋势如何？`]
+    }
+  },
+
+  // 里程碑阶段详情（K任务：点击时间轴节点触发 — 与设计稿 openMilestonePhase 一致）
+  'milestone-phase'(deptData, extra) {
+    const phase = extra?.phase
+    if (!phase) return { title: '阶段详情', reasoning: '暂无数据' }
+    const offering = extra?.offering || ''
+    const timelineItem = extra?.timelineItem
+    const ms = deptData?.department?.milestone || {}
+
+    const objectives = phase.objectives || []
+    const risks = phase.risks || []
+
+    // 风险等级标签（与设计稿一致：独立的彩色标签）
+    const riskLabelMap = { high: '高风险', medium: '中风险', none: '无风险' }
+    const riskLevel = phase.risk || 'none'
+    const riskLabel = riskLabelMap[riskLevel] || '无风险'
+    const riskStatus = riskLevel === 'high' ? 'danger' : (riskLevel === 'medium' ? 'warning' : 'normal')
+    const statusText = phase.status === 'completed' ? '已完成' : (phase.status === 'active' ? '进行中' : '待达成')
+
+    // 快捷问题优先取 offering 级别 timelineItem.quickQuestions（与设计稿一致），再 fallback
+    const offeringQQ = timelineItem?.quickQuestions || ms.quickQuestions || []
+    const defaultQQ = [`该阶段的主要风险是什么？`, `如何确保按时完成？`]
+
+    return {
+      title: `${offering} · ${phase.name}`,
+      subtitle: `${statusText} · 目标日期 ${phase.date || '-'}`,
+      progress: [
+        { label: '风险等级', value: riskLabel, status: riskStatus },
+        { label: '截止日期', value: phase.date || '-', status: 'normal' }
+      ],
+      // 技术目标 (Gate Criteria) — 使用 keyPoints 展示
+      keyPoints: objectives,
+      keyPointsTitle: '技术目标 (Gate Criteria)',
+      // 风险原因作为独立字段（渲染为红色提示框）
+      riskReason: phase.riskReason || '',
+      reasoning: phase.aiSummary || '',
+      risks: formatRisks(risks),
+      quickQuestions: offeringQQ.length > 0 ? offeringQQ : defaultQQ
+    }
+  },
+
+  // 任务令 AI 概览（L任务：按产业分组统计 — 与设计稿 _openTaskOrderAIOverview 一致）
+  'task-overview'(deptData) {
+    const task = deptData?.department?.task || {}
+    const taskOrders = task.taskOrders || []
+
+    // 概览统计
+    const completedCount = taskOrders.filter(o => o.progress >= 100 || o.status === 'completed').length
+    const inProgressCount = taskOrders.filter(o => o.progress > 0 && o.progress < 100 && o.status !== 'completed').length
+    const pendingCount = taskOrders.filter(o => o.progress === 0 && o.status !== 'completed').length
+
+    // 按产业分组
+    const industryMap = {}
+    taskOrders.forEach(to => {
+      const ind = to.industry || '其他'
+      if (!industryMap[ind]) industryMap[ind] = []
+      industryMap[ind].push(to)
+    })
+    const industryCards = Object.entries(industryMap).map(([ind, orders]) => {
+      const iCompleted = orders.filter(o => o.progress >= 100 || o.status === 'completed').length
+      const iCritical = orders.filter(o => o.status === 'critical' || o.risk === 'high').length
+      const iWarning = orders.filter(o => o.status === 'warning' || o.risk === 'medium').length
+      const pct = Math.round(iCompleted / orders.length * 100)
+      return {
+        name: ind,
+        total: orders.length,
+        completed: iCompleted,
+        pct,
+        highRisk: iCritical,
+        mediumRisk: iWarning,
+        status: iCritical > 0 ? 'danger' : (iWarning > 0 ? 'warning' : 'normal')
+      }
+    })
+
+    // 关键风险项
+    const criticalOrders = taskOrders.filter(o => o.status === 'critical' || o.risk === 'high')
+
+    // 时间分布
+    const now = new Date()
+    const thisMonth = taskOrders.filter(o => {
+      const parts = (o.deadline || '').split('/')
+      return parseInt(parts[0]) === (now.getMonth() + 1)
+    }).length
+    const nextMonth = taskOrders.filter(o => {
+      const parts = (o.deadline || '').split('/')
+      return parseInt(parts[0]) === (now.getMonth() + 2)
+    }).length
+
+    return {
+      title: '任务令进展综合分析',
+      subtitle: `共${taskOrders.length}项任务令`,
+      overviewStats: {
+        completed: completedCount,
+        inProgress: inProgressCount,
+        pending: pendingCount
+      },
+      industryCards,
+      criticalOrders: criticalOrders.map(o => ({
+        name: o.name,
+        industry: o.industry,
+        progress: o.progress,
+        deadline: o.deadline,
+        owner: o.owner
+      })),
+      timeDistribution: { thisMonth, nextMonth },
+      reasoning: task.aiSummary || '',
+      risks: formatRisks(task.risks || []),
+      quickQuestions: task.quickQuestions || []
+    }
+  },
+
+  // 外部风险概览（O任务）
+  'external-risk-dept'(deptData, extra) {
+    const sentence = extra?.sentence || ''
+    return {
+      title: '外部风险分析',
+      subtitle: '部门级',
+      progress: [],
+      reasoning: sentence,
+      risks: [],
+      quickQuestions: ['外部风险的影响范围？', '是否有应对预案？', '需要升级处理吗？']
     }
   }
 }
@@ -963,6 +1430,52 @@ function getMaxRiskLevel(risks) {
   if (risks.some(r => normalizeLevel(r.level) === 'danger')) return 'danger'
   if (risks.some(r => normalizeLevel(r.level) === 'warning')) return 'warning'
   return 'normal'
+}
+
+/**
+ * 从项目数据计算雷达图四维评分（0-100）
+ * 维度：进度/质量/成本/风险
+ */
+function computeRadarData(project) {
+  // 进度：取项目整体进度或迭代进度
+  const scheduleScore = Math.min(100, project.progress
+    || project.schedule?.iterProgress
+    || 0)
+
+  // 质量：基于 DI 值和解决率综合评分
+  const q = project.quality || {}
+  const diScore = q.di > 150 ? 20 : q.di > 100 ? 40 : q.di > 50 ? 65 : q.di > 10 ? 85 : 95
+  const resolveScore = q.resolveRate || 0
+  const qualityScore = Math.round(diScore * 0.5 + resolveScore * 0.5)
+
+  // 成本：基于执行率（越接近 100 越好，过高或过低扣分）
+  const b = project.budget || {}
+  const execRate = b.executionRate || 0
+  const costScore = execRate === 0 ? 80
+    : execRate <= 90 ? 95
+    : execRate <= 100 ? 85
+    : execRate <= 110 ? 60
+    : 30
+
+  // 风险：基于各级别风险数量（风险越少分数越高）
+  const allRisks = []
+  const riskFields = ['milestone', 'trustDetails', 'scope', 'schedule', 'resource', 'budget', 'quality']
+  riskFields.forEach(f => {
+    if (project[f]?.risks?.length) allRisks.push(...project[f].risks)
+  })
+  const dangerCount = allRisks.filter(r => normalizeLevel(r.level) === 'danger').length
+  const warningCount = allRisks.filter(r => normalizeLevel(r.level) === 'warning').length
+  const riskScore = Math.max(0, 100 - dangerCount * 25 - warningCount * 10)
+
+  return {
+    indicators: [
+      { name: '进度', max: 100 },
+      { name: '质量', max: 100 },
+      { name: '成本', max: 100 },
+      { name: '风险', max: 100 }
+    ],
+    values: [scheduleScore, qualityScore, costScore, riskScore]
+  }
 }
 
 function statusText(status) {

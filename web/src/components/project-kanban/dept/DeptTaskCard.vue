@@ -6,10 +6,11 @@
     :status-text="statusText"
     :status-color="statusColor"
     :ai-summary="data?.aiSummary"
-    @ai-click="$emit('ai-click', 'task-dept')"
+    @ai-click="$emit('ai-click', 'task-overview')"
+    @summary-click="$emit('summary-click', 'task-dept')"
   >
     <template #stats>
-      <StatGrid :items="summaryItems" />
+      <StatGrid :items="summaryItems" @item-click="$emit('metric-click', 'task-dept', $event)" />
     </template>
 
     <!-- 产业泳道（共享时间轴） -->
@@ -20,7 +21,7 @@
         class="pk-task-lane"
       >
         <!-- 产业标签 -->
-        <div class="pk-task-lane__label">{{ lane.industry }}</div>
+        <div class="pk-task-lane__label" @click.stop="$emit('industry-click', lane.industry)">{{ lane.industry }}</div>
 
         <!-- 泳道节点区域 -->
         <div class="pk-task-lane__content">
@@ -60,7 +61,7 @@ const props = defineProps({
   data: { type: Object, default: null }
 })
 
-defineEmits(['ai-click', 'task-click'])
+defineEmits(['ai-click', 'summary-click', 'task-click', 'metric-click', 'industry-click'])
 
 const ClipboardIcon = {
   render() {
@@ -80,7 +81,7 @@ const summaryItems = computed(() => {
   const tos = props.data?.taskOrders || []
   return [
     { value: tos.length, label: '任务令总数' },
-    { value: tos.filter(t => t.risk === 'high').length, label: '高风险', statusClass: 'danger' },
+    { value: tos.filter(t => t.risk === 'high').length, label: '高风险', statusClass: 'danger', clickable: true },
     { value: tos.filter(t => t.progress < 100).length, label: '待完成', statusClass: 'warning' },
     { value: tos.filter(t => t.progress >= 100).length, label: '已完成', statusClass: 'success' }
   ]
@@ -198,6 +199,12 @@ function ringFgColor(to) {
   color: var(--gray-500);
   background: #f5f6f8;
   border-right: 1px solid #eef0f4;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.pk-task-lane__label:hover {
+  background: #eef2ff;
+  color: #6366f1;
 }
 
 /* 泳道内容：相对定位容器，节点绝对定位 */

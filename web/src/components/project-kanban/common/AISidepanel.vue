@@ -61,15 +61,169 @@
                 </div>
               </div>
 
-              <!-- 关键进度列表（长文本如 objectives/phases） -->
+              <!-- 雷达图（项目级数据才有） -->
+              <div v-if="panelData.radarData" class="ai-sidepanel__radar">
+                <div class="ai-sidepanel__section-title">
+                  <Target :size="13" style="color: #6366f1" />
+                  <span>综合评估</span>
+                </div>
+                <div ref="radarChartRef" class="ai-sidepanel__radar-chart" />
+              </div>
+
+              <!-- 概览统计（任务令AI概览：已完成/进行中/待启动 三格大数字） -->
+              <div v-if="panelData.overviewStats" class="ai-sidepanel__overview-stats">
+                <div class="ai-sidepanel__overview-stat ai-sidepanel__overview-stat--completed">
+                  <span class="ai-sidepanel__overview-num">{{ panelData.overviewStats.completed }}</span>
+                  <span class="ai-sidepanel__overview-label">已完成</span>
+                </div>
+                <div class="ai-sidepanel__overview-stat ai-sidepanel__overview-stat--progress">
+                  <span class="ai-sidepanel__overview-num">{{ panelData.overviewStats.inProgress }}</span>
+                  <span class="ai-sidepanel__overview-label">进行中</span>
+                </div>
+                <div class="ai-sidepanel__overview-stat ai-sidepanel__overview-stat--pending">
+                  <span class="ai-sidepanel__overview-num">{{ panelData.overviewStats.pending }}</span>
+                  <span class="ai-sidepanel__overview-label">待启动</span>
+                </div>
+              </div>
+
+              <!-- 各产业进展（任务令AI概览：产业分组卡片+进度条） -->
+              <div v-if="panelData.industryCards?.length" class="ai-sidepanel__industries">
+                <div class="ai-sidepanel__section-title">
+                  <Target :size="13" style="color: #6366f1" />
+                  <span>各产业进展</span>
+                </div>
+                <div class="ai-sidepanel__industry-list">
+                  <div
+                    v-for="(ind, i) in panelData.industryCards"
+                    :key="i"
+                    class="ai-sidepanel__industry-card"
+                  >
+                    <div class="ai-sidepanel__industry-header">
+                      <span class="ai-sidepanel__industry-name">🏭 {{ ind.name }}</span>
+                      <span class="ai-sidepanel__industry-pct" :class="`ai-sidepanel__industry-pct--${ind.status}`">
+                        {{ ind.completed }}/{{ ind.total }}（{{ ind.pct }}%）
+                      </span>
+                    </div>
+                    <div class="ai-sidepanel__industry-bar">
+                      <div
+                        class="ai-sidepanel__industry-bar-fill"
+                        :class="`ai-sidepanel__industry-bar-fill--${ind.status}`"
+                        :style="{ width: ind.pct + '%' }"
+                      />
+                    </div>
+                    <div class="ai-sidepanel__industry-meta">
+                      <span class="ai-sidepanel__industry-meta-item">已完成 {{ ind.completed }}</span>
+                      <span v-if="ind.highRisk > 0" class="ai-sidepanel__industry-meta-item ai-sidepanel__industry-meta-item--danger">高风险 {{ ind.highRisk }}</span>
+                      <span v-if="ind.mediumRisk > 0" class="ai-sidepanel__industry-meta-item ai-sidepanel__industry-meta-item--warning">中风险 {{ ind.mediumRisk }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 关键风险项（任务令AI概览：critical/high 风险的任务令） -->
+              <div v-if="panelData.criticalOrders?.length" class="ai-sidepanel__critical-orders">
+                <div class="ai-sidepanel__section-title">
+                  <AlertTriangle :size="13" style="color: #dc2626" />
+                  <span>关键风险项</span>
+                </div>
+                <div class="ai-sidepanel__critical-list">
+                  <div
+                    v-for="(o, i) in panelData.criticalOrders"
+                    :key="i"
+                    class="ai-sidepanel__critical-item"
+                  >
+                    <div class="ai-sidepanel__critical-name">{{ o.name }}（{{ o.industry }}）</div>
+                    <div class="ai-sidepanel__critical-meta">进度 {{ o.progress }}% · 截止 {{ o.deadline }} · {{ o.owner }}</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 时间分布（任务令AI概览：本月/下月截止数量） -->
+              <div v-if="panelData.timeDistribution" class="ai-sidepanel__time-dist">
+                <div class="ai-sidepanel__section-title">
+                  <Target :size="13" style="color: #3b82f6" />
+                  <span>时间分布</span>
+                </div>
+                <div class="ai-sidepanel__time-dist-cards">
+                  <div class="ai-sidepanel__time-dist-card">
+                    <span class="ai-sidepanel__time-dist-num">{{ panelData.timeDistribution.thisMonth }}</span>
+                    <span class="ai-sidepanel__time-dist-label">本月截止</span>
+                  </div>
+                  <div class="ai-sidepanel__time-dist-card">
+                    <span class="ai-sidepanel__time-dist-num">{{ panelData.timeDistribution.nextMonth }}</span>
+                    <span class="ai-sidepanel__time-dist-label">下月截止</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 当前状态（里程碑子卡片） -->
+              <div v-if="panelData.currentPhase" class="ai-sidepanel__current-phase">
+                📍 当前状态：{{ panelData.currentPhase }}
+              </div>
+
+              <!-- OBP 里程碑节点（结构化卡片，与设计稿一致） -->
+              <div v-if="panelData.phases?.length" class="ai-sidepanel__phases">
+                <div class="ai-sidepanel__section-title">
+                  <Target :size="13" style="color: #6366f1" />
+                  <span>OBP 里程碑节点</span>
+                </div>
+                <div class="ai-sidepanel__phases-list">
+                  <div
+                    v-for="(phase, i) in panelData.phases"
+                    :key="i"
+                    class="ai-sidepanel__phase-card"
+                    :class="{
+                      'ai-sidepanel__phase-card--active': phase.status === 'active',
+                      'ai-sidepanel__phase-card--risk-high': phase.risk === 'high',
+                      'ai-sidepanel__phase-card--risk-medium': phase.risk === 'medium'
+                    }"
+                  >
+                    <div class="ai-sidepanel__phase-header">
+                      <span class="ai-sidepanel__phase-icon">
+                        <svg v-if="phase.status === 'completed'" viewBox="0 0 16 16" width="14" height="14"><circle cx="8" cy="8" r="7" fill="#22c55e"/><path d="M5 8l2 2 4-4" fill="none" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        <svg v-else-if="phase.status === 'active'" viewBox="0 0 16 16" width="14" height="14"><circle cx="8" cy="8" r="7" fill="#f59e0b"/><path d="M6 5l4 3-4 3z" fill="white"/></svg>
+                        <svg v-else viewBox="0 0 16 16" width="14" height="14"><circle cx="8" cy="8" r="7" fill="#d1d5db"/><circle cx="8" cy="8" r="3" fill="white"/></svg>
+                      </span>
+                      <span class="ai-sidepanel__phase-name">{{ phase.name }}</span>
+                      <span v-if="phase.risk && phase.risk !== 'none'" class="ai-sidepanel__phase-risk-tag" :class="`ai-sidepanel__phase-risk-tag--${phase.risk}`">
+                        {{ phase.risk === 'high' ? '高风险' : '中风险' }}
+                      </span>
+                      <span class="ai-sidepanel__phase-status" :class="`ai-sidepanel__phase-status--${phase.status}`">{{ phase.statusText }}</span>
+                      <span class="ai-sidepanel__phase-date">{{ phase.date }}</span>
+                    </div>
+                    <!-- 技术目标 (Gate Criteria) -->
+                    <div v-if="phase.objectives?.length" class="ai-sidepanel__phase-objectives">
+                      <div class="ai-sidepanel__phase-objectives-label">技术目标</div>
+                      <ul class="ai-sidepanel__phase-objectives-list">
+                        <li v-for="(obj, j) in phase.objectives" :key="j">
+                          <span class="ai-sidepanel__phase-obj-check">✓</span>
+                          {{ obj }}
+                        </li>
+                      </ul>
+                    </div>
+                    <!-- 风险原因 -->
+                    <div v-if="phase.riskReason" class="ai-sidepanel__phase-risk-reason">
+                      ⚠️ 风险原因：{{ phase.riskReason }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 关键进度列表 / 技术目标（标题可自定义） -->
               <div v-if="panelData.keyPoints?.length" class="ai-sidepanel__keypoints">
                 <div class="ai-sidepanel__section-title">
                   <Target :size="13" style="color: #6366f1" />
-                  <span>关键进度</span>
+                  <span>{{ panelData.keyPointsTitle || '关键进度' }}</span>
                 </div>
                 <ul class="ai-sidepanel__keypoints-list">
                   <li v-for="(point, i) in panelData.keyPoints" :key="i">{{ point }}</li>
                 </ul>
+              </div>
+
+              <!-- 独立风险提示框（阶段详情页的风险原因） -->
+              <div v-if="panelData.riskReason" class="ai-sidepanel__standalone-risk-reason">
+                <div class="ai-sidepanel__standalone-risk-reason-title">⚠️ 风险详情</div>
+                <div class="ai-sidepanel__standalone-risk-reason-text">{{ panelData.riskReason }}</div>
               </div>
 
               <!-- AI 分析推理 -->
@@ -214,7 +368,13 @@
 <script setup>
 import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { message as antMessage } from 'ant-design-vue'
+import * as echarts from 'echarts/core'
+import { RadarChart } from 'echarts/charts'
+import { TooltipComponent } from 'echarts/components'
+import { CanvasRenderer } from 'echarts/renderers'
 import { Lightbulb, X, Sparkles, AlertTriangle, ChevronDown, MessageCircle, Search, Info, CheckCircle, Target } from 'lucide-vue-next'
+
+echarts.use([RadarChart, TooltipComponent, CanvasRenderer])
 import KanbanChatArea from './KanbanChatArea.vue'
 import AgentInputArea from '@/components/AgentInputArea.vue'
 import AgentPanel from '@/components/AgentPanel.vue'
@@ -254,6 +414,8 @@ const scrollContainerRef = ref(null)
 const filePanelOpen = ref(false)
 const filePanelRef = ref(null)
 const filePanelExpanded = ref(false)
+const radarChartRef = ref(null)
+let radarChart = null
 
 // 文件面板拖拽状态
 let startResizeX = 0
@@ -310,6 +472,7 @@ onBeforeUnmount(() => {
   document.body.style.left = ''
   document.body.style.right = ''
   document.body.style.overflowY = ''
+  if (radarChart) { radarChart.dispose(); radarChart = null }
 })
 
 // ==================== 滚动容器注册 ====================
@@ -343,6 +506,14 @@ const panelData = reactive({
   subtitle: '',
   progress: [],
   keyPoints: [],
+  keyPointsTitle: '',
+  phases: [],
+  currentPhase: '',
+  riskReason: '',
+  overviewStats: null,
+  industryCards: [],
+  criticalOrders: [],
+  timeDistribution: null,
   reasoning: '',
   risks: [],
   quickQuestions: []
@@ -351,7 +522,7 @@ const panelData = reactive({
 const expandedRisks = reactive(new Set())
 
 const hasPanelData = computed(() => {
-  return panelData.progress?.length || panelData.keyPoints?.length || panelData.reasoning || panelData.risks?.length
+  return panelData.progress?.length || panelData.keyPoints?.length || panelData.phases?.length || panelData.reasoning || panelData.risks?.length
 })
 
 watch(() => [props.visible, props.data], ([vis, data]) => {
@@ -360,18 +531,36 @@ watch(() => [props.visible, props.data], ([vis, data]) => {
     panelData.subtitle = data.subtitle || ''
     panelData.progress = data.progress || []
     panelData.keyPoints = data.keyPoints || []
+    panelData.keyPointsTitle = data.keyPointsTitle || ''
+    panelData.phases = data.phases || []
+    panelData.currentPhase = data.currentPhase || ''
+    panelData.riskReason = data.riskReason || ''
+    panelData.overviewStats = data.overviewStats || null
+    panelData.industryCards = data.industryCards || []
+    panelData.criticalOrders = data.criticalOrders || []
+    panelData.timeDistribution = data.timeDistribution || null
     panelData.reasoning = data.reasoning || ''
     panelData.risks = data.risks || []
     panelData.quickQuestions = data.quickQuestions || []
     // 猜你想问点击时隐藏数据概览
     dataCollapsed.value = !!data.hideData
     expandedRisks.clear()
-    if (panelData.risks.length > 0) expandedRisks.add(0)
+    if (panelData.risks.length > 0) {
+      // 支持 riskIndex：自动展开指定索引的风险
+      const expandIdx = data.expandedRiskIndex ?? 0
+      if (expandIdx >= 0 && expandIdx < panelData.risks.length) {
+        expandedRisks.add(expandIdx)
+      } else if (panelData.risks.length > 0) {
+        expandedRisks.add(0)
+      }
+    }
     // 自动发送消息（猜你想问场景）
     if (data.autoSend) {
       inputText.value = data.autoSend
       nextTick(() => handleSend())
     }
+    // 雷达图：数据加载后初始化
+    nextTick(() => initOrUpdateRadar())
   }
 }, { immediate: true, deep: true })
 
@@ -454,6 +643,47 @@ function formatReasoning(text) {
   return text
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
     .replace(/\n/g, '<br>')
+}
+
+// ==================== 雷达图 ====================
+function initOrUpdateRadar() {
+  if (!panelData.radarData || !radarChartRef.value) {
+    if (radarChart) { radarChart.dispose(); radarChart = null }
+    return
+  }
+  if (!radarChart) {
+    radarChart = echarts.init(radarChartRef.value)
+  }
+  const { indicators, values } = panelData.radarData
+  radarChart.setOption({
+    radar: {
+      indicator: indicators,
+      shape: 'circle',
+      splitNumber: 4,
+      axisName: { color: '#6b7280', fontSize: 11 },
+      splitArea: { areaStyle: { color: ['rgba(99,102,241,0.02)', 'rgba(99,102,241,0.04)', 'rgba(99,102,241,0.06)', 'rgba(99,102,241,0.08)'] } },
+      splitLine: { lineStyle: { color: 'rgba(0,0,0,0.06)' } },
+      axisLine: { lineStyle: { color: 'rgba(0,0,0,0.08)' } }
+    },
+    series: [{
+      type: 'radar',
+      data: [{
+        value: values,
+        areaStyle: { color: 'rgba(99,102,241,0.18)' },
+        lineStyle: { color: '#6366f1', width: 2 },
+        itemStyle: { color: '#6366f1' },
+        symbol: 'circle',
+        symbolSize: 5
+      }]
+    }],
+    tooltip: {
+      trigger: 'item',
+      formatter(params) {
+        const names = indicators.map(i => i.name)
+        return params.value.map((v, i) => `${names[i]}: ${v}`).join('<br/>')
+      }
+    }
+  })
 }
 </script>
 
@@ -665,6 +895,291 @@ function formatReasoning(text) {
 }
 .ai-sidepanel__progress-value--danger { color: #ef4444; }
 .ai-sidepanel__progress-value--warning { color: #d97706; }
+
+/* Radar Chart */
+.ai-sidepanel__radar-chart {
+  width: 100%;
+  height: 200px;
+}
+
+/* Overview Stats (任务令概览) */
+.ai-sidepanel__overview-stats {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+.ai-sidepanel__overview-stat {
+  flex: 1;
+  text-align: center;
+  padding: 10px;
+  border-radius: 8px;
+}
+.ai-sidepanel__overview-stat--completed { background: #f0fdf4; }
+.ai-sidepanel__overview-stat--progress { background: #eff6ff; }
+.ai-sidepanel__overview-stat--pending { background: #f3f4f6; }
+.ai-sidepanel__overview-num {
+  display: block;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+}
+.ai-sidepanel__overview-stat--completed .ai-sidepanel__overview-num { color: #22c55e; }
+.ai-sidepanel__overview-stat--progress .ai-sidepanel__overview-num { color: #3b82f6; }
+.ai-sidepanel__overview-stat--pending .ai-sidepanel__overview-num { color: #6b7280; }
+.ai-sidepanel__overview-label {
+  display: block;
+  font-size: 11px;
+  color: #6b7280;
+  margin-top: 4px;
+}
+
+/* Industry Cards (任务令概览) */
+.ai-sidepanel__industry-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ai-sidepanel__industry-card {
+  padding: 10px 12px;
+  background: #f9fafb;
+  border-radius: 8px;
+}
+.ai-sidepanel__industry-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.ai-sidepanel__industry-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+}
+.ai-sidepanel__industry-pct {
+  font-size: 12px;
+  font-weight: 600;
+}
+.ai-sidepanel__industry-pct--danger { color: #ef4444; }
+.ai-sidepanel__industry-pct--warning { color: #f59e0b; }
+.ai-sidepanel__industry-pct--normal { color: #22c55e; }
+.ai-sidepanel__industry-bar {
+  width: 100%;
+  height: 4px;
+  background: #e5e7eb;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.ai-sidepanel__industry-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+.ai-sidepanel__industry-bar-fill--danger { background: #ef4444; }
+.ai-sidepanel__industry-bar-fill--warning { background: #f59e0b; }
+.ai-sidepanel__industry-bar-fill--normal { background: #22c55e; }
+.ai-sidepanel__industry-meta {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+.ai-sidepanel__industry-meta-item {
+  font-size: 10px;
+  color: #9ca3af;
+}
+.ai-sidepanel__industry-meta-item--danger { color: #ef4444; }
+.ai-sidepanel__industry-meta-item--warning { color: #f59e0b; }
+
+/* Critical Orders (任务令概览) */
+.ai-sidepanel__critical-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ai-sidepanel__critical-item {
+  padding: 8px 10px;
+  background: #fef2f2;
+  border-radius: 6px;
+}
+.ai-sidepanel__critical-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #7f1d1d;
+}
+.ai-sidepanel__critical-meta {
+  font-size: 11px;
+  color: #9ca3af;
+  margin-top: 2px;
+}
+
+/* Time Distribution (任务令概览) */
+.ai-sidepanel__time-dist-cards {
+  display: flex;
+  gap: 8px;
+}
+.ai-sidepanel__time-dist-card {
+  flex: 1;
+  text-align: center;
+  padding: 8px;
+  background: #eff6ff;
+  border-radius: 6px;
+}
+.ai-sidepanel__time-dist-num {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  color: #3b82f6;
+}
+.ai-sidepanel__time-dist-label {
+  display: block;
+  font-size: 10px;
+  color: #6b7280;
+  margin-top: 2px;
+}
+
+/* Current Phase */
+.ai-sidepanel__current-phase {
+  padding: 8px 12px;
+  background: #f0f9ff;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #0369a1;
+  line-height: 1.6;
+  margin-bottom: 2px;
+}
+
+/* OBP Phases (Structured) */
+.ai-sidepanel__phases-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ai-sidepanel__phase-card {
+  padding: 10px 12px;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  transition: border-color 0.2s;
+}
+.ai-sidepanel__phase-card--active {
+  background: #fffbeb;
+}
+.ai-sidepanel__phase-card--risk-high {
+  border-color: #fca5a5;
+}
+.ai-sidepanel__phase-card--risk-medium {
+  border-color: #fde68a;
+}
+.ai-sidepanel__phase-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.ai-sidepanel__phase-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+.ai-sidepanel__phase-name {
+  font-weight: 600;
+  font-size: 13px;
+  color: #111827;
+}
+.ai-sidepanel__phase-risk-tag {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: white;
+}
+.ai-sidepanel__phase-risk-tag--high {
+  background: #ef4444;
+}
+.ai-sidepanel__phase-risk-tag--medium {
+  background: #f59e0b;
+}
+.ai-sidepanel__phase-status {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 500;
+}
+.ai-sidepanel__phase-status--completed {
+  color: #22c55e;
+}
+.ai-sidepanel__phase-status--active {
+  color: #f59e0b;
+}
+.ai-sidepanel__phase-status--pending {
+  color: #9ca3af;
+}
+.ai-sidepanel__phase-date {
+  font-size: 11px;
+  color: #9ca3af;
+  margin-left: 6px;
+}
+.ai-sidepanel__phase-objectives {
+  margin-top: 6px;
+}
+.ai-sidepanel__phase-objectives-label {
+  font-size: 11px;
+  color: #6b7280;
+  margin-bottom: 4px;
+}
+.ai-sidepanel__phase-objectives-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ai-sidepanel__phase-objectives-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 6px 8px;
+  background: #f9fafb;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #374151;
+  line-height: 1.5;
+}
+.ai-sidepanel__phase-obj-check {
+  color: #22c55e;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.ai-sidepanel__phase-risk-reason {
+  margin-top: 8px;
+  padding: 6px 8px;
+  background: #fef2f2;
+  border-left: 3px solid #ef4444;
+  border-radius: 4px;
+  font-size: 11px;
+  color: #dc2626;
+  line-height: 1.5;
+}
+
+/* Standalone Risk Reason (阶段详情页) */
+.ai-sidepanel__standalone-risk-reason {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: #fef2f2;
+  border-left: 3px solid #ef4444;
+  border-radius: 6px;
+}
+.ai-sidepanel__standalone-risk-reason-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #dc2626;
+  margin-bottom: 4px;
+}
+.ai-sidepanel__standalone-risk-reason-text {
+  font-size: 12px;
+  color: #7f1d1d;
+  line-height: 1.6;
+}
 
 /* Key Points */
 .ai-sidepanel__keypoints-list {

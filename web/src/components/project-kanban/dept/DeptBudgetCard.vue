@@ -7,9 +7,10 @@
     :status-color="statusColor"
     :ai-summary="data?.aiSummary"
     @ai-click="$emit('ai-click', 'budget-dept')"
+    @summary-click="$emit('summary-click', 'budget-dept')"
   >
     <template #stats>
-      <StatGrid :items="summaryItems" />
+      <StatGrid :items="summaryItems" @item-click="$emit('metric-click', 'budget-dept', $event)" />
     </template>
 
     <!-- 2x2 正方形项目子卡片 -->
@@ -71,7 +72,7 @@ const props = defineProps({
   data: { type: Object, default: null }
 })
 
-defineEmits(['ai-click', 'project-click'])
+defineEmits(['ai-click', 'summary-click', 'project-click', 'metric-click'])
 
 const DollarIcon = {
   render() {
@@ -96,7 +97,7 @@ const summaryItems = computed(() => {
     { value: projs.length || '-', label: '项目数' },
     { value: totalBudget ? `¥${totalBudget}M` : '-', label: '总预算(M)' },
     { value: totalExecuted ? `¥${totalExecuted}M` : '-', label: '已执行(M)' },
-    { value: warningCount || '-', label: '预警项目', statusClass: warningCount > 0 ? 'warning' : '' }
+    { value: warningCount || '-', label: '预警项目', statusClass: warningCount > 0 ? 'warning' : '', clickable: true }
   ]
 })
 
