@@ -642,10 +642,10 @@ function handleIndustryHighlight(industry) {
   gap: 16px;
 }
 
-/* Dept grid - 4 columns for department view */
+/* Dept grid - 默认 2*2 布局 */
 .pk-kanban__dept-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 12px;
   min-width: 0;
 }
@@ -689,12 +689,6 @@ function handleIndustryHighlight(industry) {
 }
 
 /* Responsive */
-@media (max-width: 1280px) {
-  .pk-kanban__dept-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
 @media (max-width: 1024px) {
   .pk-kanban__grid {
     grid-template-columns: 1fr;

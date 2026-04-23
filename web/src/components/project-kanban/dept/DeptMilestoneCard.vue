@@ -230,7 +230,7 @@ function nodeClass(phase, idx, item) {
 }
 
 .pk-milestone-sub__title {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: #1e293b;
   overflow: hidden;
@@ -241,7 +241,7 @@ function nodeClass(phase, idx, item) {
 }
 
 .pk-milestone-sub__tag {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   padding: 1px 6px;
   border-radius: 4px;
@@ -266,8 +266,8 @@ function nodeClass(phase, idx, item) {
 /* 弧形半圆仪表容器 */
 .pk-milestone-sub__arc {
   position: relative;
-  width: 52px;
-  height: 26px;
+  width: 64px;
+  height: 32px;
   flex-shrink: 0;
 }
 
@@ -281,7 +281,7 @@ function nodeClass(phase, idx, item) {
   bottom: 0;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
   color: #475569;
   white-space: nowrap;
@@ -299,7 +299,7 @@ function nodeClass(phase, idx, item) {
 }
 
 .pk-milestone-sub__next-name {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   color: #334155;
   overflow: hidden;
@@ -308,7 +308,7 @@ function nodeClass(phase, idx, item) {
 }
 
 .pk-milestone-sub__next-date {
-  font-size: 11px;
+  font-size: 12px;
   color: #94a3b8;
   font-variant-numeric: tabular-nums;
 }
@@ -317,18 +317,18 @@ function nodeClass(phase, idx, item) {
 .pk-milestone-sub__track {
   position: relative;
   margin-top: auto;
-  /* 日期(10px行高) + gap(2px) + 圆点半径(7px) = 19px 为圆点中心 */
-  /* 总高度 = 10 + 2 + 14 + 2 + 10 = 38px, 留点余量 */
-  height: 40px;
+  /* 日期(11px行高) + gap(2px) + 圆点半径(9px) = 22px 为圆点中心 */
+  /* 总高度 = 11 + 2 + 18 + 2 + 11 = 44px, 留点余量 */
+  height: 48px;
 }
 
 /* 连线 — 精确穿过圆点中心 */
 .pk-milestone-sub__track-line {
   position: absolute;
-  top: 18px;
+  top: 22px;
   left: 10%;
   right: 10%;
-  height: 1.5px;
+  height: 2px;
   background: #e2e8f0;
 }
 
@@ -346,17 +346,17 @@ function nodeClass(phase, idx, item) {
 
 /* 日期 */
 .pk-milestone-sub__node-date {
-  font-size: 10px;
+  font-size: 11px;
   color: #94a3b8;
   font-variant-numeric: tabular-nums;
   line-height: 1;
-  height: 10px;
+  height: 11px;
 }
 
 /* 圆点 */
 .pk-milestone-sub__node-dot {
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   border: 2px solid #cbd5e1;
   background: #fff;
@@ -397,11 +397,11 @@ function nodeClass(phase, idx, item) {
 
 /* 阶段名 */
 .pk-milestone-sub__node-label {
-  font-size: 9px;
+  font-size: 11px;
   color: #6b7280;
   white-space: nowrap;
   text-align: center;
-  max-width: 48px;
+  max-width: 56px;
   overflow: hidden;
   text-overflow: ellipsis;
   line-height: 1.2;
@@ -426,56 +426,17 @@ function nodeClass(phase, idx, item) {
 
 @media (min-width: 1600px) {
   .pk-milestone-sub__title {
-    font-size: 14px;
-  }
-  .pk-milestone-sub__tag {
-    font-size: 12px;
-  }
-  .pk-milestone-sub__arc {
-    width: 56px;
-    height: 28px;
-  }
-  .pk-milestone-sub__arc-label {
-    font-size: 12px;
-  }
-  .pk-milestone-sub__next-name {
-    font-size: 14px;
-  }
-  .pk-milestone-sub__next-date {
-    font-size: 12px;
-  }
-  .pk-milestone-sub__node-date {
-    font-size: 11px;
-  }
-  .pk-milestone-sub__node-dot {
-    width: 16px;
-    height: 16px;
-  }
-  .pk-milestone-sub__node-label {
-    font-size: 10px;
-    max-width: 52px;
-  }
-  .pk-milestone-sub__track {
-    height: 42px;
-  }
-  .pk-milestone-sub__track-line {
-    top: 20px;
-  }
-}
-
-@media (min-width: 1920px) {
-  .pk-milestone-sub__title {
     font-size: 15px;
   }
   .pk-milestone-sub__tag {
     font-size: 13px;
   }
   .pk-milestone-sub__arc {
-    width: 60px;
-    height: 30px;
+    width: 76px;
+    height: 38px;
   }
   .pk-milestone-sub__arc-label {
-    font-size: 13px;
+    font-size: 15px;
   }
   .pk-milestone-sub__next-name {
     font-size: 15px;
@@ -485,45 +446,6 @@ function nodeClass(phase, idx, item) {
   }
   .pk-milestone-sub__node-date {
     font-size: 12px;
-  }
-  .pk-milestone-sub__node-dot {
-    width: 18px;
-    height: 18px;
-  }
-  .pk-milestone-sub__node-label {
-    font-size: 11px;
-    max-width: 56px;
-  }
-  .pk-milestone-sub__track {
-    height: 46px;
-  }
-  .pk-milestone-sub__track-line {
-    top: 22px;
-  }
-}
-
-@media (min-width: 2560px) {
-  .pk-milestone-sub__title {
-    font-size: 16px;
-  }
-  .pk-milestone-sub__tag {
-    font-size: 13px;
-  }
-  .pk-milestone-sub__arc {
-    width: 64px;
-    height: 32px;
-  }
-  .pk-milestone-sub__arc-label {
-    font-size: 14px;
-  }
-  .pk-milestone-sub__next-name {
-    font-size: 16px;
-  }
-  .pk-milestone-sub__next-date {
-    font-size: 14px;
-  }
-  .pk-milestone-sub__node-date {
-    font-size: 13px;
   }
   .pk-milestone-sub__node-dot {
     width: 20px;
@@ -538,6 +460,84 @@ function nodeClass(phase, idx, item) {
   }
   .pk-milestone-sub__track-line {
     top: 24px;
+  }
+}
+
+@media (min-width: 1920px) {
+  .pk-milestone-sub__title {
+    font-size: 16px;
+  }
+  .pk-milestone-sub__tag {
+    font-size: 14px;
+  }
+  .pk-milestone-sub__arc {
+    width: 88px;
+    height: 44px;
+  }
+  .pk-milestone-sub__arc-label {
+    font-size: 16px;
+  }
+  .pk-milestone-sub__next-name {
+    font-size: 16px;
+  }
+  .pk-milestone-sub__next-date {
+    font-size: 14px;
+  }
+  .pk-milestone-sub__node-date {
+    font-size: 13px;
+  }
+  .pk-milestone-sub__node-dot {
+    width: 22px;
+    height: 22px;
+  }
+  .pk-milestone-sub__node-label {
+    font-size: 13px;
+    max-width: 64px;
+  }
+  .pk-milestone-sub__track {
+    height: 54px;
+  }
+  .pk-milestone-sub__track-line {
+    top: 26px;
+  }
+}
+
+@media (min-width: 2560px) {
+  .pk-milestone-sub__title {
+    font-size: 17px;
+  }
+  .pk-milestone-sub__tag {
+    font-size: 14px;
+  }
+  .pk-milestone-sub__arc {
+    width: 100px;
+    height: 50px;
+  }
+  .pk-milestone-sub__arc-label {
+    font-size: 18px;
+  }
+  .pk-milestone-sub__next-name {
+    font-size: 17px;
+  }
+  .pk-milestone-sub__next-date {
+    font-size: 15px;
+  }
+  .pk-milestone-sub__node-date {
+    font-size: 14px;
+  }
+  .pk-milestone-sub__node-dot {
+    width: 24px;
+    height: 24px;
+  }
+  .pk-milestone-sub__node-label {
+    font-size: 14px;
+    max-width: 68px;
+  }
+  .pk-milestone-sub__track {
+    height: 58px;
+  }
+  .pk-milestone-sub__track-line {
+    top: 28px;
   }
 }
 </style>

@@ -5,7 +5,14 @@
       <div v-if="visible" class="ai-sidepanel__overlay" @click="close" />
     </Transition>
     <Transition name="ai-sidepanel">
-      <div v-if="visible" class="ai-sidepanel">
+      <div
+        v-if="visible"
+        ref="sidepanelRef"
+        class="ai-sidepanel"
+        :class="{ 'is-resizing': isResizing }"
+      >
+        <!-- 拖拽手柄 -->
+        <div class="resize-handle" @pointerdown="startResize" />
         <!-- 头部 -->
         <div class="ai-sidepanel__header">
           <div class="ai-sidepanel__header-left">
@@ -415,11 +422,109 @@ const filePanelOpen = ref(false)
 const filePanelRef = ref(null)
 const filePanelExpanded = ref(false)
 const radarChartRef = ref(null)
+const sidepanelRef = ref(null)
 let radarChart = null
 
 // 文件面板拖拽状态
 let startResizeX = 0
 let startResizeWidth = 0
+
+// ==================== 主侧边栏拖拽调整宽度 ====================
+const isResizing = ref(false)
+const SIDE_PANEL_MIN_WIDTH = 400
+const SIDE_PANEL_MAX_WIDTH = 1200
+const SIDE_PANEL_WIDTH_KEY = 'kanban-sidepanel-width'
+
+let resizePointerId = null
+let pendingClientX = 0
+let resizeFrameId = 0
+let sidepanelStartX = 0
+let sidepanelStartWidth = 0
+
+const flushResize = () => {
+  resizeFrameId = 0
+  if (!isResizing.value || !sidepanelRef.value) return
+  const deltaX = pendingClientX - sidepanelStartX
+  const newWidth = Math.max(SIDE_PANEL_MIN_WIDTH, Math.min(SIDE_PANEL_MAX_WIDTH, sidepanelStartWidth - deltaX))
+  sidepanelRef.value.style.width = `${newWidth}px`
+  // 同步更新文件面板位置
+  if (filePanelRef.value) {
+    filePanelRef.value.style.right = `${newWidth}px`
+  }
+}
+
+const queueResize = (clientX) => {
+  pendingClientX = clientX
+  if (resizeFrameId) return
+  resizeFrameId = window.requestAnimationFrame(flushResize)
+}
+
+const startResize = (e) => {
+  if (e.button !== 0) return
+  if (!sidepanelRef.value) return
+
+  isResizing.value = true
+  resizePointerId = e.pointerId
+  pendingClientX = e.clientX
+  sidepanelStartX = e.clientX
+  sidepanelStartWidth = sidepanelRef.value.offsetWidth
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+
+  e.currentTarget?.setPointerCapture?.(e.pointerId)
+  window.addEventListener('pointermove', onPointerMove)
+  window.addEventListener('pointerup', stopResize)
+  window.addEventListener('pointercancel', stopResize)
+}
+
+const onPointerMove = (e) => {
+  if (!isResizing.value || e.pointerId !== resizePointerId) return
+  queueResize(e.clientX)
+}
+
+const stopResize = (e) => {
+  if (!isResizing.value || (e && e.pointerId !== resizePointerId)) return
+
+  if (resizeFrameId) {
+    window.cancelAnimationFrame(resizeFrameId)
+    resizeFrameId = 0
+  }
+
+  if (e) {
+    pendingClientX = e.clientX
+    flushResize()
+  }
+
+  isResizing.value = false
+  resizePointerId = null
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+  window.removeEventListener('pointermove', onPointerMove)
+  window.removeEventListener('pointerup', stopResize)
+  window.removeEventListener('pointercancel', stopResize)
+
+  // 持久化宽度
+  if (sidepanelRef.value) {
+    const width = sidepanelRef.value.offsetWidth
+    localStorage.setItem(SIDE_PANEL_WIDTH_KEY, String(width))
+  }
+}
+
+/** 应用保存的侧边栏宽度 */
+function applySavedWidth() {
+  if (!sidepanelRef.value) return
+  const saved = localStorage.getItem(SIDE_PANEL_WIDTH_KEY)
+  if (!saved) return
+  const width = parseInt(saved, 10)
+  if (Number.isNaN(width) || width < SIDE_PANEL_MIN_WIDTH || width > SIDE_PANEL_MAX_WIDTH) {
+    localStorage.removeItem(SIDE_PANEL_WIDTH_KEY)
+    return
+  }
+  sidepanelRef.value.style.width = `${width}px`
+  if (filePanelRef.value) {
+    filePanelRef.value.style.right = `${width}px`
+  }
+}
 
 const FILE_PANEL_MIN_WIDTH = 300
 const FILE_PANEL_MAX_WIDTH = 800
@@ -456,6 +561,7 @@ watch(() => props.visible, (vis) => {
     document.body.style.left = '0'
     document.body.style.right = '0'
     document.body.style.overflowY = 'scroll'
+    nextTick(() => applySavedWidth())
   } else {
     document.body.style.position = ''
     document.body.style.top = ''
@@ -473,6 +579,15 @@ onBeforeUnmount(() => {
   document.body.style.right = ''
   document.body.style.overflowY = ''
   if (radarChart) { radarChart.dispose(); radarChart = null }
+  if (resizeFrameId) {
+    window.cancelAnimationFrame(resizeFrameId)
+    resizeFrameId = 0
+  }
+  window.removeEventListener('pointermove', onPointerMove)
+  window.removeEventListener('pointerup', stopResize)
+  window.removeEventListener('pointercancel', stopResize)
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
 })
 
 // ==================== 滚动容器注册 ====================
@@ -701,13 +816,39 @@ function initOrUpdateRadar() {
   position: fixed;
   top: 0;
   right: 0;
-  width: 480px;
+  width: clamp(560px, 34vw, 960px);
   height: 100vh;
   background: var(--gray-0, #fff);
   z-index: 1001;
   display: flex;
   flex-direction: column;
   box-shadow: -4px 0 24px rgba(0, 0, 0, 0.12);
+}
+
+/* 拖拽手柄 */
+.resize-handle {
+  position: absolute;
+  left: -3px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 6px;
+  height: 48px;
+  cursor: col-resize;
+  background: var(--gray-300, #d1d5db);
+  border-radius: 3px;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.ai-sidepanel:hover .resize-handle,
+.ai-sidepanel.is-resizing .resize-handle {
+  opacity: 1;
+}
+
+.resize-handle:hover,
+.ai-sidepanel.is-resizing .resize-handle {
+  background: var(--gray-400, #9ca3af);
 }
 
 /* Header */
@@ -1433,7 +1574,7 @@ function initOrUpdateRadar() {
 .ai-sidepanel__file-panel {
   position: fixed;
   top: 0;
-  right: 480px;
+  right: clamp(560px, 34vw, 960px);
   width: 480px; /* JS 拖拽时会动态更新 */
   height: 75vh;
   background: var(--gray-0, #fff);

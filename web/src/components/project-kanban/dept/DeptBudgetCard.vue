@@ -30,7 +30,7 @@
         <!-- 圆环 + 金额 -->
         <div class="pk-budget-sub__body">
           <div class="pk-budget-sub__ring">
-            <DonutChart :percentage="proj.rate" :size="52" :stroke-width="4" />
+            <DonutChart :percentage="proj.rate" :size="64" :stroke-width="5" />
           </div>
           <div class="pk-budget-sub__amount">
             <span class="pk-budget-sub__executed">¥{{ proj.executed }}M</span>
@@ -167,7 +167,7 @@ function deviationClass(deviation) {
 }
 
 .pk-budget-sub__name {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--gray-700);
   overflow: hidden;
@@ -178,7 +178,7 @@ function deviationClass(deviation) {
 .pk-budget-sub__status {
   padding: 1px 6px;
   border-radius: 4px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   flex-shrink: 0;
 }
@@ -191,7 +191,7 @@ function deviationClass(deviation) {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 10px;
   flex: 1;
   min-height: 0;
 }
@@ -204,7 +204,7 @@ function deviationClass(deviation) {
   display: flex;
   align-items: center;
   gap: 3px;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .pk-budget-sub__executed { font-weight: 700; color: var(--gray-800); }
@@ -220,7 +220,7 @@ function deviationClass(deviation) {
 }
 
 .pk-budget-sub__deviation-bar {
-  height: 5px;
+  height: 6px;
   border-radius: 3px;
   position: relative;
   background: linear-gradient(90deg,
@@ -247,7 +247,7 @@ function deviationClass(deviation) {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--gray-400);
   padding: 0 2px;
 }
@@ -269,7 +269,7 @@ function deviationClass(deviation) {
 .pk-budget-sub__deviation-ptr--good { border-top-color: #059669; }
 
 .pk-budget-sub__deviation-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
 }
 
@@ -289,46 +289,55 @@ function deviationClass(deviation) {
 
 @media (min-width: 1600px) {
   .pk-budget-sub__name {
-    font-size: 13px;
+    font-size: 14px;
   }
   .pk-budget-sub__status {
-    font-size: 12px;
-  }
-  .pk-budget-sub__amount {
     font-size: 13px;
   }
+  .pk-budget-sub__amount {
+    font-size: 14px;
+  }
   .pk-budget-sub__deviation-scale {
-    font-size: 11px;
+    font-size: 12px;
+  }
+  :deep(.pk-donut) {
+    --pk-donut-size: 76px !important;
   }
 }
 
 @media (min-width: 1920px) {
   .pk-budget-sub__name {
-    font-size: 14px;
+    font-size: 15px;
   }
   .pk-budget-sub__status {
-    font-size: 13px;
-  }
-  .pk-budget-sub__amount {
     font-size: 14px;
   }
+  .pk-budget-sub__amount {
+    font-size: 15px;
+  }
   .pk-budget-sub__deviation-scale {
-    font-size: 12px;
+    font-size: 13px;
+  }
+  :deep(.pk-donut) {
+    --pk-donut-size: 88px !important;
   }
 }
 
 @media (min-width: 2560px) {
   .pk-budget-sub__name {
-    font-size: 15px;
+    font-size: 16px;
   }
   .pk-budget-sub__status {
-    font-size: 13px;
+    font-size: 14px;
   }
   .pk-budget-sub__amount {
-    font-size: 15px;
+    font-size: 16px;
   }
   .pk-budget-sub__deviation-scale {
-    font-size: 13px;
+    font-size: 14px;
+  }
+  :deep(.pk-donut) {
+    --pk-donut-size: 100px !important;
   }
 }
 </style>

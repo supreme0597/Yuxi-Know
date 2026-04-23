@@ -1,6 +1,6 @@
 <template>
-  <div class="pk-donut" :style="{ width: size + 'px', height: size + 'px' }">
-    <svg :width="size" :height="size" class="pk-donut__svg">
+  <div class="pk-donut" :style="{ '--pk-donut-size': size + 'px' }">
+    <svg :viewBox="'0 0 ' + size + ' ' + size" class="pk-donut__svg">
       <circle
         :cx="size / 2"
         :cy="size / 2"
@@ -56,8 +56,12 @@ const ringColor = computed(() => {
 .pk-donut {
   position: relative;
   flex-shrink: 0;
+  width: var(--pk-donut-size);
+  height: var(--pk-donut-size);
 }
 .pk-donut__svg {
+  width: var(--pk-donut-size);
+  height: var(--pk-donut-size);
   transform: rotate(-90deg);
 }
 .pk-donut__progress {
@@ -71,26 +75,26 @@ const ringColor = computed(() => {
   justify-content: center;
 }
 .pk-donut__value {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--gray-700);
 }
 
 @media (min-width: 1600px) {
   .pk-donut__value {
-    font-size: 13px;
+    font-size: 14px;
   }
 }
 
 @media (min-width: 1920px) {
   .pk-donut__value {
-    font-size: 14px;
+    font-size: 15px;
   }
 }
 
 @media (min-width: 2560px) {
   .pk-donut__value {
-    font-size: 15px;
+    font-size: 16px;
   }
 }
 </style>

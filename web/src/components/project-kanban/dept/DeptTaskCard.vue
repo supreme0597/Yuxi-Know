@@ -35,8 +35,8 @@
           >
             <DonutChart
               :percentage="to.progress"
-              :size="44"
-              :stroke-width="4"
+              :size="54"
+              :stroke-width="5"
               :color="ringFgColor(to)"
               :label="`${to.progress}%`"
             />
@@ -211,7 +211,7 @@ function ringFgColor(to) {
 .pk-task-lane__content {
   flex: 1;
   position: relative;
-  min-height: 76px;
+  min-height: 88px;
 }
 
 /* 任务令节点（绝对定位，共享全局时间轴位置） */
@@ -222,7 +222,7 @@ function ringFgColor(to) {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 3px;
   z-index: 2;
   cursor: pointer;
   transition: transform 0.15s;
@@ -235,11 +235,11 @@ function ringFgColor(to) {
 
 /* 节点名称 */
 .pk-task-node__name {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--gray-700);
   text-align: center;
-  max-width: 50px;
+  max-width: 60px;
   line-height: 1.3;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -250,7 +250,7 @@ function ringFgColor(to) {
 
 /* 截止日期 */
 .pk-task-node__date {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--gray-400);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
@@ -276,18 +276,6 @@ function ringFgColor(to) {
 
 @media (min-width: 1600px) {
   .pk-task-lane__label {
-    font-size: 13px;
-  }
-  .pk-task-node__name {
-    font-size: 12px;
-  }
-  .pk-task-node__date {
-    font-size: 12px;
-  }
-}
-
-@media (min-width: 1920px) {
-  .pk-task-lane__label {
     font-size: 14px;
   }
   .pk-task-node__name {
@@ -296,9 +284,12 @@ function ringFgColor(to) {
   .pk-task-node__date {
     font-size: 13px;
   }
+  :deep(.pk-donut) {
+    --pk-donut-size: 64px !important;
+  }
 }
 
-@media (min-width: 2560px) {
+@media (min-width: 1920px) {
   .pk-task-lane__label {
     font-size: 15px;
   }
@@ -307,6 +298,24 @@ function ringFgColor(to) {
   }
   .pk-task-node__date {
     font-size: 14px;
+  }
+  :deep(.pk-donut) {
+    --pk-donut-size: 74px !important;
+  }
+}
+
+@media (min-width: 2560px) {
+  .pk-task-lane__label {
+    font-size: 16px;
+  }
+  .pk-task-node__name {
+    font-size: 15px;
+  }
+  .pk-task-node__date {
+    font-size: 15px;
+  }
+  :deep(.pk-donut) {
+    --pk-donut-size: 84px !important;
   }
 }
 </style>

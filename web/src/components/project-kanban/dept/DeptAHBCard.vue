@@ -29,7 +29,7 @@
         <!-- 圆环 + 人力数据 -->
         <div class="pk-ahb-sub__body">
           <div class="pk-ahb-sub__ring">
-            <DonutChart :percentage="ringPercent(cat)" :size="52" :stroke-width="4" :color="ringColor(cat)" :label="deviationPercentText(cat)" />
+            <DonutChart :percentage="ringPercent(cat)" :size="64" :stroke-width="5" :color="ringColor(cat)" :label="deviationPercentText(cat)" />
           </div>
           <div class="pk-ahb-sub__amount">
             <span class="pk-ahb-sub__executed">{{ cat.total }}</span>
@@ -205,7 +205,7 @@ function compositionPercent(cat, type) {
 }
 
 .pk-ahb-sub__label {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--gray-700);
 }
@@ -215,7 +215,7 @@ function compositionPercent(cat, type) {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 10px;
   flex: 1;
   min-height: 0;
 }
@@ -228,7 +228,7 @@ function compositionPercent(cat, type) {
   display: flex;
   align-items: center;
   gap: 3px;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .pk-ahb-sub__executed { font-weight: 700; color: var(--gray-800); }
@@ -243,8 +243,8 @@ function compositionPercent(cat, type) {
 
 .pk-ahb-sub__bar {
   display: flex;
-  height: 8px;
-  border-radius: 4px;
+  height: 10px;
+  border-radius: 5px;
   overflow: hidden;
   background: #f3f4f6;
   margin-bottom: 4px;
@@ -262,7 +262,7 @@ function compositionPercent(cat, type) {
 .pk-ahb-sub__legend {
   display: flex;
   justify-content: space-between;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--gray-500);
 }
 
@@ -295,37 +295,46 @@ function compositionPercent(cat, type) {
 
 @media (min-width: 1600px) {
   .pk-ahb-sub__label {
-    font-size: 13px;
+    font-size: 14px;
   }
   .pk-ahb-sub__amount {
-    font-size: 13px;
+    font-size: 14px;
   }
   .pk-ahb-sub__legend {
-    font-size: 12px;
+    font-size: 13px;
+  }
+  :deep(.pk-donut) {
+    --pk-donut-size: 76px !important;
   }
 }
 
 @media (min-width: 1920px) {
   .pk-ahb-sub__label {
-    font-size: 14px;
+    font-size: 15px;
   }
   .pk-ahb-sub__amount {
-    font-size: 14px;
+    font-size: 15px;
   }
   .pk-ahb-sub__legend {
-    font-size: 13px;
+    font-size: 14px;
+  }
+  :deep(.pk-donut) {
+    --pk-donut-size: 88px !important;
   }
 }
 
 @media (min-width: 2560px) {
   .pk-ahb-sub__label {
-    font-size: 15px;
+    font-size: 16px;
   }
   .pk-ahb-sub__amount {
-    font-size: 15px;
+    font-size: 16px;
   }
   .pk-ahb-sub__legend {
-    font-size: 14px;
+    font-size: 15px;
+  }
+  :deep(.pk-donut) {
+    --pk-donut-size: 100px !important;
   }
 }
 </style>
