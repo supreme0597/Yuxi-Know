@@ -5,7 +5,7 @@
     icon-color="#6366f1"
     :status-text="statusText"
     :status-color="trustStatusColor"
-    :ai-summary="data?.aiSummary ? `✨ ${data.aiSummary}` : ''"
+    :ai-summary="data?.aiSummary ? `${data.aiSummary}` : ''"
     wide
     @ai-click="$emit('ai-click', 'trust')"
   >
