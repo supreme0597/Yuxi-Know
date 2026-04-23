@@ -7,6 +7,7 @@
     :status-color="data?.status || 'info'"
     :ai-summary="data?.aiSummary"
     @ai-click="$emit('ai-click', 'budget')"
+    @summary-click="$emit('ai-click', 'budget')"
   >
     <div class="pk-budget__chart">
       <DonutChart :percentage="data?.executionRate ?? 0" />

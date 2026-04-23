@@ -7,6 +7,7 @@
     :status-color="data?.status || 'info'"
     :ai-summary="data?.aiSummary"
     @ai-click="$emit('ai-click', 'quality')"
+    @summary-click="$emit('ai-click', 'quality')"
   >
     <div class="pk-quality__grid">
       <div class="pk-quality__item">

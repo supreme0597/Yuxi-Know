@@ -7,6 +7,7 @@
     :status-color="data?.status || 'info'"
     :ai-summary="data?.aiSummary"
     @ai-click="$emit('ai-click', 'scope')"
+    @summary-click="$emit('ai-click', 'scope')"
   >
     <div class="pk-scope__grid">
       <div class="pk-scope__item pk-scope__item--purple">

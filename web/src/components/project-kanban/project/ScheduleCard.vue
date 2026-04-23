@@ -7,6 +7,7 @@
     :status-color="data?.status || 'info'"
     :ai-summary="data?.aiSummary"
     @ai-click="$emit('ai-click', 'schedule')"
+    @summary-click="$emit('ai-click', 'schedule')"
   >
     <StatGrid :items="statItems" />
     <RiskList :risks="data?.risks" @risk-click="$emit('risk-click', $event)" />

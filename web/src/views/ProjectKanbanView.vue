@@ -352,8 +352,11 @@ function handleToolAction(action) {
 }
 
 function handleRiskClick(risk) {
+  const typeToField = { '里程碑': 'milestone', '可信': 'trustDetails', '范围': 'scope', '质量': 'quality', '进度': 'schedule', '费用': 'budget' }
+  const field = typeToField[risk.type]
+  const fieldQuestions = field ? currentProject.value?.[field]?.quickQuestions : []
   const intent = currentProject.value?.intentQuestions || {}
-  const questions = [...(intent.risk || []), ...(intent.decision || [])]
+  const questions = fieldQuestions?.length ? fieldQuestions : [...(intent.risk || []), ...(intent.decision || [])]
   sidepanel.open('aiSummary', currentProject.value, { risk, questions })
 }
 

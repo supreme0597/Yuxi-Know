@@ -16,6 +16,9 @@
       >
         <span class="pk-risk-item__dot"></span>
         <span class="pk-risk-item__text">{{ risk.text || risk.title }}</span>
+        <svg class="pk-risk-item__arrow" width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+        </svg>
       </div>
     </div>
   </div>
@@ -82,6 +85,12 @@ const topRisks = computed(() => {
 }
 .pk-risk-item__text {
   color: var(--gray-700);
+  flex: 1;
+}
+.pk-risk-item__arrow {
+  flex-shrink: 0;
+  color: var(--gray-400);
+  margin-left: auto;
 }
 
 .pk-risk-item--critical,

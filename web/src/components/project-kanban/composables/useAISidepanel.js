@@ -58,7 +58,7 @@ const sectionBuilders = {
     const phases = ms.phases || []
     const completed = phases.filter(p => p.status === 'completed').length
     const active = phases.filter(p => p.status === 'active').length
-    const risks = ms.risks || []
+    const risks = ms.risks || phases.flatMap(p => p.risks || [])
 
     // 焦点风险：取最高等级风险项
     const topRisk = risks.find(r => normalizeLevel(r.level) === 'danger') || risks.find(r => normalizeLevel(r.level) === 'warning')
@@ -523,14 +523,21 @@ const sectionBuilders = {
       '对其他领域有什么影响？'
     ]
 
+    // 构建 reasoning：根因 + 影响 + 建议
+    const reasoningParts = []
+    if (risk.rootCause || risk.why) reasoningParts.push(`**风险详情**：${risk.rootCause || risk.why}`)
+    if (risk.impact) reasoningParts.push(`**影响范围**：${risk.impact}`)
+    if (risk.suggestion || risk.how) reasoningParts.push(`**应对措施**：${risk.suggestion || risk.how}`)
+
     return {
       title: risk.title || '风险详情',
       subtitle: project.name || '',
+      summary: risk.text || '',
       progress: [
         { label: '风险级别', value: riskLevelText(risk.level), status: risk.level === 'critical' || risk.level === 'danger' ? 'danger' : (risk.level === 'warning' ? 'warning' : 'normal') },
         { label: '来源', value: risk.type || '-', status: 'normal' }
       ],
-      reasoning: '',
+      reasoning: reasoningParts.join('\n\n'),
       risks: [formatSingleRisk(risk)],
       quickQuestions: questions
     }

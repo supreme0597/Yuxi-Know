@@ -8,6 +8,7 @@
     :ai-summary="data?.aiSummary ? `${data.aiSummary}` : ''"
     wide
     @ai-click="$emit('ai-click', 'trust')"
+    @summary-click="$emit('ai-click', 'trust')"
   >
     <!-- 9宫格 -->
     <div class="pk-trust__grid">
