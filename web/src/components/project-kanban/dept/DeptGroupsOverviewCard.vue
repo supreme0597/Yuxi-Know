@@ -20,7 +20,6 @@
         <div class="pk-dim-card__header">
           <span class="pk-dim-card__icon">{{ dim.icon }}</span>
           <span class="pk-dim-card__title">{{ dim.label }}</span>
-          <span class="pk-dim-card__dot" :class="`pk-dim-card__dot--${dim.statusType}`" />
         </div>
         <div class="pk-dim-card__stats">
           <div v-for="stat in dim.stats" :key="stat.label" class="pk-dim-card__stat">
@@ -276,15 +275,6 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
   flex: 1;
 }
 
-.pk-dim-card__dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.pk-dim-card__dot--danger { background: var(--pk-danger); }
-.pk-dim-card__dot--warning { background: var(--pk-warning); }
-.pk-dim-card__dot--success { background: var(--pk-success); }
 
 .pk-dim-card__stats {
   display: flex;
@@ -557,10 +547,6 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
   .pk-dim-card__title {
     font-size: 13px;
   }
-  .pk-dim-card__dot {
-    width: 7px;
-    height: 7px;
-  }
   .pk-dim-card__stat-value {
     font-size: 17px;
   }
@@ -624,10 +610,6 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
   .pk-dim-card__title {
     font-size: 14px;
   }
-  .pk-dim-card__dot {
-    width: 8px;
-    height: 8px;
-  }
   .pk-dim-card__stat-value {
     font-size: 18px;
   }
@@ -690,10 +672,6 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
   }
   .pk-dim-card__title {
     font-size: 15px;
-  }
-  .pk-dim-card__dot {
-    width: 9px;
-    height: 9px;
   }
   .pk-dim-card__stat-value {
     font-size: 20px;

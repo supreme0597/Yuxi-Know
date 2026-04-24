@@ -49,7 +49,7 @@
               :class="nodeClass(phase, pi, item)"
               :style="{ left: nodeLeft(pi, item.phases.length) + '%' }"
             >
-              <span class="pk-milestone-sub__node-date">{{ phase.date }}</span>
+              <span class="pk-milestone-sub__node-date">{{ formatDisplayDate(phase.date) }}</span>
               <span class="pk-milestone-sub__node-dot" @click.stop="$emit('phase-click', { phase, offering: item.category + ' ' + item.project, timelineItem: item })">
                 <svg v-if="phase.status === 'completed'" viewBox="0 0 12 12" width="8" height="8">
                   <path d="M2.5 6L5 8.5L9.5 3.5" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -113,22 +113,38 @@ function nextPhase(item) {
   return item.phases.find(p => p.status !== 'completed') || item.phases[item.phases.length - 1]
 }
 
-/** 日期字符串 "4/1" → 小数月份（用于比较） */
+/** 日期字符串显示格式化："2028-12-31" → "28/12/31"，"2026/4/1" → "26/4/1"，"4/1" 不变 */
+function formatDisplayDate(date) {
+  if (!date) return ''
+  // 统一按 / 和 - 拆分
+  const parts = date.split(/[-/]/)
+  if (parts.length === 3) {
+    return `${parts[0].slice(-2)}/${parts[1]}/${parts[2]}`
+  }
+  return date
+}
+
+/** 日期字符串 → 线性数值（用于比较和进度计算），兼容 "2028-12-31"、"2026/4/1"、"4/1" 等格式 */
 function dateToDecimal(date) {
-  const parts = (date || '').split('/')
-  return parseInt(parts[0]) + parseInt(parts[1] || 1) / 31
+  const parts = (date || '').split(/[-/]/).map(Number)
+  if (parts.length === 3) {
+    // "2026/4/1" / "2028-12-31" → year*12 + month + day/31，跨年顺序正确
+    return parts[0] * 12 + parts[1] + parts[2] / 31
+  }
+  // "4/1" → month + day/31（遗留格式，假定为当前年）
+  return parts[0] + (parts[1] || 1) / 31
 }
 
 /** 弧形仪表进度百分比（按设计稿：根据日期计算时间进度） */
 function arcPercent(phase, item) {
   if (phase.status === 'completed') return 100
   const now = new Date()
-  const todayVal = now.getMonth() + 1 + now.getDate() / 31
+  const todayVal = now.getFullYear() * 12 + (now.getMonth() + 1) + now.getDate() / 31
   const phaseVal = dateToDecimal(phase.date)
   if (todayVal >= phaseVal) return 100 // 已延期
   // 找前一个节点的日期作为起始
   const idx = item.phases.indexOf(phase)
-  const prevVal = idx > 0 ? dateToDecimal(item.phases[idx - 1].date) : dateToDecimal('1/1')
+  const prevVal = idx > 0 ? dateToDecimal(item.phases[idx - 1].date) : dateToDecimal(`${now.getFullYear()}/1/1`)
   const range = phaseVal - prevVal
   if (range <= 0) return 0
   const elapsed = todayVal - prevVal
@@ -285,7 +301,7 @@ function nodeClass(phase, idx, item) {
   color: var(--pk-text-tertiary);
   font-variant-numeric: tabular-nums;
   line-height: 1;
-  height: 11px;
+  white-space: nowrap;
 }
 
 /* 圆点 */

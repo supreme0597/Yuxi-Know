@@ -523,7 +523,7 @@ function handleIndustryHighlight(industry) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 32px;
+  padding: 16px clamp(32px, 3vw, 80px);
   background: var(--gray-0);
   border-bottom: 1px solid var(--gray-200);
   position: sticky;
@@ -580,11 +580,11 @@ function handleIndustryHighlight(industry) {
   50% { opacity: 0.3; }
 }
 
-/* Content wrapper - centered with max-width */
+/* Content wrapper - centered with max-width, fluid padding */
 .pk-kanban__content {
-  max-width: 1440px;
+  max-width: clamp(1440px, 92vw, 2400px);
   margin: 0 auto;
-  padding: 0 32px;
+  padding: 0 clamp(32px, 3vw, 80px);
 }
 
 /* Tabs */
@@ -644,7 +644,7 @@ function handleIndustryHighlight(industry) {
 
 /* Body */
 .pk-kanban__body {
-  padding: 24px 0;
+  padding: 16px 0;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -721,12 +721,9 @@ function handleIndustryHighlight(industry) {
 
 /* 宽屏自适应放大 */
 @media (min-width: 1600px) {
-  .pk-kanban__content {
-    max-width: 1520px;
-    padding: 0 36px;
-  }
   .pk-kanban__header {
-    padding: 18px 36px;
+    padding-top: 18px;
+    padding-bottom: 18px;
   }
   .pk-kanban__title {
     font-size: 17px;
@@ -749,7 +746,7 @@ function handleIndustryHighlight(industry) {
     font-size: 13px;
   }
   .pk-kanban__body {
-    padding: 28px 0;
+    padding: 18px 0;
     gap: 18px;
   }
   .pk-kanban__grid {
@@ -764,12 +761,9 @@ function handleIndustryHighlight(industry) {
 }
 
 @media (min-width: 1920px) {
-  .pk-kanban__content {
-    max-width: 1720px;
-    padding: 0 44px;
-  }
   .pk-kanban__header {
-    padding: 20px 44px;
+    padding-top: 20px;
+    padding-bottom: 20px;
   }
   .pk-kanban__title {
     font-size: 18px;
@@ -792,7 +786,7 @@ function handleIndustryHighlight(industry) {
     font-size: 14px;
   }
   .pk-kanban__body {
-    padding: 32px 0;
+    padding: 20px 0;
     gap: 20px;
   }
   .pk-kanban__grid {
@@ -807,12 +801,9 @@ function handleIndustryHighlight(industry) {
 }
 
 @media (min-width: 2560px) {
-  .pk-kanban__content {
-    max-width: 2100px;
-    padding: 0 56px;
-  }
   .pk-kanban__header {
-    padding: 24px 56px;
+    padding-top: 24px;
+    padding-bottom: 24px;
   }
   .pk-kanban__title {
     font-size: 19px;
@@ -835,7 +826,7 @@ function handleIndustryHighlight(industry) {
     font-size: 15px;
   }
   .pk-kanban__body {
-    padding: 36px 0;
+    padding: 24px 0;
     gap: 24px;
   }
   .pk-kanban__grid {

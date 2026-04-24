@@ -25,7 +25,7 @@ export const deptData = {
                     "deviation": -8.3,
                     "phases": [
                         {
-                            "name": "立项", "date": "2/15", "status": "completed", "risk": "none",
+                            "name": "立项", "date": "2026/2/15", "status": "completed", "risk": "none",
                             "objectives": ["完成产品需求规格书v1.0", "通过立项评审", "确认资源预算"],
                             "aiSummary": "立项节点已正常完成，产品需求规格书v1.0已通过评审，资源预算已确认。",
                             "risks": [
@@ -33,7 +33,7 @@ export const deptData = {
                             ]
                         },
                         {
-                            "name": "审视", "date": "4/1", "status": "pending", "risk": "yellow",
+                            "name": "审视", "date": "2026/4/1", "status": "pending", "risk": "yellow",
                             "overduePercent": 8,
                             "objectives": ["需求基线冻结", "架构评审通过", "关键风险闭环"],
                             "riskReason": "需求变更频繁，架构方案仍在评审中",
@@ -43,7 +43,7 @@ export const deptData = {
                             ]
                         },
                         {
-                            "name": "结项", "date": "12/31", "status": "pending", "risk": "none",
+                            "name": "结项", "date": "2026/12/31", "status": "pending", "risk": "none",
                             "objectives": ["所有特性开发完成", "集成测试通过率≥95%", "发布文档齐套"],
                             "aiSummary": "结项节点尚远，当前关键是审视阶段的推进情况将直接影响结项节奏。",
                             "risks": []
@@ -68,13 +68,13 @@ export const deptData = {
                     "deviation": 12.5,
                     "phases": [
                         {
-                            "name": "立项", "date": "2/10", "status": "completed", "risk": "none",
+                            "name": "立项", "date": "2026/2/10", "status": "completed", "risk": "none",
                             "objectives": ["完成V3平台立项评审", "关键技术路线确认", "人力资源锁定"],
                             "aiSummary": "立项节点已正常完成，V3平台立项评审通过，技术路线和人力资源已确认。",
                             "risks": []
                         },
                         {
-                            "name": "RR准入", "date": "3/28", "status": "pending", "risk": "high",
+                            "name": "RR准入", "date": "2026/3/28", "status": "pending", "risk": "high",
                             "overduePercent": 15,
                             "objectives": ["RR准入条件定义", "架构评审通过", "测试策略发布"],
                             "riskReason": "编码进度滞后导致RR准入条件未达成",
@@ -84,7 +84,7 @@ export const deptData = {
                             ]
                         },
                         {
-                            "name": "结项", "date": "12/31", "status": "pending", "risk": "yellow",
+                            "name": "结项", "date": "2026/12/31", "status": "pending", "risk": "yellow",
                             "objectives": ["RR准入条件100%达成", "遗留缺陷清零（P1/P2）", "版本发布包就绪"],
                             "riskReason": "301.1.0版本当前进度滞后，需加速追赶",
                             "aiSummary": "结项节点存在中风险，301.1.0版本进度滞后，需加速追赶以确保按期发布。",
@@ -112,19 +112,19 @@ export const deptData = {
                     "deviation": -5.0,
                     "phases": [
                         {
-                            "name": "立项", "date": "2/01", "status": "completed", "risk": "none",
+                            "name": "立项", "date": "2026-2-02", "status": "completed", "risk": "none",
                             "objectives": ["MCU固件需求冻结", "硬件接口规格确认", "供应链评估完成"],
                             "aiSummary": "立项节点已正常完成，MCU固件需求已冻结，硬件接口规格和供应链评估已确认。",
                             "risks": []
                         },
                         {
-                            "name": "审视", "date": "3/15", "status": "completed", "risk": "none",
+                            "name": "审视", "date": "2026-3-15", "status": "completed", "risk": "none",
                             "objectives": ["固件开发完成率≥70%", "单元测试覆盖率≥85%", "硬件联调通过"],
                             "aiSummary": "审视节点已正常完成，固件开发完成率达标，单元测试覆盖率和硬件联调均通过。",
                             "risks": []
                         },
                         {
-                            "name": "结项", "date": "12/31", "status": "pending", "risk": "none",
+                            "name": "结项", "date": "2028-12-31", "status": "pending", "risk": "none",
                             "objectives": ["全功能测试通过", "EMC/安规测试完成", "量产包发布"],
                             "aiSummary": "结项节点尚远，当前开发推进正常，需关注TR5评审节点准备情况。",
                             "risks": [
@@ -151,13 +151,13 @@ export const deptData = {
                     "deviation": 0,
                     "phases": [
                         {
-                            "name": "立项", "date": "1/15", "status": "completed", "risk": "none",
+                            "name": "立项", "date": "2026/1/15", "status": "completed", "risk": "none",
                             "objectives": ["维护项目启动", "资源确认", "维护范围界定"],
                             "aiSummary": "立项节点已正常完成，维护项目已启动，资源和范围已确认。",
                             "risks": []
                         },
                         {
-                            "name": "结项", "date": "12/31", "status": "pending", "risk": "none",
+                            "name": "结项", "date": "2026/12/31", "status": "pending", "risk": "none",
                             "objectives": ["遗留问题清零", "维护文档完整", "客户满意度达标"],
                             "aiSummary": "维护项目按季度评审节奏正常推进，需持续关注遗留问题清零进度。",
                             "risks": [

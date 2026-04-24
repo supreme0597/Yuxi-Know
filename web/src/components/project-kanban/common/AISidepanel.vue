@@ -831,27 +831,23 @@ function initOrUpdateRadar() {
 /* 拖拽手柄 */
 .resize-handle {
   position: absolute;
-  left: -3px;
+  left: 0;
   top: 50%;
   transform: translateY(-50%);
-  width: 6px;
-  height: 48px;
+  width: 4px;
+  height: 64px;
   cursor: col-resize;
-  background: var(--gray-300);
-  border-radius: 3px;
   z-index: 10;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-
-.ai-sidepanel:hover .resize-handle,
-.ai-sidepanel.is-resizing .resize-handle {
-  opacity: 1;
+  border-radius: 0 3px 3px 0;
+  background: rgba(99, 102, 241, 0.35);
+  transition: all 0.2s ease;
 }
 
 .resize-handle:hover,
 .ai-sidepanel.is-resizing .resize-handle {
-  background: var(--gray-400);
+  width: 5px;
+  background: rgba(99, 102, 241, 0.6);
+  box-shadow: 1px 0 6px rgba(99, 102, 241, 0.2);
 }
 
 /* Header */
