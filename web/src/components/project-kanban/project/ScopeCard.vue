@@ -2,10 +2,11 @@
   <DataCard
     title="范围管理"
     :icon="ScopeIcon"
-    icon-color="#f97316"
+    icon-color="var(--pk-warning)"
     :status-text="statusText"
     :status-color="data?.status || 'info'"
     :ai-summary="data?.aiSummary"
+    ai-lines="1"
     @ai-click="$emit('ai-click', 'scope')"
     @summary-click="$emit('ai-click', 'scope')"
   >
@@ -58,9 +59,9 @@ const statusText = computed(() => statusMap[props.data?.status] || '正常')
   padding: 8px 4px;
   border-radius: 8px;
 }
-.pk-scope__item--purple { background: #faf5ff; }
-.pk-scope__item--orange { background: #fff7ed; }
-.pk-scope__item--blue { background: #eff6ff; }
+.pk-scope__item--purple { background: var(--pk-group-v3-light); }
+.pk-scope__item--orange { background: var(--pk-warning-light); }
+.pk-scope__item--blue { background: var(--pk-group-v2-light); }
 
 .pk-scope__value {
   display: block;
@@ -68,9 +69,9 @@ const statusText = computed(() => statusMap[props.data?.status] || '正常')
   font-weight: 700;
   color: var(--gray-800);
 }
-.pk-scope__item--purple .pk-scope__value { color: #7c3aed; }
-.pk-scope__item--orange .pk-scope__value { color: #ea580c; }
-.pk-scope__item--blue .pk-scope__value { color: #2563eb; }
+.pk-scope__item--purple .pk-scope__value { color: var(--pk-group-v3); }
+.pk-scope__item--orange .pk-scope__value { color: var(--pk-warning-dark); }
+.pk-scope__item--blue .pk-scope__value { color: var(--pk-group-v2); }
 
 .pk-scope__label {
   font-size: 12px;

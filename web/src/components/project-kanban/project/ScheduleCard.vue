@@ -2,10 +2,11 @@
   <DataCard
     title="进度管理"
     :icon="ScheduleIcon"
-    icon-color="#22c55e"
+    icon-color="var(--pk-success)"
     :status-text="statusText"
     :status-color="data?.status || 'info'"
     :ai-summary="data?.aiSummary"
+    ai-lines="1"
     @ai-click="$emit('ai-click', 'schedule')"
     @summary-click="$emit('ai-click', 'schedule')"
   >

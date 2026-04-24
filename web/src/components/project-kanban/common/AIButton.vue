@@ -18,7 +18,7 @@ defineEmits(['click'])
   align-items: center;
   gap: 4px;
   padding: 3px 10px;
-  background: linear-gradient(135deg, #8b5cf6, #3b82f6);
+  background: linear-gradient(135deg, var(--pk-group-v3), var(--pk-group-v2));
   border: none;
   border-radius: 10px;
   cursor: pointer;
@@ -35,14 +35,14 @@ defineEmits(['click'])
 .pk-ai-btn__dot {
   width: 6px;
   height: 6px;
-  background: #fff;
+  background: var(--pk-card-bg);
   border-radius: 50%;
   animation: pk-ai-pulse 2s ease-in-out infinite;
 }
 .pk-ai-btn__text {
   font-size: 12px;
   font-weight: 600;
-  color: #fff;
+  color: var(--pk-card-bg);
   letter-spacing: 0.5px;
 }
 @keyframes pk-ai-pulse {

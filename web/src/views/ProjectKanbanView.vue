@@ -1,5 +1,5 @@
 <template>
-  <div class="pk-kanban">
+  <div class="pk-kanban project-kanban-view">
     <!-- Header -->
     <header class="pk-kanban__header">
       <div class="pk-kanban__logo">
@@ -115,6 +115,7 @@
             @dim-click="handleDimClick"
             @progress-click="handleSubProjectProgressClick"
             @milestone-click="handleSubProjectMilestoneClick"
+            @id-click="handleSubProjectIdClick"
           />
         </div>
 
@@ -131,7 +132,7 @@
 
       <!-- 部门级视图内容 -->
       <div v-else class="pk-kanban__body">
-        <!-- 上方四卡片 -->
+        <!-- 第1行：3张卡片 -->
         <div class="pk-kanban__dept-grid">
           <DeptMilestoneCard
             :data="deptData.department.milestone"
@@ -154,17 +155,19 @@
             @project-click="handleDeptBudgetProjectClick"
             @metric-click="handleMetricClick"
           />
-          <DeptTaskCard
-            :data="deptData.department.task"
-            @ai-click="handleDeptAIClick"
-            @summary-click="handleDeptSummaryClick"
-            @task-click="handleDeptTaskClick"
-            @metric-click="handleMetricClick"
-            @industry-click="handleIndustryHighlight"
-          />
         </div>
 
-        <!-- 下方全宽综合风险卡片 -->
+        <!-- 第2行：任务卡片全宽 -->
+        <DeptTaskCard
+          :data="deptData.department.task"
+          @ai-click="handleDeptAIClick"
+          @summary-click="handleDeptSummaryClick"
+          @task-click="handleDeptTaskClick"
+          @metric-click="handleMetricClick"
+          @industry-click="handleIndustryHighlight"
+        />
+
+        <!-- 第3行：综合风险卡片全宽 -->
         <DeptGroupsOverviewCard
           :data="deptData.department.groupsOverview"
           @ai-click="handleDeptAIClick"
@@ -187,6 +190,7 @@
 </template>
 
 <script setup>
+import '@/components/project-kanban/styles/variables.css'
 import { ref, computed } from 'vue'
 import { projectData } from '@/components/project-kanban/data/projectData'
 import { groupData } from '@/components/project-kanban/data/groupData'
@@ -215,7 +219,7 @@ const tabs = [
   { key: 'project', label: '项目级' }
 ]
 
-const activeTab = ref('project')
+const activeTab = ref('dept')
 const sidepanel = useAISidepanel()
 
 // 派生数据
@@ -361,8 +365,8 @@ function handleRiskClick(risk) {
 }
 
 function handleQuestionClick(question) {
-  // 猜你想问：打开侧边栏 + 隐藏概览 + 自动发送
-  sidepanel.open('subProject', currentProject.value, { hideData: true, autoSend: question })
+  // 猜你想问：打开侧边栏 + 显示完整数据概览 + 自动发送
+  sidepanel.open('subProject', currentProject.value, { autoSend: question })
 }
 
 function handleSummaryClick() {
@@ -379,11 +383,18 @@ function handleSidepanelQuestion(question) {
 function handleGroupAIClick(groupKey) {
   const meta = groupData[groupKey]
   if (!meta) return
-  sidepanel.open('group', meta, { summary: groupSummaryData.value, groupCount: groupKeys.length })
+  sidepanel.open('group', meta, { summary: groupSummaryData.value, groupCount: groupKeys.value.length })
 }
 
 function handleSubProjectClick(subProject) {
   sidepanel.open('subProject', subProject)
+}
+
+function handleSubProjectIdClick(subProject) {
+  // 切换到项目级页签 + 选择对应子项目
+  currentProjectId.value = subProject.id
+  activeTab.value = 'project'
+  window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
 function handleSubProjectAIClick(subProject) {
@@ -417,12 +428,12 @@ function handleGroupRiskClick(risk) {
 }
 
 function handleGroupQuestionClick(question) {
-  // 项目群级猜你想问：打开侧边栏 + 隐藏概览 + 自动发送
-  sidepanel.open('groupSummary', groupSummaryData.value, { groupCount: groupKeys.length, hideData: true, autoSend: question })
+  // 项目群级猜你想问：打开侧边栏 + 显示完整数据概览 + 自动发送
+  sidepanel.open('groupSummary', groupSummaryData.value, { groupCount: groupKeys.value.length, autoSend: question })
 }
 
 function handleGroupSummaryClick() {
-  sidepanel.open('groupSummary', groupSummaryData.value, { groupCount: groupKeys.length })
+  sidepanel.open('groupSummary', groupSummaryData.value, { groupCount: groupKeys.value.length })
 }
 
 // 部门级事件
@@ -472,11 +483,12 @@ function handleDeptDimClick(dimension) {
 }
 
 function handleDeptGroupClick(groupCard) {
-  sidepanel.open('groupRisk', deptData, { groupCard })
+  activeTab.value = 'group'
+  window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
 function handleDeptQuestionClick(question) {
-  sidepanel.open('deptQuestion', deptData, { hideData: true, autoSend: question })
+  sidepanel.open('groups-overview', deptData, { autoSend: question })
 }
 
 // 指标点击（I任务）
@@ -527,11 +539,11 @@ function handleIndustryHighlight(industry) {
   width: 40px;
   height: 40px;
   border-radius: 12px;
-  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  background: linear-gradient(135deg, var(--pk-group-v2), var(--pk-group-v3));
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--pk-card-bg);
 }
 .pk-kanban__title {
   font-size: 15px;
@@ -559,7 +571,7 @@ function handleIndustryHighlight(industry) {
 .pk-kanban__ai-dot {
   width: 6px;
   height: 6px;
-  background: #10b981;
+  background: var(--pk-success);
   border-radius: 50%;
   animation: pk-pulse 2s ease-in-out infinite;
 }
@@ -627,8 +639,8 @@ function handleIndustryHighlight(industry) {
   height: 6px;
   border-radius: 50%;
 }
-.pk-kanban__stat-dot--red { background: #ef4444; }
-.pk-kanban__stat-dot--yellow { background: #f59e0b; }
+.pk-kanban__stat-dot--red { background: var(--pk-danger-dark); }
+.pk-kanban__stat-dot--yellow { background: var(--pk-warning); }
 
 /* Body */
 .pk-kanban__body {
@@ -645,10 +657,10 @@ function handleIndustryHighlight(industry) {
   gap: 16px;
 }
 
-/* Dept grid - 默认 2*2 布局 */
+/* Dept grid - 第1行3列 */
 .pk-kanban__dept-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 12px;
   min-width: 0;
 }

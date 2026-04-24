@@ -2,7 +2,7 @@
   <DataCard
     title="费用执行率"
     :icon="DollarIcon"
-    icon-color="#f59e0b"
+    icon-color="var(--pk-warning)"
     :status-text="statusText"
     :status-color="statusColor"
     :ai-summary="data?.aiSummary"
@@ -27,35 +27,35 @@
           <span class="pk-budget-sub__status" :class="statusClass(proj)">{{ proj.status }}</span>
         </div>
 
-        <!-- 圆环 + 金额 -->
+        <!-- 中部：圆环图 + 偏差指示条 上下排列 -->
         <div class="pk-budget-sub__body">
           <div class="pk-budget-sub__ring">
             <DonutChart :percentage="proj.rate" :size="64" :stroke-width="5" />
           </div>
-          <div class="pk-budget-sub__amount">
-            <span class="pk-budget-sub__executed">¥{{ proj.executed }}M</span>
-            <span class="pk-budget-sub__divider">/</span>
-            <span class="pk-budget-sub__total">¥{{ proj.budget }}M</span>
+          <div class="pk-budget-sub__deviation">
+            <div class="pk-budget-sub__deviation-bar">
+              <div class="pk-budget-sub__deviation-zero" />
+              <div
+                class="pk-budget-sub__deviation-ptr"
+                :class="deviationPtrClass(proj.deviation)"
+                :style="{ left: deviationLeft(proj.deviation) }"
+              />
+            </div>
+            <div class="pk-budget-sub__deviation-scale">
+              <span>-20%</span>
+              <span class="pk-budget-sub__deviation-label" :class="deviationClass(proj.deviation)">
+                偏差 {{ proj.deviation > 0 ? '+' : '' }}{{ proj.deviation }}%
+              </span>
+              <span>+20%</span>
+            </div>
           </div>
         </div>
 
-        <!-- 偏差指示条 -->
-        <div class="pk-budget-sub__deviation">
-          <div class="pk-budget-sub__deviation-bar">
-            <div class="pk-budget-sub__deviation-zero" />
-            <div
-              class="pk-budget-sub__deviation-ptr"
-              :class="deviationPtrClass(proj.deviation)"
-              :style="{ left: deviationLeft(proj.deviation) }"
-            />
-          </div>
-          <div class="pk-budget-sub__deviation-scale">
-            <span>-20%</span>
-            <span class="pk-budget-sub__deviation-label" :class="deviationClass(proj.deviation)">
-              偏差 {{ proj.deviation > 0 ? '+' : '' }}{{ proj.deviation }}%
-            </span>
-            <span>+20%</span>
-          </div>
+        <!-- 底部：金额 -->
+        <div class="pk-budget-sub__amount">
+          <span class="pk-budget-sub__executed">¥{{ proj.executed }}M</span>
+          <span class="pk-budget-sub__divider">/</span>
+          <span class="pk-budget-sub__total">¥{{ proj.budget }}M</span>
         </div>
       </div>
     </div>
@@ -140,8 +140,8 @@ function deviationClass(deviation) {
 
 /* 单个子卡片 — 正方形 */
 .pk-budget-sub {
-  background: #fff;
-  border: 1px solid #eef0f4;
+  background: var(--pk-card-bg);
+  border: 1px solid var(--pk-border);
   border-radius: 10px;
   padding: 8px 8px 10px;
   min-width: 0;
@@ -154,7 +154,7 @@ function deviationClass(deviation) {
 }
 
 .pk-budget-sub:hover {
-  border-color: #dde1e8;
+  border-color: var(--pk-border-hover);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
@@ -183,16 +183,17 @@ function deviationClass(deviation) {
   flex-shrink: 0;
 }
 
-.pk-budget-sub__status--active { background: #d1fae5; color: #059669; }
-.pk-budget-sub__status--maintenance { background: #fef3c7; color: #92400e; }
+.pk-budget-sub__status--active { background: var(--pk-success-light); color: var(--pk-success-dark); }
+.pk-budget-sub__status--maintenance { background: var(--pk-warning-light); color: var(--pk-warning-dark); }
 
-/* 中部：圆环 + 金额 */
+/* 中部：圆环图 + 偏差指示条 上下排列 */
 .pk-budget-sub__body {
+  flex: 1;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  flex: 1;
+  gap: 6px;
   min-height: 0;
 }
 
@@ -200,9 +201,11 @@ function deviationClass(deviation) {
   flex-shrink: 0;
 }
 
+/* 底部：金额 */
 .pk-budget-sub__amount {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 3px;
   font-size: 13px;
 }
@@ -213,10 +216,11 @@ function deviationClass(deviation) {
 
 /* 偏差指示条 */
 .pk-budget-sub__deviation {
-  margin-top: auto;
   display: flex;
   flex-direction: column;
   gap: 2px;
+  width: 80%;
+  margin: 0 auto;
 }
 
 .pk-budget-sub__deviation-bar {
@@ -224,11 +228,11 @@ function deviationClass(deviation) {
   border-radius: 3px;
   position: relative;
   background: linear-gradient(90deg,
-    #dc2626 0%, #dc2626 16.67%,
-    #d97706 16.67%, #d97706 33.33%,
-    #059669 33.33%, #059669 66.67%,
-    #d97706 66.67%, #d97706 83.33%,
-    #dc2626 83.33%, #dc2626 100%
+    var(--pk-danger) 0%, var(--pk-danger) 16.67%,
+    var(--pk-warning) 16.67%, var(--pk-warning) 33.33%,
+    var(--pk-success) 33.33%, var(--pk-success) 66.67%,
+    var(--pk-warning) 66.67%, var(--pk-warning) 83.33%,
+    var(--pk-danger) 83.33%, var(--pk-danger) 100%
   );
 }
 
@@ -254,28 +258,28 @@ function deviationClass(deviation) {
 
 .pk-budget-sub__deviation-ptr {
   position: absolute;
-  top: -3px;
+  top: -4px;
   width: 0;
   height: 0;
-  border-left: 4px solid transparent;
-  border-right: 4px solid transparent;
-  border-top: 6px solid;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 9px solid;
   transform: translateX(-50%);
   z-index: 3;
 }
 
-.pk-budget-sub__deviation-ptr--danger { border-top-color: #dc2626; }
-.pk-budget-sub__deviation-ptr--warning { border-top-color: #d97706; }
-.pk-budget-sub__deviation-ptr--good { border-top-color: #059669; }
+.pk-budget-sub__deviation-ptr--danger { border-top-color: var(--pk-danger); }
+.pk-budget-sub__deviation-ptr--warning { border-top-color: var(--pk-warning); }
+.pk-budget-sub__deviation-ptr--good { border-top-color: var(--pk-success); }
 
 .pk-budget-sub__deviation-label {
   font-size: 11px;
   font-weight: 500;
 }
 
-.pk-budget-sub__deviation-label--danger { color: #dc2626; }
-.pk-budget-sub__deviation-label--warning { color: #d97706; }
-.pk-budget-sub__deviation-label--good { color: #059669; }
+.pk-budget-sub__deviation-label--danger { color: var(--pk-danger); }
+.pk-budget-sub__deviation-label--warning { color: var(--pk-warning); }
+.pk-budget-sub__deviation-label--good { color: var(--pk-success); }
 
 /* Responsive */
 @media (max-width: 600px) {

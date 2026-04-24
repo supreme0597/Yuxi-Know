@@ -5,7 +5,7 @@
         :cx="size / 2"
         :cy="size / 2"
         :r="radius"
-        stroke="#e5e7eb"
+        stroke="var(--pk-border)"
         :stroke-width="strokeWidth"
         fill="none"
       />
@@ -46,9 +46,9 @@ const displayValue = computed(() => props.label || `${props.percentage}%`)
 
 const ringColor = computed(() => {
   if (props.color) return props.color
-  if (props.percentage >= 80) return '#059669'
-  if (props.percentage >= 50) return '#d97706'
-  return '#dc2626'
+  if (props.percentage >= 80) return 'var(--pk-chart-green)'
+  if (props.percentage >= 50) return 'var(--pk-chart-orange)'
+  return 'var(--pk-chart-red)'
 })
 </script>
 
@@ -77,7 +77,7 @@ const ringColor = computed(() => {
 .pk-donut__value {
   font-size: 13px;
   font-weight: 700;
-  color: var(--gray-700);
+  color: var(--pk-text);
 }
 
 @media (min-width: 1600px) {

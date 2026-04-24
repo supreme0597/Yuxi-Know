@@ -2,7 +2,7 @@
   <DataCard
     title="项目里程碑"
     :icon="FlagIcon"
-    icon-color="#8b5cf6"
+    icon-color="var(--pk-group-v3)"
     :status-text="statusText"
     :status-color="statusColor"
     :ai-summary="data?.aiSummary"
@@ -29,31 +29,15 @@
           <span v-else-if="item.deviation > 0" class="pk-milestone-sub__tag pk-milestone-sub__tag--warn">关注</span>
         </div>
 
-        <!-- 下一里程碑 + 弧形仪表 -->
-        <div v-if="nextPhase(item)" class="pk-milestone-sub__next">
-          <!-- 弧形半圆仪表 -->
-          <div class="pk-milestone-sub__arc" :class="'pk-milestone-sub__arc--' + arcStatus(nextPhase(item))">
-            <svg width="100%" height="100%" viewBox="0 0 40 22" preserveAspectRatio="xMidYMax meet">
-              <!-- 背景弧 -->
-              <path d="M4 20 A16 16 0 0 1 36 20" fill="none" stroke="#e2e8f0" stroke-width="3" stroke-linecap="round" />
-              <!-- 进度弧 -->
-              <path
-                d="M4 20 A16 16 0 0 1 36 20"
-                fill="none"
-                :stroke="arcColor(nextPhase(item))"
-                stroke-width="3"
-                stroke-linecap="round"
-                :stroke-dasharray="50.27"
-                :stroke-dashoffset="50.27 - (arcPercent(nextPhase(item), item) / 100) * 50.27"
-              />
-            </svg>
-            <span class="pk-milestone-sub__arc-label">{{ shortName(nextPhase(item).name) }}</span>
-          </div>
-          <!-- 文字信息 -->
-          <div class="pk-milestone-sub__next-info">
-            <span class="pk-milestone-sub__next-name">{{ nextPhase(item).name }}</span>
-            <span class="pk-milestone-sub__next-date">{{ nextPhase(item).date }}</span>
-          </div>
+        <!-- 圆环图 -->
+        <div v-if="nextPhase(item)" class="pk-milestone-sub__donut">
+          <DonutChart
+            :percentage="arcPercent(nextPhase(item), item)"
+            :size="64"
+            :stroke-width="5"
+            :color="arcColor(nextPhase(item))"
+            :label="shortName(nextPhase(item).name)"
+          />
         </div>
 
         <!-- 时间轴 -->
@@ -84,6 +68,7 @@
 import { computed, h, ref } from 'vue'
 import DataCard from '../common/DataCard.vue'
 import StatGrid from '../common/StatGrid.vue'
+import DonutChart from '../common/DonutChart.vue'
 
 const props = defineProps({
   data: { type: Object, default: null }
@@ -152,10 +137,10 @@ function arcPercent(phase, item) {
 
 /** 弧形仪表颜色 */
 function arcColor(phase) {
-  if (phase.status === 'completed') return '#059669'
-  if (phase.risk === 'high') return '#dc2626'
-  if (phase.risk === 'yellow' || phase.risk === 'medium') return '#d97706'
-  return '#059669'
+  if (phase.status === 'completed') return 'var(--pk-success)'
+  if (phase.risk === 'high') return 'var(--pk-danger)'
+  if (phase.risk === 'yellow' || phase.risk === 'medium') return 'var(--pk-warning)'
+  return 'var(--pk-success)'
 }
 
 /** 弧形仪表状态 */
@@ -199,8 +184,8 @@ function nodeClass(phase, idx, item) {
 
 /* ===== 子卡片 ===== */
 .pk-milestone-sub {
-  background: #fff;
-  border: 1px solid #eef0f4;
+  background: var(--pk-card-bg);
+  border: 1px solid var(--pk-border);
   border-radius: 10px;
   padding: 8px 8px 10px;
   display: flex;
@@ -213,13 +198,13 @@ function nodeClass(phase, idx, item) {
 }
 
 .pk-milestone-sub:hover {
-  border-color: #dde1e8;
+  border-color: var(--pk-border-hover);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
 .pk-milestone-sub--active {
-  border-color: #818cf8;
-  box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.15);
+  border-color: var(--pk-accent);
+  box-shadow: 0 0 0 2px var(--pk-accent-glow);
 }
 
 /* ===== 头部 ===== */
@@ -232,7 +217,7 @@ function nodeClass(phase, idx, item) {
 .pk-milestone-sub__title {
   font-size: 14px;
   font-weight: 600;
-  color: #1e293b;
+  color: var(--pk-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -247,76 +232,26 @@ function nodeClass(phase, idx, item) {
   border-radius: 4px;
   white-space: nowrap;
   flex-shrink: 0;
-  color: #b91c1c;
-  background: #fef2f2;
+  color: var(--pk-danger-dark);
+  background: var(--pk-danger-light);
 }
 .pk-milestone-sub__tag--warn {
-  color: #92400e;
-  background: #fef3c7;
+  color: var(--pk-warning-dark);
+  background: var(--pk-warning-light);
 }
 
-/* ===== 下一里程碑 + 弧形仪表 ===== */
-.pk-milestone-sub__next {
+/* ===== 圆环图 ===== */
+.pk-milestone-sub__donut {
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 8px;
-}
-
-/* 弧形半圆仪表容器 */
-.pk-milestone-sub__arc {
-  position: relative;
-  width: 64px;
-  height: 32px;
-  flex-shrink: 0;
-}
-
-.pk-milestone-sub__arc svg {
-  display: block;
-}
-
-/* 弧内标签（里程碑缩写） */
-.pk-milestone-sub__arc-label {
-  position: absolute;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 13px;
-  font-weight: 700;
-  color: #475569;
-  white-space: nowrap;
-}
-
-.pk-milestone-sub__arc--danger .pk-milestone-sub__arc-label { color: #b91c1c; }
-.pk-milestone-sub__arc--warn .pk-milestone-sub__arc-label { color: #92400e; }
-
-/* 文字信息 */
-.pk-milestone-sub__next-info {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-}
-
-.pk-milestone-sub__next-name {
-  font-size: 14px;
-  font-weight: 700;
-  color: #334155;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.pk-milestone-sub__next-date {
-  font-size: 12px;
-  color: #94a3b8;
-  font-variant-numeric: tabular-nums;
+  justify-content: center;
+  min-height: 0;
 }
 
 /* ===== 时间轴 ===== */
 .pk-milestone-sub__track {
   position: relative;
-  margin-top: auto;
   /* 日期(11px行高) + gap(2px) + 圆点半径(9px) = 22px 为圆点中心 */
   /* 总高度 = 11 + 2 + 18 + 2 + 11 = 44px, 留点余量 */
   height: 48px;
@@ -329,7 +264,7 @@ function nodeClass(phase, idx, item) {
   left: 10%;
   right: 10%;
   height: 2px;
-  background: #e2e8f0;
+  background: var(--pk-border);
 }
 
 /* 节点 */
@@ -347,7 +282,7 @@ function nodeClass(phase, idx, item) {
 /* 日期 */
 .pk-milestone-sub__node-date {
   font-size: 11px;
-  color: #94a3b8;
+  color: var(--pk-text-tertiary);
   font-variant-numeric: tabular-nums;
   line-height: 1;
   height: 11px;
@@ -358,8 +293,8 @@ function nodeClass(phase, idx, item) {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  border: 2px solid #cbd5e1;
-  background: #fff;
+  border: 2px solid var(--pk-border-hover);
+  background: var(--pk-card-bg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -370,35 +305,35 @@ function nodeClass(phase, idx, item) {
 
 /* 已完成 */
 .pk-milestone-sub__node--done .pk-milestone-sub__node-dot {
-  background: #059669;
-  border-color: #059669;
+  background: var(--pk-success);
+  border-color: var(--pk-success);
 }
 
 /* 高风险 */
 .pk-milestone-sub__node--danger .pk-milestone-sub__node-dot {
-  background: #dc2626;
-  border-color: #dc2626;
-  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.2);
+  background: var(--pk-danger);
+  border-color: var(--pk-danger);
+  box-shadow: 0 0 0 3px var(--pk-danger-glow);
   animation: dot-pulse 2.5s ease-in-out infinite;
 }
 
 /* 关注 */
 .pk-milestone-sub__node--warn .pk-milestone-sub__node-dot {
-  background: #d97706;
-  border-color: #d97706;
-  box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.15);
+  background: var(--pk-warning);
+  border-color: var(--pk-warning);
+  box-shadow: 0 0 0 3px var(--pk-warning-glow);
 }
 
 /* 未来 */
 .pk-milestone-sub__node--future .pk-milestone-sub__node-dot {
-  border-color: #cbd5e1;
-  background: #fff;
+  border-color: var(--pk-border-hover);
+  background: var(--pk-card-bg);
 }
 
 /* 阶段名 */
 .pk-milestone-sub__node-label {
   font-size: 11px;
-  color: #6b7280;
+  color: var(--pk-text-secondary);
   white-space: nowrap;
   text-align: center;
   max-width: 56px;
@@ -408,13 +343,13 @@ function nodeClass(phase, idx, item) {
 }
 
 .pk-milestone-sub__node--danger .pk-milestone-sub__node-label {
-  color: #b91c1c;
+  color: var(--pk-danger);
   font-weight: 600;
 }
 
 @keyframes dot-pulse {
-  0%, 100% { box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.2); }
-  50% { box-shadow: 0 0 0 5px rgba(220, 38, 38, 0.1); }
+  0%, 100% { box-shadow: 0 0 0 3px var(--pk-danger-glow); }
+  50% { box-shadow: 0 0 0 5px var(--pk-danger-glow-weak); }
 }
 
 /* Responsive */
@@ -431,18 +366,8 @@ function nodeClass(phase, idx, item) {
   .pk-milestone-sub__tag {
     font-size: 13px;
   }
-  .pk-milestone-sub__arc {
-    width: 76px;
-    height: 38px;
-  }
-  .pk-milestone-sub__arc-label {
-    font-size: 15px;
-  }
-  .pk-milestone-sub__next-name {
-    font-size: 15px;
-  }
-  .pk-milestone-sub__next-date {
-    font-size: 13px;
+  :deep(.pk-donut) {
+    --pk-donut-size: 76px !important;
   }
   .pk-milestone-sub__node-date {
     font-size: 12px;
@@ -470,18 +395,8 @@ function nodeClass(phase, idx, item) {
   .pk-milestone-sub__tag {
     font-size: 14px;
   }
-  .pk-milestone-sub__arc {
-    width: 88px;
-    height: 44px;
-  }
-  .pk-milestone-sub__arc-label {
-    font-size: 16px;
-  }
-  .pk-milestone-sub__next-name {
-    font-size: 16px;
-  }
-  .pk-milestone-sub__next-date {
-    font-size: 14px;
+  :deep(.pk-donut) {
+    --pk-donut-size: 88px !important;
   }
   .pk-milestone-sub__node-date {
     font-size: 13px;
@@ -509,18 +424,8 @@ function nodeClass(phase, idx, item) {
   .pk-milestone-sub__tag {
     font-size: 14px;
   }
-  .pk-milestone-sub__arc {
-    width: 100px;
-    height: 50px;
-  }
-  .pk-milestone-sub__arc-label {
-    font-size: 18px;
-  }
-  .pk-milestone-sub__next-name {
-    font-size: 17px;
-  }
-  .pk-milestone-sub__next-date {
-    font-size: 15px;
+  :deep(.pk-donut) {
+    --pk-donut-size: 100px !important;
   }
   .pk-milestone-sub__node-date {
     font-size: 14px;

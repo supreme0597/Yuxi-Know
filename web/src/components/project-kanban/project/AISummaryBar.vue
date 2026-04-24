@@ -141,23 +141,23 @@ const topRisks = computed(() => {
 }
 .pk-ai-bar__risk-item--critical,
 .pk-ai-bar__risk-item--danger {
-  background: var(--color-error-50);
+  background: var(--pk-danger-light);
 }
 .pk-ai-bar__risk-item--critical:hover,
 .pk-ai-bar__risk-item--danger:hover {
-  background: var(--color-error-10);
+  background: var(--pk-danger-lighter);
 }
 .pk-ai-bar__risk-item--warning {
-  background: var(--color-warning-50);
+  background: var(--pk-warning-light);
 }
 .pk-ai-bar__risk-item--warning:hover {
-  background: var(--color-warning-10);
+  background: var(--pk-warning-lighter);
 }
 .pk-ai-bar__risk-item--normal {
-  background: var(--color-success-50);
+  background: var(--pk-success-light);
 }
 .pk-ai-bar__risk-item--normal:hover {
-  background: var(--color-success-10);
+  background: var(--pk-success-lighter);
 }
 .pk-ai-bar__risk-rank {
   width: 18px;
@@ -170,17 +170,17 @@ const topRisks = computed(() => {
   font-weight: 700;
   flex-shrink: 0;
   background: var(--gray-300);
-  color: #fff;
+  color: var(--pk-card-bg);
 }
 .pk-ai-bar__risk-item--critical .pk-ai-bar__risk-rank,
 .pk-ai-bar__risk-item--danger .pk-ai-bar__risk-rank {
-  background: var(--color-error-500);
+  background: var(--pk-danger-dark);
 }
 .pk-ai-bar__risk-item--warning .pk-ai-bar__risk-rank {
-  background: var(--color-warning-500);
+  background: var(--pk-warning-dark);
 }
 .pk-ai-bar__risk-item--normal .pk-ai-bar__risk-rank {
-  background: var(--color-success-500);
+  background: var(--pk-success-dark);
 }
 .pk-ai-bar__risk-body {
   display: flex;
@@ -217,9 +217,9 @@ const topRisks = computed(() => {
   box-sizing: border-box;
 }
 .pk-ai-bar__question:hover {
-  background: var(--main-50);
-  border-color: var(--main-200);
-  color: var(--main-700);
+  background: var(--pk-accent-light);
+  border-color: var(--pk-accent);
+  color: var(--pk-accent-dark);
 }
 
 /* Responsive */

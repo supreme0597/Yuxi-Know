@@ -1,0 +1,61 @@
+:root {
+  /* 状态色 */
+  --pk-success: #10b981;
+  --pk-success-light: #d1fae5;
+  --pk-success-dark: #059669;
+
+  --pk-warning: #f59e0b;
+  --pk-warning-light: #fef3c7;
+  --pk-warning-dark: #d97706;
+
+  --pk-danger: #ff6b6b;
+  --pk-danger-light: #fee2e2;
+  --pk-danger-dark: #ef4444;
+
+  /* AI 强调色 */
+  --pk-accent: #6366f1;
+  --pk-accent-light: #eef2ff;
+  --pk-accent-dark: #4f46e5;
+  --pk-accent-gradient-from: #eef2ff;
+  --pk-accent-gradient-to: #e0e7ff;
+
+  /* 项目群标识色 */
+  --pk-group-v2: #3b82f6;
+  --pk-group-v3: #8b5cf6;
+  --pk-group-mcu: #06b6d4;
+
+  /* 中性色 */
+  --pk-card-bg: #ffffff;
+  --pk-page-bg: #f8fafa;
+  --pk-border: #eef0f4;
+  --pk-text: #1e293b;
+  --pk-text-secondary: #64748b;
+
+  /* 图表色（使用亮色，避免图表过于暗沉） */
+  --pk-chart-green: #10b981;
+  --pk-chart-orange: #f59e0b;
+  --pk-chart-red: #ff6b6b;
+
+  /* 项目群 light 背景 */
+  --pk-group-v2-light: #eff6ff;
+  --pk-group-v3-light: #faf5ff;
+
+  /* 更浅的状态背景（用于 hover） */
+  --pk-success-lighter: #f0fdf4;
+  --pk-warning-lighter: #fffbeb;
+  --pk-danger-lighter: #fef2f2;
+
+  /* 补充中性色 */
+  --pk-text-tertiary: #94a3b8;
+  --pk-border-hover: #dde1e8;
+  --pk-neutral-bg: #f5f6f8;
+
+  /* 状态光晕 */
+  --pk-danger-glow: rgba(255, 107, 107, 0.2);
+  --pk-danger-glow-weak: rgba(255, 107, 107, 0.1);
+  --pk-danger-glow-strong: rgba(255, 107, 107, 0.25);
+  --pk-warning-glow: rgba(245, 158, 11, 0.15);
+  --pk-accent-glow: rgba(99, 102, 241, 0.2);
+  --pk-accent-glow-weak: rgba(99, 102, 241, 0.1);
+  --pk-success-glow: rgba(16, 185, 129, 0.25);
+}

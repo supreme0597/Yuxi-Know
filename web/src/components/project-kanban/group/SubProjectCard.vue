@@ -1,8 +1,11 @@
 <template>
   <div class="pk-sub" @click="$emit('click', project)">
-    <!-- 头部：项目ID + 状态徽章 + 进度 -->
+    <!-- 头部：项目ID（可点击跳转项目级）+ 状态徽章 + 进度 -->
     <div class="pk-sub__header">
-      <span class="pk-sub__id">{{ project.id }}</span>
+      <span class="pk-sub__id" @click.stop="$emit('id-click', project)">
+        <span class="pk-sub__id-text">{{ project.id }}</span>
+        <ChevronRight class="pk-sub__id-arrow" :size="14" />
+      </span>
       <StatusBadge :status="milestoneStatus" :text="milestoneText" />
       <span class="pk-sub__progress" @click.stop="$emit('progress-click', project)">{{ project.progress }}%</span>
     </div>
@@ -13,9 +16,9 @@
     </div>
 
     <!-- AI 一句话总结 -->
-    <div v-if="project.aiSummary" class="pk-sub__ai" @click.stop="$emit('ai-click', project)">
+    <div v-if="project.aiSummary" class="pk-sub__ai" :title="project.aiSummary" @click.stop="$emit('ai-click', project)">
       <span class="pk-sub__ai-spark">✨</span>
-      <span>{{ project.aiSummary }}</span>
+      <span class="pk-sub__ai-text">{{ project.aiSummary }}</span>
     </div>
 
     <!-- 5维度风险标签 -->
@@ -49,6 +52,7 @@
 
 <script setup>
 import { computed } from 'vue'
+import { ChevronRight } from 'lucide-vue-next'
 import StatusBadge from '../common/StatusBadge.vue'
 import { projectData } from '../data/projectData'
 import { groupData } from '../data/groupData'
@@ -73,7 +77,7 @@ const props = defineProps({
   project: { type: Object, required: true }
 })
 
-defineEmits(['click', 'ai-click', 'dim-click', 'progress-click', 'milestone-click'])
+defineEmits(['click', 'ai-click', 'dim-click', 'progress-click', 'milestone-click', 'id-click'])
 
 const dimensions = computed(() => getRiskDimensions(props.project))
 
@@ -109,8 +113,8 @@ const milestoneText = computed(() => {
   gap: 10px;
 }
 .pk-sub:hover {
-  border-color: var(--main-300);
-  background: #fafbff;
+  border-color: var(--pk-accent);
+  background: var(--pk-page-bg);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
@@ -121,21 +125,49 @@ const milestoneText = computed(() => {
   gap: 6px;
 }
 .pk-sub__id {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   font-size: 14px;
   font-weight: 700;
   color: var(--gray-800);
   letter-spacing: -0.3px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 1px 6px 1px 8px;
+  border-radius: 6px;
+  background: transparent;
+}
+.pk-sub__id:hover {
+  background: linear-gradient(135deg, var(--pk-accent-light), var(--pk-group-v3-light));
+  color: var(--pk-accent);
+  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.15);
+}
+
+.pk-sub__id-text {
+  line-height: 1;
+}
+
+.pk-sub__id-arrow {
+  flex-shrink: 0;
+  opacity: 0.35;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.pk-sub__id:hover .pk-sub__id-arrow {
+  opacity: 0.8;
+  transform: translateX(2px);
 }
 .pk-sub__progress {
   margin-left: auto;
   font-size: 13px;
   font-weight: 700;
-  color: var(--main-600);
+  color: var(--pk-accent);
   cursor: pointer;
   transition: color 0.15s ease;
 }
 .pk-sub__progress:hover {
-  color: var(--main-500);
+  color: var(--pk-accent-dark);
 }
 
 /* Progress bar */
@@ -147,7 +179,7 @@ const milestoneText = computed(() => {
 }
 .pk-sub__bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--main-400), var(--main-600));
+  background: linear-gradient(90deg, var(--pk-accent), var(--pk-accent-dark));
   border-radius: 3px;
   transition: width 0.4s ease;
 }
@@ -161,8 +193,18 @@ const milestoneText = computed(() => {
   color: var(--gray-600);
   line-height: 1.5;
   padding: 6px 8px;
-  background: linear-gradient(135deg, #f8faff, #faf5ff);
+  background: linear-gradient(135deg, var(--pk-accent-light), var(--pk-group-v3-light));
   border-radius: 6px;
+  overflow: hidden;
+  box-sizing: content-box;
+  height: calc(1 * 1.5em);
+}
+.pk-sub__ai-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .pk-sub__ai-spark {
   flex-shrink: 0;
@@ -188,16 +230,16 @@ const milestoneText = computed(() => {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 .pk-sub__dim--normal {
-  background: #d1fae5;
-  color: #059669;
+  background: var(--pk-success-light);
+  color: var(--pk-success);
 }
 .pk-sub__dim--warning {
-  background: #fef3c7;
-  color: #d97706;
+  background: var(--pk-warning-light);
+  color: var(--pk-warning-dark);
 }
 .pk-sub__dim--danger {
-  background: #fef2f2;
-  color: #dc2626;
+  background: var(--pk-danger-light);
+  color: var(--pk-danger);
 }
 
 /* Milestone timeline */
@@ -228,11 +270,11 @@ const milestoneText = computed(() => {
   flex-shrink: 0;
 }
 .pk-sub__phase--completed .pk-sub__phase-dot {
-  background: #10b981;
+  background: var(--pk-chart-green);
 }
 .pk-sub__phase--active .pk-sub__phase-dot {
-  background: #059669;
-  box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.25);
+  background: var(--pk-success-dark);
+  box-shadow: 0 0 0 2px var(--pk-success-glow);
 }
 .pk-sub__phase--pending .pk-sub__phase-dot {
   background: var(--gray-300);
@@ -251,7 +293,7 @@ const milestoneText = computed(() => {
   flex-shrink: 0;
 }
 .pk-sub__phase-line--done {
-  background: #10b981;
+  background: var(--pk-chart-green);
 }
 
 @media (min-width: 1600px) {
@@ -261,6 +303,7 @@ const milestoneText = computed(() => {
   }
   .pk-sub__id {
     font-size: 15px;
+    padding: 2px 7px 2px 9px;
   }
   .pk-sub__progress {
     font-size: 14px;
@@ -303,6 +346,7 @@ const milestoneText = computed(() => {
   }
   .pk-sub__id {
     font-size: 16px;
+    padding: 2px 8px 2px 10px;
   }
   .pk-sub__progress {
     font-size: 15px;
@@ -345,6 +389,7 @@ const milestoneText = computed(() => {
   }
   .pk-sub__id {
     font-size: 17px;
+    padding: 2px 8px 2px 10px;
   }
   .pk-sub__progress {
     font-size: 16px;

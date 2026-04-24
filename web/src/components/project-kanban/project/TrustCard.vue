@@ -2,10 +2,11 @@
   <DataCard
     title="可信管理"
     :icon="TrustIcon"
-    icon-color="#6366f1"
+    icon-color="var(--pk-accent)"
     :status-text="statusText"
     :status-color="trustStatusColor"
     :ai-summary="data?.aiSummary ? `${data.aiSummary}` : ''"
+    ai-lines="1"
     wide
     @ai-click="$emit('ai-click', 'trust')"
     @summary-click="$emit('ai-click', 'trust')"
@@ -123,8 +124,8 @@ const trustItems = computed(() => {
   transition: all 0.15s ease;
 }
 .pk-trust__subcard:hover {
-  border-color: var(--main-200);
-  background: var(--main-50);
+  border-color: var(--pk-accent);
+  background: var(--pk-accent-light);
 }
 
 .pk-trust__subcard-header {
@@ -143,9 +144,9 @@ const trustItems = computed(() => {
   height: 6px;
   border-radius: 50%;
 }
-.pk-trust__subcard-dot--green { background: #10b981; }
-.pk-trust__subcard-dot--yellow { background: #f59e0b; }
-.pk-trust__subcard-dot--red { background: #ef4444; }
+.pk-trust__subcard-dot--green { background: var(--pk-chart-green); }
+.pk-trust__subcard-dot--yellow { background: var(--pk-chart-orange); }
+.pk-trust__subcard-dot--red { background: var(--pk-chart-red); }
 
 .pk-trust__metric {
   display: flex;
@@ -178,9 +179,9 @@ const trustItems = computed(() => {
   border-radius: 2px;
   transition: width 0.5s ease;
 }
-.pk-trust__progress-fill--green { background: #10b981; }
-.pk-trust__progress-fill--yellow { background: #f59e0b; }
-.pk-trust__progress-fill--red { background: #ef4444; }
+.pk-trust__progress-fill--green { background: var(--pk-success); }
+.pk-trust__progress-fill--yellow { background: var(--pk-warning); }
+.pk-trust__progress-fill--red { background: var(--pk-danger); }
 
 @media (min-width: 1600px) {
   .pk-trust__grid {

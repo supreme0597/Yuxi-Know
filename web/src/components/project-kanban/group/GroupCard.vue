@@ -14,11 +14,9 @@
       </div>
 
       <!-- AI 一句话总结 -->
-      <div v-if="meta.aiSummary" class="pk-group__ai" @click.stop="$emit('ai-click', groupKey)">
+      <div v-if="meta.aiSummary" class="pk-group__ai" :title="meta.aiSummary" @click.stop="$emit('ai-click', groupKey)">
         <span class="pk-group__ai-spark">✨</span>
-        <Tooltip :title="meta.aiSummary" placement="topLeft" :mouseEnterDelay="0.3">
-          <span class="pk-group__ai-text">{{ meta.aiSummary }}</span>
-        </Tooltip>
+        <span class="pk-group__ai-text">{{ meta.aiSummary }}</span>
       </div>
 
       <!-- 子项目网格 -->
@@ -32,6 +30,7 @@
           @dim-click="$emit('dim-click', $event)"
           @progress-click="$emit('progress-click', $event)"
           @milestone-click="$emit('milestone-click', $event)"
+          @id-click="$emit('id-click', $event)"
         />
       </div>
     </div>
@@ -45,7 +44,6 @@
 
 <script setup>
 import { computed, h } from 'vue'
-import { Tooltip } from 'ant-design-vue'
 import AIButton from '../common/AIButton.vue'
 import StatusBadge from '../common/StatusBadge.vue'
 import SubProjectCard from './SubProjectCard.vue'
@@ -65,7 +63,7 @@ const props = defineProps({
   groupKey: { type: String, required: true }
 })
 
-defineEmits(['ai-click', 'sub-click', 'sub-ai-click', 'dim-click', 'progress-click', 'milestone-click'])
+defineEmits(['ai-click', 'sub-click', 'sub-ai-click', 'dim-click', 'progress-click', 'milestone-click', 'id-click'])
 
 // 用 render function 创建图标组件
 const Building2 = {
@@ -152,18 +150,21 @@ const statusText = computed(() => {
   align-items: flex-start;
   gap: 6px;
   padding: 8px 12px;
-  background: linear-gradient(135deg, #faf5ff, #eff6ff);
+  background: linear-gradient(135deg, var(--pk-group-v3-light), var(--pk-group-v2-light));
   border-radius: 8px;
-  border: 1px solid rgba(99, 102, 241, 0.1);
+  border: 1px solid var(--pk-accent-glow-weak);
   font-size: 13px;
   color: var(--gray-700);
   line-height: 1.6;
   cursor: pointer;
   transition: background 0.2s ease, box-shadow 0.2s ease;
+  overflow: hidden;
+  box-sizing: content-box;
+  height: calc(2 * 1.6em);
 }
 .pk-group__ai:hover {
-  background: linear-gradient(135deg, #f3e8ff, #dbeafe);
-  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.2);
+  background: linear-gradient(135deg, var(--pk-group-v3-light), var(--pk-accent-light));
+  box-shadow: 0 0 0 1px var(--pk-accent-glow);
 }
 .pk-group__ai-spark {
   flex-shrink: 0;
@@ -171,10 +172,11 @@ const statusText = computed(() => {
 }
 .pk-group__ai-text {
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1.6;
 }
 
 /* Sub-project grid - 纵向排布 */

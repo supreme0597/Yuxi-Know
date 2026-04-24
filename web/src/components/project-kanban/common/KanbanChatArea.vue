@@ -156,15 +156,15 @@ function getShowRefs(msg) {
   justify-content: center;
   gap: 10px;
   padding: 32px 0;
-  color: var(--gray-500, #6b7280);
+  color: var(--gray-500);
   font-size: 13px;
 }
 
 .kanban-chat-messages__loading-spinner {
   width: 18px;
   height: 18px;
-  border: 2px solid var(--gray-200, #e5e7eb);
-  border-top-color: #6366f1;
+  border: 2px solid var(--gray-200);
+  border-top-color: var(--pk-accent);
   border-radius: 50%;
   animation: kcm-spin 0.8s linear infinite;
 }
@@ -175,7 +175,7 @@ function getShowRefs(msg) {
   align-items: center;
   gap: 10px;
   padding: 8px 0;
-  color: var(--gray-500, #6b7280);
+  color: var(--gray-500);
   font-size: 13px;
   animation: kcm-fadeInUp 0.3s ease-out;
 }
@@ -189,7 +189,7 @@ function getShowRefs(msg) {
 .kanban-chat-messages__generating-dots div {
   width: 5px;
   height: 5px;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  background: linear-gradient(135deg, var(--pk-accent), var(--pk-group-v3));
   border-radius: 50%;
   animation: kcm-dotPulse 1.4s infinite ease-in-out both;
 }

@@ -1494,3 +1494,122 @@ function riskLevelText(level) {
   const map = { critical: '关键', danger: '危险', warning: '一般', normal: '低', info: '信息' }
   return map[level] || level || '未知'
 }
+
+/**
+ * buildDataContext - 将侧边栏数据概览序列化为结构化文本
+ * 用于在 AI 对话时作为隐藏上下文注入 query，让 AI 能感知数据概览的全部信息
+ * @param {object} panelData - 侧边栏数据（useAISidepanel 返回的 panelData）
+ * @returns {string} 结构化上下文文本
+ */
+export function buildDataContext(panelData) {
+  if (!panelData || typeof panelData !== 'object') return ''
+
+  const lines = []
+
+  // 标题
+  if (panelData.title) {
+    lines.push(`## ${panelData.title}`)
+  }
+  if (panelData.subtitle) {
+    lines.push(`所属：${panelData.subtitle}`)
+  }
+
+  // 关键数据条 (progress)
+  if (panelData.progress?.length) {
+    lines.push('')
+    lines.push('### 关键数据')
+    panelData.progress.forEach(item => {
+      const statusLabel = { danger: '⚠️', warning: '⚡', normal: '' }[item.status] || ''
+      lines.push(`- ${item.label}：${item.value} ${statusLabel}`)
+    })
+  }
+
+  // 概览统计（任务令概览专用）
+  if (panelData.overviewStats) {
+    const os = panelData.overviewStats
+    lines.push('')
+    lines.push('### 概览统计')
+    lines.push(`- 已完成：${os.completed}个`)
+    lines.push(`- 进行中：${os.inProgress}个`)
+    lines.push(`- 待启动：${os.pending}个`)
+  }
+
+  // 产业分组（任务令概览专用）
+  if (panelData.industryCards?.length) {
+    lines.push('')
+    lines.push('### 产业分组')
+    panelData.industryCards.forEach(card => {
+      lines.push(`- ${card.name}：共${card.total}项，完成${card.completed}项(${card.pct}%)，高风险${card.highRisk}个，中风险${card.mediumRisk}个`)
+    })
+  }
+
+  // 关键要点 (keyPoints)
+  if (panelData.keyPoints?.length) {
+    lines.push('')
+    lines.push(`### ${panelData.keyPointsTitle || '关键要点'}`)
+    panelData.keyPoints.forEach(p => {
+      lines.push(`- ${typeof p === 'string' ? p : p.text || p.name || JSON.stringify(p)}`)
+    })
+  }
+
+  // 雷达图数据
+  if (panelData.radarData) {
+    const rd = panelData.radarData
+    if (rd.indicators?.length && rd.values?.length) {
+      lines.push('')
+      lines.push('### 综合评估')
+      rd.indicators.forEach((ind, i) => {
+        lines.push(`- ${ind.name}：${rd.values[i] || 0}分`)
+      })
+    }
+  }
+
+  // AI 总结 (reasoning)
+  if (panelData.reasoning) {
+    lines.push('')
+    lines.push('### AI 总结')
+    lines.push(panelData.reasoning)
+  }
+
+  // 风险列表 (risks)
+  if (panelData.risks?.length) {
+    lines.push('')
+    lines.push('### 风险清单')
+    panelData.risks.forEach((r, i) => {
+      lines.push(`${i + 1}. [${riskLevelText(r.level)}] ${r.title || ''}`)
+      if (r.detail) lines.push(`   - 详情：${r.detail}`)
+      if (r.impact) lines.push(`   - 影响：${r.impact}`)
+      if (r.suggestion) lines.push(`   - 建议：${r.suggestion}`)
+    })
+  }
+
+  // 风险原因（里程碑阶段专用）
+  if (panelData.riskReason) {
+    lines.push('')
+    lines.push('### 风险原因')
+    lines.push(panelData.riskReason)
+  }
+
+  // 时间分布（任务令概览专用）
+  if (panelData.timeDistribution) {
+    lines.push('')
+    lines.push('### 时间分布')
+    lines.push(`- 本月截止：${panelData.timeDistribution.thisMonth}项`)
+    lines.push(`- 下月截止：${panelData.timeDistribution.nextMonth}项`)
+  }
+
+  // 阶段列表（里程碑时间轴专用）
+  if (panelData.phases?.length) {
+    lines.push('')
+    lines.push('### 阶段详情')
+    panelData.phases.forEach(p => {
+      const sMap = { completed: '已完成', active: '进行中', pending: '待达成' }
+      lines.push(`- ${p.name}（${p.date || '-'}）：${sMap[p.status] || p.status}`)
+      if (p.risk && p.risk !== 'none') lines.push(`  风险：${p.risk}`)
+      if (p.riskReason) lines.push(`  原因：${p.riskReason}`)
+      if (p.aiSummary) lines.push(`  分析：${p.aiSummary}`)
+    })
+  }
+
+  return lines.join('\n')
+}

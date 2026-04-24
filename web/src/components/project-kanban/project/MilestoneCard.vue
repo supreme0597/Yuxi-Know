@@ -2,7 +2,7 @@
   <DataCard
     title="里程碑进度"
     :icon="CalendarIcon"
-    icon-color="#059669"
+    icon-color="var(--pk-success-dark)"
     :status-text="statusText"
     :status-color="data?.statusColor || 'info'"
     wide
@@ -40,9 +40,7 @@
     <!-- AI总结 -->
     <div v-if="data?.aiSummary" class="pk-card__ai-summary" @click.stop="$emit('ai-click', 'milestone')">
       <span class="pk-card__ai-spark">✨</span>
-      <Tooltip :title="data.aiSummary" placement="topLeft" :mouseEnterDelay="0.3">
-        <span class="pk-card__ai-text">{{ data.aiSummary }}</span>
-      </Tooltip>
+      <span class="pk-card__ai-text" :title="data.aiSummary">{{ data.aiSummary }}</span>
     </div>
 
     <!-- TOP3风险 -->
@@ -52,7 +50,6 @@
 
 <script setup>
 import { computed, h } from 'vue'
-import { Tooltip } from 'ant-design-vue'
 import DataCard from '../common/DataCard.vue'
 import StatGrid from '../common/StatGrid.vue'
 import RiskList from '../common/RiskList.vue'
@@ -87,11 +84,11 @@ const statItems = computed(() => {
 
 function phaseColor(status) {
   const map = {
-    completed: '#10b981',
-    active: '#059669',
-    pending: '#e5e7eb'
+    completed: 'var(--pk-chart-green)',
+    active: 'var(--pk-success)',
+    pending: 'var(--pk-border)'
   }
-  return map[status] || '#e5e7eb'
+  return map[status] || 'var(--pk-border)'
 }
 </script>
 
@@ -123,7 +120,7 @@ function phaseColor(status) {
 .pk-milestone__phase {
   flex: 1;
   height: 100%;
-  background: #f3f4f6;
+  background: var(--pk-page-bg);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -151,15 +148,18 @@ function phaseColor(status) {
   align-items: flex-start;
   gap: 4px;
   padding: 6px 10px;
-  background: linear-gradient(135deg, #faf5ff, #eff6ff);
+  background: linear-gradient(135deg, var(--pk-accent-gradient-from), var(--pk-accent-gradient-to));
   border-radius: 6px;
   font-size: 12px;
-  color: var(--gray-700);
+  color: var(--pk-text);
   cursor: pointer;
   transition: background 0.2s ease, box-shadow 0.2s ease;
+  overflow: hidden;
+  box-sizing: content-box;
+  height: calc(1 * 1.5em);
 }
 .pk-card__ai-summary:hover {
-  background: linear-gradient(135deg, #f3e8ff, #dbeafe);
+  background: linear-gradient(135deg, var(--pk-accent-gradient-from), var(--pk-accent-gradient-to));
   box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.2);
 }
 .pk-card__ai-spark {
@@ -168,7 +168,7 @@ function phaseColor(status) {
 }
 .pk-card__ai-text {
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -187,6 +187,7 @@ function phaseColor(status) {
   .pk-card__ai-summary {
     font-size: 13px;
     padding: 7px 12px;
+    height: calc(1 * 1.5em);
   }
 }
 
@@ -203,6 +204,7 @@ function phaseColor(status) {
   .pk-card__ai-summary {
     font-size: 14px;
     padding: 8px 12px;
+    height: calc(1 * 1.5em);
   }
 }
 
@@ -219,6 +221,7 @@ function phaseColor(status) {
   .pk-card__ai-summary {
     font-size: 15px;
     padding: 8px 14px;
+    height: calc(1 * 1.5em);
   }
 }
 </style>

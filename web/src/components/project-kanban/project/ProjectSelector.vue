@@ -98,9 +98,9 @@ const options = computed(() =>
   transition: all 0.15s ease;
 }
 .pk-sweet-btn:hover {
-  color: var(--main-color);
-  border-color: var(--main-200);
-  background: var(--main-50);
+  color: var(--pk-accent);
+  border-color: var(--pk-accent);
+  background: var(--pk-accent-light);
 }
 
 @media (min-width: 1600px) {

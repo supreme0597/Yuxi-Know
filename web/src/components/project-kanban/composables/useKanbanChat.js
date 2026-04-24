@@ -118,18 +118,41 @@ async function ensureActiveThread(title = '新的对话') {
   return null
 }
 
+/** 剥离消息中的 <context>...</context> 块，用户不应看到隐藏上下文 */
+function stripContextFromContent(content) {
+  if (typeof content !== 'string') return content
+  return content.replace(/<context>[\s\S]*?<\/context>\s*/g, '').trim()
+}
+
+/** 批量剥离历史消息中的隐藏上下文 */
+function stripContextFromHistory(history) {
+  if (!Array.isArray(history)) return history
+  return history.map(msg => {
+    if (msg.type === 'human' && typeof msg.content === 'string') {
+      return { ...msg, content: stripContextFromContent(msg.content) }
+    }
+    return msg
+  })
+}
+
 async function fetchThreadMessages(threadId) {
   if (!threadId) return
   try {
     const response = await agentApi.getAgentHistory(threadId)
-    threadMessages.value[threadId] = response.history || []
+    threadMessages.value[threadId] = stripContextFromHistory(response.history || [])
   } catch (err) {
     console.error('[KanbanChat] Fetch messages failed:', err)
   }
 }
 
 // ==================== 消息发送 ====================
-async function sendMessage(text) {
+/**
+ * 发送消息到 AI 对话
+ * @param {string} text - 用户输入的消息文本
+ * @param {object} [options] - 可选参数
+ * @param {string} [options.context] - 隐藏上下文（数据概览），拼接到 query 前面，用户不可见
+ */
+async function sendMessage(text, options = {}) {
   if (!text?.trim()) return
 
   const agentStore = useAgentStore()
@@ -158,6 +181,12 @@ async function sendMessage(text) {
   const currentHistory = threadMessages.value[threadId] || []
   threadMessages.value[threadId] = [...currentHistory, { type: 'human', content: text }]
 
+  // 构建 query：如果有 context，拼接到前面作为隐藏上下文
+  let query = text
+  if (options.context) {
+    query = `<context>\n${options.context}\n</context>\n\n${text}`
+  }
+
   // 开始流式处理
   threadState.isStreaming = true
   resetOnGoingConv(threadId)
@@ -166,7 +195,7 @@ async function sendMessage(text) {
   try {
     const response = await agentApi.sendAgentMessage(
       {
-        query: text,
+        query,
         thread_id: threadId,
         agent_config_id: agentStore.selectedAgentConfigId
       },

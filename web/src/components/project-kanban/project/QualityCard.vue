@@ -2,10 +2,11 @@
   <DataCard
     title="质量管理"
     :icon="QualityIcon"
-    icon-color="#14b8a6"
+    icon-color="var(--pk-success)"
     :status-text="statusText"
     :status-color="data?.status || 'info'"
     :ai-summary="data?.aiSummary"
+    ai-lines="1"
     @ai-click="$emit('ai-click', 'quality')"
     @summary-click="$emit('ai-click', 'quality')"
   >
@@ -63,9 +64,9 @@ const statusText = computed(() => statusMap[props.data?.status] || '正常')
   background: var(--gray-50);
   border-radius: 6px;
 }
-.pk-quality__item--orange { background: #fff7ed; }
-.pk-quality__item--yellow { background: #fefce8; }
-.pk-quality__item--green { background: #f0fdf4; }
+.pk-quality__item--orange { background: var(--pk-warning-light); }
+.pk-quality__item--yellow { background: var(--pk-warning-light); }
+.pk-quality__item--green { background: var(--pk-success-light); }
 
 .pk-quality__value {
   display: block;
@@ -73,9 +74,9 @@ const statusText = computed(() => statusMap[props.data?.status] || '正常')
   font-weight: 700;
   color: var(--gray-700);
 }
-.pk-quality__item--orange .pk-quality__value { color: #ea580c; }
-.pk-quality__item--yellow .pk-quality__value { color: #ca8a04; }
-.pk-quality__item--green .pk-quality__value { color: #16a34a; }
+.pk-quality__item--orange .pk-quality__value { color: var(--pk-warning-dark); }
+.pk-quality__item--yellow .pk-quality__value { color: var(--pk-warning-dark); }
+.pk-quality__item--green .pk-quality__value { color: var(--pk-success); }
 
 .pk-quality__label {
   font-size: 11px;

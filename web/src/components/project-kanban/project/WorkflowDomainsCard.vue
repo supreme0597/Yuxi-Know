@@ -94,7 +94,7 @@ function topRisks(key) {
   gap: 8px;
 }
 .pk-domain:hover {
-  border-color: var(--main-200);
+  border-color: var(--pk-accent);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
@@ -109,9 +109,9 @@ function topRisks(key) {
   border-radius: 50%;
   flex-shrink: 0;
 }
-.pk-domain__dot--green { background: #10b981; }
-.pk-domain__dot--yellow, .pk-domain__dot--warning { background: #f59e0b; }
-.pk-domain__dot--red, .pk-domain__dot--critical { background: #ef4444; }
+.pk-domain__dot--green { background: var(--pk-chart-green); }
+.pk-domain__dot--yellow, .pk-domain__dot--warning { background: var(--pk-chart-orange); }
+.pk-domain__dot--red, .pk-domain__dot--critical { background: var(--pk-chart-red); }
 
 .pk-domain__tag {
   font-size: 11px;
@@ -133,11 +133,11 @@ function topRisks(key) {
   border-radius: 3px;
   font-weight: 500;
 }
-.pk-domain__status--green { background: #d1fae5; color: #059669; }
+.pk-domain__status--green { background: var(--pk-success-light); color: var(--pk-success-dark); }
 .pk-domain__status--yellow,
-.pk-domain__status--warning { background: #fef3c7; color: #d97706; }
+.pk-domain__status--warning { background: var(--pk-warning-light); color: var(--pk-warning-dark); }
 .pk-domain__status--red,
-.pk-domain__status--critical { background: #fef2f2; color: #dc2626; }
+.pk-domain__status--critical { background: var(--pk-danger-light); color: var(--pk-danger-dark); }
 
 .pk-domain__summary {
   font-size: 13px;
@@ -161,7 +161,7 @@ function topRisks(key) {
   transition: color 0.15s;
 }
 .pk-domain__risk:hover {
-  color: #6366f1;
+  color: var(--pk-accent);
 }
 .pk-domain__risk-dot {
   width: 4px;
@@ -170,9 +170,9 @@ function topRisks(key) {
   flex-shrink: 0;
 }
 .pk-domain__risk--critical .pk-domain__risk-dot,
-.pk-domain__risk--danger .pk-domain__risk-dot { background: #dc2626; }
-.pk-domain__risk--warning .pk-domain__risk-dot { background: #d97706; }
-.pk-domain__risk--normal .pk-domain__risk-dot { background: #059669; }
+.pk-domain__risk--danger .pk-domain__risk-dot { background: var(--pk-danger); }
+.pk-domain__risk--warning .pk-domain__risk-dot { background: var(--pk-warning); }
+.pk-domain__risk--normal .pk-domain__risk-dot { background: var(--pk-success); }
 
 .pk-domain__footer {
   display: flex;

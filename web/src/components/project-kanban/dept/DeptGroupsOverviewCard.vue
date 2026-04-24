@@ -2,7 +2,7 @@
   <DataCard
     title="项目群综合风险"
     :icon="ShieldIcon"
-    icon-color="#6366f1"
+    icon-color="var(--pk-accent)"
     wide
     :status-text="statusText"
     :status-color="statusColor"
@@ -44,9 +44,12 @@
         :class="`pk-group-card--${gc.status}`"
         @click="$emit('group-click', gc)"
       >
-        <!-- 头部：项目群名称 -->
+        <!-- 头部：项目群名称（可点击跳转项目群级） -->
         <div class="pk-group-card__header">
-          <span class="pk-group-card__tag" :class="`pk-group-card__tag--${gc.status}`">{{ gc.name }}</span>
+          <span class="pk-group-card__tag" :class="`pk-group-card__tag--${gc.status}`" @click.stop="$emit('group-click', gc)">
+            <span class="pk-group-card__tag-text">{{ gc.name }}</span>
+            <ChevronRight class="pk-group-card__tag-arrow" :size="14" />
+          </span>
         </div>
 
         <!-- 风险列表（部门级：数字序号 + 紧凑描述，无标题无分割线） -->
@@ -86,6 +89,7 @@
 
 <script setup>
 import { computed, h } from 'vue'
+import { ChevronRight } from 'lucide-vue-next'
 import DataCard from '../common/DataCard.vue'
 import AIButton from '../common/AIButton.vue'
 
@@ -119,6 +123,12 @@ const ShieldIcon = {
   }
 }
 
+/** 数据源 statusType → CSS class 映射 */
+function mapStatusType(raw) {
+  const map = { red: 'danger', yellow: 'warning', green: 'success', orange: 'warning' }
+  return map[raw] || raw || 'success'
+}
+
 /** 四维度卡片数据 */
 const dimensions = computed(() => {
   const d = props.data
@@ -147,7 +157,7 @@ const dimensions = computed(() => {
       key: 'online',
       label: '网上运行',
       icon: '🌐',
-      statusType: online?.statusType || 'success',
+      statusType: online?.statusType ? mapStatusType(online.statusType) : 'success',
       stats: (online?.labels || []).map(l => ({
         value: online?.[l.value] ?? '-',
         label: l.label
@@ -158,7 +168,7 @@ const dimensions = computed(() => {
       key: 'downstream',
       label: '下游问题',
       icon: '🔗',
-      statusType: downstream?.statusType || 'success',
+      statusType: downstream?.statusType ? mapStatusType(downstream.statusType) : 'success',
       stats: (downstream?.labels || []).map(l => ({
         value: downstream?.[l.value] ?? '-',
         label: l.label,
@@ -170,7 +180,7 @@ const dimensions = computed(() => {
       key: 'trust',
       label: '可信管理',
       icon: '🛡️',
-      statusType: trustSummary?.statusType || 'success',
+      statusType: trustSummary?.statusType ? mapStatusType(trustSummary.statusType) : 'success',
       stats: (trustSummary?.labels || []).map(l => ({
         value: l.value === 'overallRate' ? (trustSummary?.overallRate ?? '-') + '%' : (trustSummary?.[l.value] ?? '-'),
         label: l.label,
@@ -189,25 +199,16 @@ function buildCompactRiskDesc(risk) {
   const rootCause = risk.rootCause || risk.why || ''
   const impact = risk.impact || ''
 
-  let emoji = '📋'
-  if (risk.level === 'critical' || risk.level === 'danger') {
-    emoji = '🔴'
-  } else if (risk.level === 'warning') {
-    emoji = '🟡'
-  } else if (risk.level === 'normal') {
-    emoji = '🟢'
-  }
-
   const parts = []
   if (title) parts.push(title)
   if (rootCause && rootCause !== '待分析') parts.push(rootCause)
   if (impact && impact !== '影响待评估') parts.push(impact)
 
   if (parts.length > 0) {
-    return emoji + ' ' + parts.join('，')
+    return parts.join('，')
   }
 
-  return emoji + ' ' + title
+  return title
 }
 
 /** 将风险数组格式化为带 text 字段的风险数组 */
@@ -239,7 +240,7 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
 }
 
 .pk-dim-card {
-  background: #fafafa;
+  background: var(--pk-page-bg);
   border-radius: 10px;
   padding: 10px 12px;
   display: flex;
@@ -247,18 +248,18 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
   gap: 6px;
   cursor: pointer;
   transition: all 0.2s ease;
-  border-left: 4px solid #059669;
+  border-left: 4px solid var(--pk-success);
 }
 
 .pk-dim-card:hover {
-  background: #f3f4f6;
+  background: var(--pk-neutral-bg);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   transform: translateY(-1px);
 }
 
-.pk-dim-card--danger { border-left-color: #dc2626; }
-.pk-dim-card--warning { border-left-color: #d97706; }
-.pk-dim-card--success { border-left-color: #059669; }
+.pk-dim-card--danger { border-left-color: var(--pk-danger); }
+.pk-dim-card--warning { border-left-color: var(--pk-warning); }
+.pk-dim-card--success { border-left-color: var(--pk-success); }
 
 .pk-dim-card__header {
   display: flex;
@@ -281,9 +282,9 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
   border-radius: 50%;
   flex-shrink: 0;
 }
-.pk-dim-card__dot--danger { background: #dc2626; }
-.pk-dim-card__dot--warning { background: #d97706; }
-.pk-dim-card__dot--success { background: #059669; }
+.pk-dim-card__dot--danger { background: var(--pk-danger); }
+.pk-dim-card__dot--warning { background: var(--pk-warning); }
+.pk-dim-card__dot--success { background: var(--pk-success); }
 
 .pk-dim-card__stats {
   display: flex;
@@ -305,8 +306,8 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
   color: var(--gray-800);
   line-height: 1;
 }
-.pk-dim-card__stat-value--danger { color: #dc2626; }
-.pk-dim-card__stat-value--warning { color: #d97706; }
+.pk-dim-card__stat-value--danger { color: var(--pk-danger); }
+.pk-dim-card__stat-value--warning { color: var(--pk-warning-dark); }
 
 .pk-dim-card__stat-label {
   font-size: 11px;
@@ -334,12 +335,12 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
   flex-shrink: 0;
 }
 
-.pk-dim-card__sentence--danger { background: #fef2f2; color: #991b1b; }
-.pk-dim-card__sentence--danger .pk-dim-card__sentence-dot { background: #dc2626; }
-.pk-dim-card__sentence--warning { background: #fef3c7; color: #92400e; }
-.pk-dim-card__sentence--warning .pk-dim-card__sentence-dot { background: #d97706; }
-.pk-dim-card__sentence--success { background: #d1fae5; color: #166534; }
-.pk-dim-card__sentence--success .pk-dim-card__sentence-dot { background: #059669; }
+.pk-dim-card__sentence--danger { background: var(--pk-danger-light); color: var(--pk-danger-dark); }
+.pk-dim-card__sentence--danger .pk-dim-card__sentence-dot { background: var(--pk-danger); }
+.pk-dim-card__sentence--warning { background: var(--pk-warning-light); color: var(--pk-warning-dark); }
+.pk-dim-card__sentence--warning .pk-dim-card__sentence-dot { background: var(--pk-warning-dark); }
+.pk-dim-card__sentence--success { background: var(--pk-success-light); color: var(--pk-success-dark); }
+.pk-dim-card__sentence--success .pk-dim-card__sentence-dot { background: var(--pk-success-dark); }
 
 /* ===== 下行：三个项目群风险卡片（阴影渐变卡片样式） ===== */
 .pk-overview-groups {
@@ -350,13 +351,12 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
 }
 
 .pk-group-card {
-  background: linear-gradient(135deg, #fff, #f8fafc);
+  background: linear-gradient(135deg, var(--pk-card-bg), var(--pk-page-bg));
   border-radius: 12px;
   padding: 10px 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  cursor: pointer;
   transition: all 0.2s ease;
   border: none;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06), 0 4px 16px rgba(0, 0, 0, 0.04);
@@ -376,14 +376,40 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
 }
 
 .pk-group-card__tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   font-size: 12px;
-  font-weight: 500;
-  padding: 3px 10px;
+  font-weight: 600;
+  padding: 3px 8px 3px 10px;
   border-radius: 6px;
-  background: linear-gradient(to bottom, #f9fafb, #f3f4f6);
-  color: #374151;
+  background: linear-gradient(to bottom, var(--pk-page-bg), var(--pk-neutral-bg));
+  color: var(--gray-700);
   border: none;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pk-group-card__tag:hover {
+  background: linear-gradient(135deg, var(--pk-accent-light), var(--pk-group-v3-light));
+  color: var(--pk-accent);
+  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.15);
+}
+
+.pk-group-card__tag-text {
+  line-height: 1;
+}
+
+.pk-group-card__tag-arrow {
+  flex-shrink: 0;
+  opacity: 0.4;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.pk-group-card__tag:hover .pk-group-card__tag-arrow {
+  opacity: 0.8;
+  transform: translateX(2px);
 }
 
 /* 部门级风险列表（数字序号 + 紧凑描述） */
@@ -419,7 +445,7 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
   font-weight: 700;
   flex-shrink: 0;
   background: var(--gray-300);
-  color: #fff;
+  color: var(--pk-card-bg);
 }
 .pk-group-risk-text {
   color: var(--gray-800);
@@ -428,53 +454,55 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
 
 .pk-group-risk-item--critical,
 .pk-group-risk-item--danger {
-  background: var(--color-error-50);
+  background: var(--pk-danger-light);
 }
 .pk-group-risk-item--critical:hover,
 .pk-group-risk-item--danger:hover {
-  background: var(--color-error-10);
+  background: var(--pk-danger-lighter);
 }
 .pk-group-risk-item--critical .pk-group-risk-rank,
 .pk-group-risk-item--danger .pk-group-risk-rank {
-  background: var(--color-error-500);
+  background: var(--pk-danger-dark);
 }
 .pk-group-risk-item--warning {
-  background: var(--color-warning-50);
+  background: var(--pk-warning-light);
 }
 .pk-group-risk-item--warning:hover {
-  background: var(--color-warning-10);
+  background: var(--pk-warning-lighter);
 }
 .pk-group-risk-item--warning .pk-group-risk-rank {
-  background: var(--color-warning-500);
+  background: var(--pk-warning-dark);
 }
 .pk-group-risk-item--normal {
-  background: var(--color-success-50);
+  background: var(--pk-success-light);
 }
 .pk-group-risk-item--normal:hover {
-  background: var(--color-success-10);
+  background: var(--pk-success-lighter);
 }
 .pk-group-risk-item--normal .pk-group-risk-rank {
-  background: var(--color-success-500);
+  background: var(--pk-success-dark);
 }
 
 /* 底部猜你想问 */
 .pk-overview-footer {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   padding: 8px 14px;
   border-top: 1px solid var(--gray-200);
+  width: 100%;
 }
 
 .pk-overview-intent {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  margin-right: 6px;
 }
 
 .pk-overview-intent__tag {
   padding: 4px 10px;
-  background: linear-gradient(135deg, #faf5ff, #eff6ff);
+  background: linear-gradient(135deg, var(--pk-group-v3-light), var(--pk-group-v2-light));
   border-radius: 6px;
   font-size: 12px;
   color: var(--gray-600);
@@ -484,8 +512,8 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
 }
 
 .pk-overview-intent__tag:hover {
-  background: linear-gradient(135deg, #f3e8ff, #dbeafe);
-  border-color: rgba(99, 102, 241, 0.2);
+  background: linear-gradient(135deg, var(--pk-group-v3-light), var(--pk-accent-light));
+  border-color: var(--pk-accent-glow);
   color: var(--gray-800);
 }
 
@@ -554,7 +582,7 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
   }
   .pk-group-card__tag {
     font-size: 13px;
-    padding: 4px 12px;
+    padding: 4px 9px 4px 12px;
   }
   .pk-group-risks {
     gap: 6px;
@@ -621,7 +649,7 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
   }
   .pk-group-card__tag {
     font-size: 14px;
-    padding: 4px 12px;
+    padding: 4px 9px 4px 12px;
   }
   .pk-group-risks {
     gap: 7px;
@@ -688,7 +716,7 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
   }
   .pk-group-card__tag {
     font-size: 15px;
-    padding: 5px 14px;
+    padding: 5px 10px 5px 14px;
   }
   .pk-group-risks {
     gap: 8px;

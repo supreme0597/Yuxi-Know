@@ -46,7 +46,7 @@ const topRisks = computed(() => {
 .pk-risk-list {
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px dashed var(--gray-200, #e5e7eb);
+  border-top: 1px dashed var(--gray-200);
 }
 .pk-risk-list__title {
   display: flex;
@@ -95,23 +95,23 @@ const topRisks = computed(() => {
 
 .pk-risk-item--critical,
 .pk-risk-item--danger {
-  background: #fef2f2;
+  background: var(--pk-danger-light);
 }
 .pk-risk-item--critical .pk-risk-item__dot,
 .pk-risk-item--danger .pk-risk-item__dot {
-  background: #dc2626;
+  background: var(--pk-danger-dark);
 }
 .pk-risk-item--warning {
-  background: #fef3c7;
+  background: var(--pk-warning-light);
 }
 .pk-risk-item--warning .pk-risk-item__dot {
-  background: #d97706;
+  background: var(--pk-warning-dark);
 }
 .pk-risk-item--normal {
-  background: #f0fdf4;
+  background: var(--pk-success-light);
 }
 .pk-risk-item--normal .pk-risk-item__dot {
-  background: #059669;
+  background: var(--pk-success-dark);
 }
 
 @media (min-width: 1600px) {

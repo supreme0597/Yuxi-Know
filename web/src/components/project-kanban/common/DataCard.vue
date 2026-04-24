@@ -26,11 +26,15 @@
       <p v-if="description" class="pk-card__desc">{{ description }}</p>
 
       <!-- AI 一句话总结 (可选) — 点击打开带焦点的分析，与 AI 按钮区分 -->
-      <div v-if="aiSummary" class="pk-card__ai-summary" @click.stop="$emit('summary-click')">
+      <div
+        v-if="aiSummary"
+        class="pk-card__ai-summary"
+        :class="`pk-card__ai-summary--${aiLines}l`"
+        :title="aiSummary"
+        @click.stop="$emit('summary-click')"
+      >
         <span class="pk-card__ai-spark">✨</span>
-        <Tooltip :title="aiSummary" placement="topLeft" :mouseEnterDelay="0.3">
-          <span class="pk-card__ai-text">{{ aiSummary }}</span>
-        </Tooltip>
+        <span class="pk-card__ai-text" :class="`pk-card__ai-text--${aiLines}l`">{{ aiSummary }}</span>
       </div>
       <div v-else-if="$slots.aiSummary" class="pk-card__ai-summary" @click.stop="$emit('summary-click')">
         <slot name="aiSummary" />
@@ -54,16 +58,16 @@
 <script setup>
 import AIButton from './AIButton.vue'
 import StatusBadge from './StatusBadge.vue'
-import { Tooltip } from 'ant-design-vue'
 
 defineProps({
   title: { type: String, default: '' },
   icon: { type: [Object, Function], default: null },
-  iconColor: { type: String, default: '#6366f1' },
+  iconColor: { type: String, default: 'var(--pk-accent)' },
   statusText: { type: String, default: '' },
   statusColor: { type: String, default: 'info' },
   description: { type: String, default: '' },
   aiSummary: { type: String, default: '' },
+  aiLines: { type: Number, default: 2 },
   wide: { type: Boolean, default: false },
   clickable: { type: Boolean, default: false },
   showAI: { type: Boolean, default: true }
@@ -139,17 +143,21 @@ defineEmits(['ai-click', 'summary-click'])
   align-items: flex-start;
   gap: 4px;
   padding: 4px 8px;
-  background: linear-gradient(135deg, #faf5ff, #eff6ff);
+  background: linear-gradient(135deg, var(--pk-accent-light), var(--pk-group-v2-light));
   border-radius: 6px;
   font-size: 12px;
-  color: var(--gray-700);
+  color: var(--pk-text);
   line-height: 1.5;
   cursor: pointer;
   transition: background 0.2s ease, box-shadow 0.2s ease;
+  overflow: hidden;
+  box-sizing: content-box;
 }
+.pk-card__ai-summary--1l { height: calc(1 * 1.5em); }
+.pk-card__ai-summary--2l { height: calc(2 * 1.5em); }
 .pk-card__ai-summary:hover {
-  background: linear-gradient(135deg, #f3e8ff, #dbeafe);
-  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.2);
+  background: linear-gradient(135deg, var(--pk-group-v3-light), var(--pk-group-v2-light));
+  box-shadow: 0 0 0 1px var(--pk-accent-glow);
 }
 .pk-card__ai-spark {
   flex-shrink: 0;
@@ -157,11 +165,13 @@ defineEmits(['ai-click', 'summary-click'])
 }
 .pk-card__ai-text {
   display: -webkit-box;
-  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1.5;
 }
+.pk-card__ai-text--1l { -webkit-line-clamp: 1; }
+.pk-card__ai-text--2l { -webkit-line-clamp: 2; }
 
 .pk-card__body {
   flex: 1;
@@ -190,6 +200,8 @@ defineEmits(['ai-click', 'summary-click'])
     font-size: 13px;
     padding: 6px 10px;
   }
+  .pk-card__ai-summary--1l { height: calc(1 * 1.5em); }
+  .pk-card__ai-summary--2l { height: calc(2 * 1.5em); }
   .pk-card__footer {
     padding: 10px 18px 14px;
   }
@@ -210,6 +222,8 @@ defineEmits(['ai-click', 'summary-click'])
     font-size: 14px;
     padding: 6px 10px;
   }
+  .pk-card__ai-summary--1l { height: calc(1 * 1.5em); }
+  .pk-card__ai-summary--2l { height: calc(2 * 1.5em); }
   .pk-card__footer {
     padding: 10px 20px 14px;
   }
@@ -230,6 +244,8 @@ defineEmits(['ai-click', 'summary-click'])
     font-size: 15px;
     padding: 8px 12px;
   }
+  .pk-card__ai-summary--1l { height: calc(1 * 1.5em); }
+  .pk-card__ai-summary--2l { height: calc(2 * 1.5em); }
   .pk-card__footer {
     padding: 12px 22px 16px;
   }

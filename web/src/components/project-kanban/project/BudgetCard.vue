@@ -2,10 +2,11 @@
   <DataCard
     title="费用执行"
     :icon="BudgetIcon"
-    icon-color="#10b981"
+    icon-color="var(--pk-success)"
     :status-text="statusText"
     :status-color="data?.status || 'info'"
     :ai-summary="data?.aiSummary"
+    ai-lines="1"
     @ai-click="$emit('ai-click', 'budget')"
     @summary-click="$emit('ai-click', 'budget')"
   >

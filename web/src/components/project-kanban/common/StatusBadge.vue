@@ -49,12 +49,12 @@ const statusClass = computed(() => {
   flex-shrink: 0;
 }
 
-.pk-badge--success { background: #d1fae5; color: #059669; }
-.pk-badge--success .pk-badge__dot { background: #059669; }
-.pk-badge--warning { background: #fef3c7; color: #d97706; }
-.pk-badge--warning .pk-badge__dot { background: #d97706; }
-.pk-badge--danger { background: #fef2f2; color: #dc2626; }
-.pk-badge--danger .pk-badge__dot { background: #dc2626; }
-.pk-badge--info { background: #d1fae5; color: #059669; }
-.pk-badge--info .pk-badge__dot { background: #059669; }
+.pk-badge--success { background: var(--pk-success-light); color: var(--pk-success-dark); }
+.pk-badge--success .pk-badge__dot { background: var(--pk-success-dark); }
+.pk-badge--warning { background: var(--pk-warning-light); color: var(--pk-warning-dark); }
+.pk-badge--warning .pk-badge__dot { background: var(--pk-warning-dark); }
+.pk-badge--danger { background: var(--pk-danger-light); color: var(--pk-danger-dark); }
+.pk-badge--danger .pk-badge__dot { background: var(--pk-danger-dark); }
+.pk-badge--info { background: var(--pk-success-light); color: var(--pk-success-dark); }
+.pk-badge--info .pk-badge__dot { background: var(--pk-success-dark); }
 </style>
