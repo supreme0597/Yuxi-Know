@@ -448,10 +448,6 @@ const flushResize = () => {
   const deltaX = pendingClientX - sidepanelStartX
   const newWidth = Math.max(SIDE_PANEL_MIN_WIDTH, Math.min(SIDE_PANEL_MAX_WIDTH, sidepanelStartWidth - deltaX))
   sidepanelRef.value.style.width = `${newWidth}px`
-  // 同步更新文件面板位置
-  if (filePanelRef.value) {
-    filePanelRef.value.style.right = `${newWidth}px`
-  }
 }
 
 const queueResize = (clientX) => {
@@ -522,9 +518,6 @@ function applySavedWidth() {
     return
   }
   sidepanelRef.value.style.width = `${width}px`
-  if (filePanelRef.value) {
-    filePanelRef.value.style.right = `${width}px`
-  }
 }
 
 const FILE_PANEL_MIN_WIDTH = 300
@@ -875,7 +868,7 @@ function initOrUpdateRadar() {
   gap: 8px;
 }
 .ai-sidepanel__subtitle {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--gray-500);
   margin: 2px 0 0;
 }
@@ -956,7 +949,7 @@ function initOrUpdateRadar() {
 
 .ai-sidepanel__data-toggle-badge {
   margin-left: auto;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--pk-warning);
   background: var(--pk-warning-lighter);
@@ -1021,13 +1014,13 @@ function initOrUpdateRadar() {
 .ai-sidepanel__progress-dot--warning { background: var(--pk-warning); }
 .ai-sidepanel__progress-dot--danger { background: var(--pk-danger); }
 .ai-sidepanel__progress-label {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--gray-500);
   white-space: nowrap;
   flex-shrink: 0;
 }
 .ai-sidepanel__progress-value {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--gray-800);
   min-width: 0;
@@ -1068,7 +1061,7 @@ function initOrUpdateRadar() {
 .ai-sidepanel__overview-stat--pending .ai-sidepanel__overview-num { color: var(--pk-text-secondary); }
 .ai-sidepanel__overview-label {
   display: block;
-  font-size: 11px;
+  font-size: 13px;
   color: var(--pk-text-secondary);
   margin-top: 4px;
 }
@@ -1091,12 +1084,12 @@ function initOrUpdateRadar() {
   margin-bottom: 6px;
 }
 .ai-sidepanel__industry-name {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--pk-text);
 }
 .ai-sidepanel__industry-pct {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
 }
 .ai-sidepanel__industry-pct--danger { color: var(--pk-danger); }
@@ -1123,7 +1116,7 @@ function initOrUpdateRadar() {
   margin-top: 6px;
 }
 .ai-sidepanel__industry-meta-item {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--pk-text-tertiary);
 }
 .ai-sidepanel__industry-meta-item--danger { color: var(--pk-danger-dark); }
@@ -1141,12 +1134,12 @@ function initOrUpdateRadar() {
   border-radius: 6px;
 }
 .ai-sidepanel__critical-name {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   color: var(--pk-danger-dark);
 }
 .ai-sidepanel__critical-meta {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--pk-text-tertiary);
   margin-top: 2px;
 }
@@ -1171,7 +1164,7 @@ function initOrUpdateRadar() {
 }
 .ai-sidepanel__time-dist-label {
   display: block;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--pk-text-secondary);
   margin-top: 2px;
 }
@@ -1181,7 +1174,7 @@ function initOrUpdateRadar() {
   padding: 8px 12px;
   background: var(--pk-group-v2-light);
   border-radius: 8px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--pk-group-v2);
   line-height: 1.6;
   margin-bottom: 2px;
@@ -1222,14 +1215,14 @@ function initOrUpdateRadar() {
 }
 .ai-sidepanel__phase-name {
   font-weight: 600;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--pk-text);
 }
 .ai-sidepanel__phase-risk-tag {
   display: inline-block;
   padding: 1px 6px;
   border-radius: 4px;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--pk-card-bg);
 }
@@ -1241,7 +1234,7 @@ function initOrUpdateRadar() {
 }
 .ai-sidepanel__phase-status {
   margin-left: auto;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
 }
 .ai-sidepanel__phase-status--completed {
@@ -1254,7 +1247,7 @@ function initOrUpdateRadar() {
   color: var(--pk-text-tertiary);
 }
 .ai-sidepanel__phase-date {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--pk-text-tertiary);
   margin-left: 6px;
 }
@@ -1262,7 +1255,7 @@ function initOrUpdateRadar() {
   margin-top: 6px;
 }
 .ai-sidepanel__phase-objectives-label {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--pk-text-secondary);
   margin-bottom: 4px;
 }
@@ -1281,13 +1274,13 @@ function initOrUpdateRadar() {
   padding: 6px 8px;
   background: var(--pk-page-bg);
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--pk-text-secondary);
   line-height: 1.5;
 }
 .ai-sidepanel__phase-obj-check {
   color: var(--pk-chart-green);
-  font-size: 13px;
+  font-size: 14px;
   flex-shrink: 0;
 }
 .ai-sidepanel__phase-risk-reason {
@@ -1296,7 +1289,7 @@ function initOrUpdateRadar() {
   background: var(--pk-danger-light);
   border-left: 3px solid var(--pk-danger);
   border-radius: 4px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--pk-danger-dark);
   line-height: 1.5;
 }
@@ -1310,13 +1303,13 @@ function initOrUpdateRadar() {
   border-radius: 6px;
 }
 .ai-sidepanel__standalone-risk-reason-title {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--pk-danger-dark);
   margin-bottom: 4px;
 }
 .ai-sidepanel__standalone-risk-reason-text {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--pk-danger-dark);
   line-height: 1.6;
 }
@@ -1337,7 +1330,7 @@ function initOrUpdateRadar() {
 }
 .ai-sidepanel__keypoints-list li::marker {
   color: var(--pk-accent);
-  font-size: 10px;
+  font-size: 13px;
 }
 
 /* Section Title */
@@ -1345,7 +1338,7 @@ function initOrUpdateRadar() {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--gray-600);
   margin-bottom: 10px;
@@ -1367,7 +1360,7 @@ function initOrUpdateRadar() {
 /* Risk Cards */
 .ai-sidepanel__risk-count {
   margin-left: auto;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--gray-400);
   font-weight: 400;
 }
@@ -1411,7 +1404,7 @@ function initOrUpdateRadar() {
 }
 
 .ai-sidepanel__risk-badge {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 4px;
@@ -1436,7 +1429,7 @@ function initOrUpdateRadar() {
 
 .ai-sidepanel__risk-title {
   flex: 1;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--gray-800);
   line-height: 1.4;
@@ -1480,7 +1473,7 @@ function initOrUpdateRadar() {
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--gray-600);
   margin-bottom: 4px;
@@ -1495,7 +1488,7 @@ function initOrUpdateRadar() {
 }
 
 .ai-sidepanel__risk-section-content {
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.7;
   color: var(--gray-700);
 }
@@ -1512,7 +1505,7 @@ function initOrUpdateRadar() {
 }
 .ai-sidepanel__question-btn {
   padding: 6px 12px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--gray-600);
   background: var(--gray-50);
   border: 1px solid var(--gray-200);
@@ -1573,13 +1566,14 @@ function initOrUpdateRadar() {
 .ai-sidepanel__file-panel {
   position: fixed;
   top: 0;
-  right: clamp(560px, 34vw, 960px);
+  right: 0;
   width: 480px; /* JS 拖拽时会动态更新 */
   height: 75vh;
   background: var(--gray-0);
   z-index: 1002;
-  border-radius: 0 0 16px 16px;
+  border-radius: 0 0 0 16px;
   border: 1px solid var(--gray-150);
+  border-right: none;
   border-top: none;
   box-shadow: -8px 0 32px rgba(0, 0, 0, 0.12);
   overflow: hidden;
@@ -1609,7 +1603,7 @@ function initOrUpdateRadar() {
   .ai-sidepanel__file-panel {
     right: 0;
     width: 100%;
-    border-radius: 16px 16px 0 0;
+    border-radius: 0;
     top: auto;
     bottom: 0;
     height: 50vh;

@@ -33,8 +33,8 @@
         <div v-if="nextPhase(item)" class="pk-milestone-sub__donut">
           <DonutChart
             :percentage="arcPercent(nextPhase(item), item)"
-            :size="64"
-            :stroke-width="5"
+            :size="44"
+            :stroke-width="4"
             :color="arcColor(nextPhase(item))"
             :label="shortName(nextPhase(item).name)"
           />
@@ -383,7 +383,7 @@ function nodeClass(phase, idx, item) {
     font-size: 13px;
   }
   :deep(.pk-donut) {
-    --pk-donut-size: 76px !important;
+    --pk-donut-size: 52px !important;
   }
   .pk-milestone-sub__node-date {
     font-size: 12px;
@@ -412,7 +412,7 @@ function nodeClass(phase, idx, item) {
     font-size: 14px;
   }
   :deep(.pk-donut) {
-    --pk-donut-size: 88px !important;
+    --pk-donut-size: 62px !important;
   }
   .pk-milestone-sub__node-date {
     font-size: 13px;
@@ -441,7 +441,7 @@ function nodeClass(phase, idx, item) {
     font-size: 14px;
   }
   :deep(.pk-donut) {
-    --pk-donut-size: 100px !important;
+    --pk-donut-size: 72px !important;
   }
   .pk-milestone-sub__node-date {
     font-size: 14px;

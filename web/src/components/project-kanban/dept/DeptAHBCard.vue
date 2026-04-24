@@ -29,7 +29,7 @@
         <!-- 中部：圆环图 + 人员构成条 上下排列 -->
         <div class="pk-ahb-sub__body">
           <div class="pk-ahb-sub__ring">
-            <DonutChart :percentage="ringPercent(cat)" :size="64" :stroke-width="5" :color="ringColor(cat)" :label="deviationPercentText(cat)" />
+            <DonutChart :percentage="ringPercent(cat)" :size="44" :stroke-width="4" :color="ringColor(cat)" :label="deviationPercentText(cat)" />
           </div>
           <div v-if="compositionTotal(cat) > 0" class="pk-ahb-sub__composition">
             <div class="pk-ahb-sub__bar">
@@ -308,7 +308,7 @@ function compositionPercent(cat, type) {
     font-size: 12px;
   }
   :deep(.pk-donut) {
-    --pk-donut-size: 76px !important;
+    --pk-donut-size: 52px !important;
   }
 }
 
@@ -323,7 +323,7 @@ function compositionPercent(cat, type) {
     font-size: 13px;
   }
   :deep(.pk-donut) {
-    --pk-donut-size: 88px !important;
+    --pk-donut-size: 62px !important;
   }
 }
 
@@ -338,7 +338,7 @@ function compositionPercent(cat, type) {
     font-size: 14px;
   }
   :deep(.pk-donut) {
-    --pk-donut-size: 100px !important;
+    --pk-donut-size: 72px !important;
   }
 }
 </style>

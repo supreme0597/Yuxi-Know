@@ -37,8 +37,8 @@
           >
             <DonutChart
               :percentage="node.progress"
-              :size="54"
-              :stroke-width="5"
+              :size="44"
+              :stroke-width="4"
               :color="ringFgColor(node)"
               :label="`${node.progress}%`"
             />
@@ -263,9 +263,8 @@ function ringFgColor(to) {
   border-right: 1px solid var(--pk-border);
   cursor: pointer;
   transition: background 0.15s;
-  /* 关键：宽度自适应内容，允许换行但绝不溢出 */
-  width: auto;
-  min-width: 36px;
+  /* 固定3字宽度，内容自适应换行 */
+  width: 3em;
 }
 .pk-task-lane__label:hover {
   background: var(--pk-accent-light);
@@ -376,7 +375,7 @@ function ringFgColor(to) {
     font-size: 12px;
   }
   :deep(.pk-donut) {
-    --pk-donut-size: 64px !important;
+    --pk-donut-size: 52px !important;
   }
   .pk-task-lane__content {
     min-height: 124px;
@@ -398,7 +397,7 @@ function ringFgColor(to) {
     font-size: 13px;
   }
   :deep(.pk-donut) {
-    --pk-donut-size: 74px !important;
+    --pk-donut-size: 62px !important;
   }
   .pk-task-lane__content {
     min-height: 136px;
@@ -420,7 +419,7 @@ function ringFgColor(to) {
     font-size: 14px;
   }
   :deep(.pk-donut) {
-    --pk-donut-size: 84px !important;
+    --pk-donut-size: 72px !important;
   }
   .pk-task-lane__content {
     min-height: 148px;

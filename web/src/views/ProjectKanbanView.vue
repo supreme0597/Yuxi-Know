@@ -523,7 +523,7 @@ function handleIndustryHighlight(industry) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px clamp(32px, 3vw, 80px);
+  padding: 16px clamp(80px, 8vw, 200px);
   background: var(--gray-0);
   border-bottom: 1px solid var(--gray-200);
   position: sticky;
@@ -584,7 +584,7 @@ function handleIndustryHighlight(industry) {
 .pk-kanban__content {
   max-width: clamp(1440px, 92vw, 2400px);
   margin: 0 auto;
-  padding: 0 clamp(32px, 3vw, 80px);
+  padding: 0 clamp(80px, 8vw, 200px);
 }
 
 /* Tabs */

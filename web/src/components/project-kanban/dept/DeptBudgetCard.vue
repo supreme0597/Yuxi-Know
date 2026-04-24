@@ -30,7 +30,7 @@
         <!-- 中部：圆环图 + 偏差指示条 上下排列 -->
         <div class="pk-budget-sub__body">
           <div class="pk-budget-sub__ring">
-            <DonutChart :percentage="proj.rate" :size="64" :stroke-width="5" />
+            <DonutChart :percentage="proj.rate" :size="44" :stroke-width="4" />
           </div>
           <div class="pk-budget-sub__deviation">
             <div class="pk-budget-sub__deviation-bar">
@@ -305,7 +305,7 @@ function deviationClass(deviation) {
     font-size: 12px;
   }
   :deep(.pk-donut) {
-    --pk-donut-size: 76px !important;
+    --pk-donut-size: 52px !important;
   }
 }
 
@@ -323,7 +323,7 @@ function deviationClass(deviation) {
     font-size: 13px;
   }
   :deep(.pk-donut) {
-    --pk-donut-size: 88px !important;
+    --pk-donut-size: 62px !important;
   }
 }
 
@@ -341,7 +341,7 @@ function deviationClass(deviation) {
     font-size: 14px;
   }
   :deep(.pk-donut) {
-    --pk-donut-size: 100px !important;
+    --pk-donut-size: 72px !important;
   }
 }
 </style>
