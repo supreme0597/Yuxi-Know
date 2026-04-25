@@ -837,6 +837,56 @@ export const deptData = {
                         "是否需要调整年度预算计划？"
                     ],
                     "aiSummary": "维护项目执行率65%（¥0.65M/¥1.0M），偏差-12%。维护需求不饱满导致预算使用偏慢，建议评估下半年需求并调整预算使用计划。"
+                },
+                {
+                    "name": "2026年维护项目",
+                    "group": "V2",
+                    "category": "RTOS维护",
+                    "budget": 1.0,
+                    "executed": 0.65,
+                    "rate": 65,
+                    "deviation": -12,
+                    "status": "维护态",
+                    "risks": [
+                        {
+                            "level": "warning",
+                            "title": "执行率偏差-12%",
+                            "rootCause": "维护工作需求不饱满，预算使用节奏偏慢",
+                            "impact": "执行率偏低可能影响年度预算执行",
+                            "suggestion": "评估维护需求，调整预算使用计划"
+                        }
+                    ],
+                    "quickQuestions": [
+                        "维护项目预算执行偏慢的原因？",
+                        "下半年维护需求预计有多少？",
+                        "是否需要调整年度预算计划？"
+                    ],
+                    "aiSummary": "维护项目执行率65%（¥0.65M/¥1.0M），偏差-12%。维护需求不饱满导致预算使用偏慢，建议评估下半年需求并调整预算使用计划。"
+                },
+                {
+                    "name": "2026年维护项目",
+                    "group": "V2",
+                    "category": "RTOS维护",
+                    "budget": 1.0,
+                    "executed": 0.65,
+                    "rate": 65,
+                    "deviation": -12,
+                    "status": "维护态",
+                    "risks": [
+                        {
+                            "level": "warning",
+                            "title": "执行率偏差-12%",
+                            "rootCause": "维护工作需求不饱满，预算使用节奏偏慢",
+                            "impact": "执行率偏低可能影响年度预算执行",
+                            "suggestion": "评估维护需求，调整预算使用计划"
+                        }
+                    ],
+                    "quickQuestions": [
+                        "维护项目预算执行偏慢的原因？",
+                        "下半年维护需求预计有多少？",
+                        "是否需要调整年度预算计划？"
+                    ],
+                    "aiSummary": "维护项目执行率65%（¥0.65M/¥1.0M），偏差-12%。维护需求不饱满导致预算使用偏慢，建议评估下半年需求并调整预算使用计划。"
                 }
             ],
             "monthlyData": [
@@ -997,7 +1047,7 @@ export const deptData = {
         "groupsOverview": {
             "projectRisk": {
                 // AI一句话总结
-                "aiSummary": "V3项目关键风险、TR5节点延误概率>80%；V2项目关注、安全加固进度滞后；MCU项目正常推进",
+                "aiSummary": "V3项目关键风险、TR5节点延误概率>80%；\n项目关注、安全加固进度滞后；MCU项目正常推进",
                 // 关键指标（数据驱动）
                 "labels": [
                     { "value": "groupCount", "label": "项目群数" },

@@ -104,7 +104,7 @@ const milestoneText = computed(() => {
   padding: 14px 16px;
   background: var(--gray-0);
   border-radius: 10px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08), 0 6px 20px rgba(0, 0, 0, 0.05);
   border: none;
   border-left: 3px solid var(--gray-300);
   cursor: pointer;
@@ -115,7 +115,7 @@ const milestoneText = computed(() => {
 }
 .pk-sub:hover {
   background: var(--pk-page-bg);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.10), 0 8px 28px rgba(0, 0, 0, 0.07);
 }
 .pk-sub--green { border-left-color: var(--pk-success); }
 .pk-sub--yellow { border-left-color: var(--pk-warning); }

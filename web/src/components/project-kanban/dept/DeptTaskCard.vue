@@ -22,7 +22,10 @@
         class="pk-task-subcard"
       >
         <div class="pk-task-subcard__header">
-          <span class="pk-task-subcard__title">{{ subcardTitles[key] || key }}</span>
+          <div class="pk-task-subcard__title-wrap">
+            <component :is="subcardIcons[key]" class="pk-task-subcard__icon" />
+            <span class="pk-task-subcard__title">{{ subcardTitles[key] || key }}</span>
+          </div>
           <span class="pk-task-subcard__count">{{ tasks.length }}项</span>
         </div>
         <div class="pk-task-subcard__lanes">
@@ -68,6 +71,7 @@
 
 <script setup>
 import { computed, h } from 'vue'
+import { Handshake, ClipboardList, Flag } from 'lucide-vue-next'
 import DataCard from '../common/DataCard.vue'
 import StatGrid from '../common/StatGrid.vue'
 import DonutChart from '../common/DonutChart.vue'
@@ -96,6 +100,12 @@ const subcardTitles = {
   PMC: '对外承诺',
   RWL: '任务令',
   DQ: '夺旗'
+}
+
+const subcardIcons = {
+  PMC: Handshake,
+  RWL: ClipboardList,
+  DQ: Flag
 }
 
 /** 所有任务的扁平数组（兼容对象型/数组型 taskOrders） */
@@ -241,7 +251,7 @@ function ringFgColor(to) {
   min-width: 0;
   border-radius: 8px;
   border: none;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08), 0 6px 20px rgba(0, 0, 0, 0.05);
   background: var(--gray-0);
   display: flex;
   flex-direction: column;
@@ -249,7 +259,7 @@ function ringFgColor(to) {
 }
 
 .pk-task-subcard:hover {
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.10), 0 8px 28px rgba(0, 0, 0, 0.07);
   transform: translateY(-1px);
 }
 
@@ -257,8 +267,21 @@ function ringFgColor(to) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 10px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--gray-100);
+  flex-shrink: 0;
+}
+
+.pk-task-subcard__title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pk-task-subcard__icon {
+  width: 16px;
+  height: 16px;
+  color: var(--gray-600);
   flex-shrink: 0;
 }
 

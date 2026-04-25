@@ -91,27 +91,18 @@ function topRisks(key) {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08), 0 6px 20px rgba(0, 0, 0, 0.05);
 }
 .pk-domain:hover {
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.10), 0 8px 28px rgba(0, 0, 0, 0.07);
 }
 
 .pk-domain__header {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
 }
-.pk-domain__dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.pk-domain__dot--green { background: var(--pk-chart-green); }
-.pk-domain__dot--yellow, .pk-domain__dot--warning { background: var(--pk-chart-orange); }
-.pk-domain__dot--red, .pk-domain__dot--critical { background: var(--pk-chart-red); }
-
 .pk-domain__tag {
   font-size: 11px;
   font-weight: 600;
@@ -124,6 +115,7 @@ function topRisks(key) {
   font-size: 14px;
   font-weight: 600;
   color: var(--gray-800);
+  min-width: 0;
 }
 .pk-domain__status {
   margin-left: auto;

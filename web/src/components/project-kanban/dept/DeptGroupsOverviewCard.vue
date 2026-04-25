@@ -18,7 +18,7 @@
         @click="$emit('dim-click', dim)"
       >
         <div class="pk-dim-card__header">
-          <span class="pk-dim-card__icon">{{ dim.icon }}</span>
+          <component :is="dim.icon" :size="14" :stroke-width="2" class="pk-dim-card__icon" />
           <span class="pk-dim-card__title">{{ dim.label }}</span>
         </div>
         <div class="pk-dim-card__stats">
@@ -88,7 +88,7 @@
 
 <script setup>
 import { computed, h } from 'vue'
-import { ChevronRight } from 'lucide-vue-next'
+import { ChevronRight, BarChart3, Globe, Link, ShieldCheck } from 'lucide-vue-next'
 import DataCard from '../common/DataCard.vue'
 import AIButton from '../common/AIButton.vue'
 
@@ -142,7 +142,7 @@ const dimensions = computed(() => {
     {
       key: 'projectRisk',
       label: '项目风险',
-      icon: '📊',
+      icon: BarChart3,
       statusType: projectRisk?.criticalCount > 0 ? 'danger' : projectRisk?.warningCount > 0 ? 'warning' : 'success',
       stats: [
         { value: projectRisk?.groupCount ?? '-', label: '群数' },
@@ -155,7 +155,7 @@ const dimensions = computed(() => {
     {
       key: 'online',
       label: '网上运行',
-      icon: '🌐',
+      icon: Globe,
       statusType: online?.statusType ? mapStatusType(online.statusType) : 'success',
       stats: (online?.labels || []).map(l => ({
         value: online?.[l.value] ?? '-',
@@ -166,7 +166,7 @@ const dimensions = computed(() => {
     {
       key: 'downstream',
       label: '下游问题',
-      icon: '🔗',
+      icon: Link,
       statusType: downstream?.statusType ? mapStatusType(downstream.statusType) : 'success',
       stats: (downstream?.labels || []).map(l => ({
         value: downstream?.[l.value] ?? '-',
@@ -178,7 +178,7 @@ const dimensions = computed(() => {
     {
       key: 'trust',
       label: '可信管理',
-      icon: '🛡️',
+      icon: ShieldCheck,
       statusType: trustSummary?.statusType ? mapStatusType(trustSummary.statusType) : 'success',
       stats: (trustSummary?.labels || []).map(l => ({
         value: l.value === 'overallRate' ? (trustSummary?.overallRate ?? '-') + '%' : (trustSummary?.[l.value] ?? '-'),
@@ -247,11 +247,11 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
   cursor: pointer;
   transition: all 0.2s ease;
   border: none;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08), 0 6px 20px rgba(0, 0, 0, 0.05);
 }
 
 .pk-dim-card:hover {
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.10), 0 8px 28px rgba(0, 0, 0, 0.07);
   transform: translateY(-1px);
 }
 
@@ -265,7 +265,7 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
   gap: 6px;
 }
 
-.pk-dim-card__icon { font-size: 14px; flex-shrink: 0; }
+.pk-dim-card__icon { display: flex; align-items: center; flex-shrink: 0; color: var(--gray-600); }
 
 .pk-dim-card__title {
   font-size: 13px;
@@ -309,12 +309,13 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
 
 .pk-dim-card__sentence {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 4px;
   font-size: 12px;
   padding: 4px 6px;
   border-radius: 4px;
-  line-height: 1.3;
+  line-height: 1.5;
+  white-space: pre-wrap;
 }
 
 .pk-dim-card__sentence-dot {
@@ -322,6 +323,7 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
   height: 7px;
   border-radius: 50%;
   flex-shrink: 0;
+  margin: 7px 0;
 }
 
 .pk-dim-card__sentence--danger .pk-dim-card__sentence-dot { background: var(--pk-danger); }
@@ -345,11 +347,11 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
   gap: 8px;
   transition: all 0.2s ease;
   border: none;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06), 0 4px 16px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08), 0 6px 20px rgba(0, 0, 0, 0.05);
 }
 
 .pk-group-card:hover {
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.12), 0 16px 32px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.10), 0 8px 28px rgba(0, 0, 0, 0.07);
   transform: translateY(-2px);
 }
 
@@ -509,8 +511,9 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
     padding: 12px 14px;
     gap: 8px;
   }
-  .pk-dim-card__icon {
-    font-size: 15px;
+  .pk-dim-card__icon :deep(svg) {
+    width: 15px;
+    height: 15px;
   }
   .pk-dim-card__title {
     font-size: 13px;
@@ -571,8 +574,9 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
     padding: 14px 16px;
     gap: 10px;
   }
-  .pk-dim-card__icon {
-    font-size: 16px;
+  .pk-dim-card__icon :deep(svg) {
+    width: 16px;
+    height: 16px;
   }
   .pk-dim-card__title {
     font-size: 14px;
@@ -633,8 +637,9 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
     padding: 16px 18px;
     gap: 12px;
   }
-  .pk-dim-card__icon {
-    font-size: 18px;
+  .pk-dim-card__icon :deep(svg) {
+    width: 18px;
+    height: 18px;
   }
   .pk-dim-card__title {
     font-size: 15px;

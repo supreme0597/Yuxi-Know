@@ -5,7 +5,10 @@
     icon-color="var(--pk-success-dark)"
     :status-text="statusText"
     :status-color="data?.statusColor || 'info'"
+    :ai-summary="data?.aiSummary"
+    ai-lines="1"
     @ai-click="$emit('ai-click', 'milestone')"
+    @summary-click="$emit('ai-click', 'milestone')"
   >
     <template #stats>
       <StatGrid :items="statItems" />
@@ -34,12 +37,6 @@
       <span v-for="(phase, index) in data?.phases || []" :key="index" class="pk-milestone__label">
         {{ phase.name }}
       </span>
-    </div>
-
-    <!-- AI总结 -->
-    <div v-if="data?.aiSummary" class="pk-card__ai-summary" @click.stop="$emit('ai-click', 'milestone')">
-      <span class="pk-card__ai-spark">✨</span>
-      <span class="pk-card__ai-text" :title="data.aiSummary">{{ data.aiSummary }}</span>
     </div>
 
     <!-- TOP3风险 -->
@@ -142,30 +139,6 @@ function phaseColor(status) {
   flex: 1;
 }
 
-.pk-card__ai-summary {
-  display: flex;
-  align-items: flex-start;
-  gap: 4px;
-  padding: 6px 10px;
-  font-size: 12px;
-  color: var(--pk-text);
-  cursor: pointer;
-  overflow: hidden;
-  box-sizing: content-box;
-  height: calc(1 * 1.5em);
-}
-.pk-card__ai-spark {
-  flex-shrink: 0;
-  font-size: 12px;
-}
-.pk-card__ai-text {
-  display: -webkit-box;
-  -webkit-line-clamp: 1;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 @media (min-width: 1600px) {
   .pk-milestone__name {
     font-size: 14px;
@@ -175,11 +148,6 @@ function phaseColor(status) {
   }
   .pk-milestone__label {
     font-size: 12px;
-  }
-  .pk-card__ai-summary {
-    font-size: 13px;
-    padding: 7px 12px;
-    height: calc(1 * 1.5em);
   }
 }
 
@@ -193,11 +161,6 @@ function phaseColor(status) {
   .pk-milestone__label {
     font-size: 13px;
   }
-  .pk-card__ai-summary {
-    font-size: 14px;
-    padding: 8px 12px;
-    height: calc(1 * 1.5em);
-  }
 }
 
 @media (min-width: 2560px) {
@@ -209,11 +172,6 @@ function phaseColor(status) {
   }
   .pk-milestone__label {
     font-size: 14px;
-  }
-  .pk-card__ai-summary {
-    font-size: 15px;
-    padding: 8px 14px;
-    height: calc(1 * 1.5em);
   }
 }
 </style>

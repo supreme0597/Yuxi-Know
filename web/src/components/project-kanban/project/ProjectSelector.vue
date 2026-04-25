@@ -61,7 +61,7 @@ const options = computed(() =>
   padding: 12px 16px;
   background: var(--gray-0);
   border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.10), 0 8px 28px rgba(0, 0, 0, 0.07);
 }
 .pk-selector__label {
   font-size: 14px;

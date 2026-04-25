@@ -273,8 +273,8 @@ const sectionBuilders = {
     if (topRisk) {
       progressItems.push({ label: '焦点风险', value: topRisk.title || topRisk.text || '', status: normalizeLevel(topRisk.level) === 'danger' ? 'danger' : 'warning' })
     }
-    progressItems.push({ label: '总预算', value: `${b.total || 0}M`, status: 'normal' })
-    progressItems.push({ label: '已执行', value: `${b.executed || 0}M`, status: 'normal' })
+    progressItems.push({ label: '总预算', value: `${b.total || 0}W`, status: 'normal' })
+    progressItems.push({ label: '已执行', value: `${b.executed || 0}W`, status: 'normal' })
     progressItems.push({ label: '执行率', value: `${b.executionRate || 0}%`, status: (b.executionRate || 0) > 90 ? 'warning' : 'normal' })
 
     return {
@@ -762,8 +762,8 @@ const sectionBuilders = {
       if (Math.abs(deviation) > 10) {
         progressItems.push({ label: '焦点问题', value: focusText, status: focusLevel })
       }
-      progressItems.push({ label: '预算', value: `${proj.budget || 0}M`, status: 'normal' })
-      progressItems.push({ label: '已执行', value: `${proj.executed || 0}M`, status: 'normal' })
+      progressItems.push({ label: '预算', value: `${proj.budget || 0}W`, status: 'normal' })
+      progressItems.push({ label: '已执行', value: `${proj.executed || 0}W`, status: 'normal' })
       progressItems.push({ label: '执行率', value: `${rate}%`, status: rate < 70 ? 'warning' : 'normal' })
 
       return {
@@ -789,8 +789,8 @@ const sectionBuilders = {
       const focusStatus = budget.statusType === 'red' ? 'danger' : (budget.statusType === 'yellow' ? 'warning' : 'normal')
       progressItems.push({ label: '焦点问题', value: focusText, status: focusStatus })
     }
-    progressItems.push({ label: '预算总额', value: `${budget.total || totalBudget}M`, status: 'normal' })
-    progressItems.push({ label: '已执行', value: `${budget.executed || totalExecuted}M`, status: 'normal' })
+    progressItems.push({ label: '预算总额', value: `${budget.total || totalBudget}W`, status: 'normal' })
+    progressItems.push({ label: '已执行', value: `${budget.executed || totalExecuted}W`, status: 'normal' })
     progressItems.push({ label: '执行率', value: `${execRate}%`, status: execRate >= 80 ? 'normal' : (execRate >= 60 ? 'warning' : 'danger') })
 
     return {

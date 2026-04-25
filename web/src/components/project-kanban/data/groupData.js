@@ -10,7 +10,7 @@
 export const groupData = {
   "summary": {
     "name": "项目群总览",
-    "aiSummary": "部门整体风险可控。V3项目面临最大压力，301.1.0 TR5节点延误概率>80%，建议重点关注；V2和MCU整体平稳，无重大阻塞风险。",
+    "aiSummary": "部门整体风险可控。\nV3项目面临最大压力，301.1.0 TR5节点延误概率>80%，建议重点关注；V2和MCU整体平稳，无重大阻塞风险。",
     "risks": [
       { "level": "critical", "title": "301.1.0 TR5节点延误概率>80%", "source": "301.1.0", "rootCause": "迭代1延期5天，编码进度滞后导致测试时间被压缩", "impact": "下游集成计划延后，影响客户交付承诺", "suggestion": "建议PM立即召集核心开发评审，目标3天内追回3天进度" },
       { "level": "warning", "title": "208.10.0安全加固滞后2周", "source": "208.10.0", "rootCause": "安全模块开发人员被抽调至301.1.0应急", "impact": "影响TR4审视节点达成", "suggestion": "建议申请安全专家支援" },

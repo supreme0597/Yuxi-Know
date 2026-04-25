@@ -92,14 +92,14 @@ const statusText = computed(() => {
 .pk-group {
   background: var(--gray-0);
   border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.10), 0 8px 28px rgba(0, 0, 0, 0.07);
   transition: box-shadow 0.2s ease;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 .pk-group:hover {
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.12), 0 14px 36px rgba(0, 0, 0, 0.09);
 }
 
 .pk-group__content {

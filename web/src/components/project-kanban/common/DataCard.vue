@@ -17,14 +17,6 @@
         </slot>
       </div>
 
-      <!-- 统计区 (可选) -->
-      <div v-if="$slots.stats" class="pk-card__stats">
-        <slot name="stats" />
-      </div>
-
-      <!-- 副标题/描述 (可选) -->
-      <p v-if="description" class="pk-card__desc">{{ description }}</p>
-
       <!-- AI 一句话总结 (可选) — 点击打开带焦点的分析，与 AI 按钮区分 -->
       <div
         v-if="aiSummary"
@@ -39,6 +31,14 @@
       <div v-else-if="$slots.aiSummary" class="pk-card__ai-summary" @click.stop="$emit('summary-click')">
         <slot name="aiSummary" />
       </div>
+
+      <!-- 统计区 (可选) -->
+      <div v-if="$slots.stats" class="pk-card__stats">
+        <slot name="stats" />
+      </div>
+
+      <!-- 副标题/描述 (可选) -->
+      <p v-if="description" class="pk-card__desc">{{ description }}</p>
 
       <!-- 主要内容区 (可选) -->
       <div v-if="$slots.default" class="pk-card__body">
@@ -81,13 +81,13 @@ defineEmits(['ai-click', 'summary-click'])
   position: relative;
   background: var(--gray-0);
   border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.10), 0 8px 28px rgba(0, 0, 0, 0.07);
   transition: box-shadow 0.2s ease;
   display: flex;
   flex-direction: column;
 }
 .pk-card:hover {
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.12), 0 14px 36px rgba(0, 0, 0, 0.09);
 }
 .pk-card--clickable {
   cursor: pointer;

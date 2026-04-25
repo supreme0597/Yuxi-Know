@@ -3,7 +3,7 @@
     <!-- 左栏：AI 总结 -->
     <div class="pk-ai-bar__col pk-ai-bar__col--summary">
       <div class="pk-ai-bar__col-head">
-        <span class="pk-ai-bar__col-icon">💡</span>
+        <Lightbulb class="pk-ai-bar__col-icon" :size="13" :stroke-width="2" />
         <span class="pk-ai-bar__col-title">AI 智能评估</span>
       </div>
       <p class="pk-ai-bar__summary" @click="$emit('summary-click')">{{ summary }}</p>
@@ -12,7 +12,7 @@
     <!-- 中栏：TOP3 风险 -->
     <div v-if="topRisks.length" class="pk-ai-bar__col pk-ai-bar__col--risks">
       <div class="pk-ai-bar__col-head">
-        <span class="pk-ai-bar__col-icon">⚡</span>
+        <Zap class="pk-ai-bar__col-icon" :size="13" :stroke-width="2" />
         <span class="pk-ai-bar__col-title">TOP3风险</span>
       </div>
       <div class="pk-ai-bar__risk-list">
@@ -34,7 +34,7 @@
     <!-- 右栏：猜你想问 -->
     <div v-if="questions && questions.length" class="pk-ai-bar__col pk-ai-bar__col--questions">
       <div class="pk-ai-bar__col-head">
-        <span class="pk-ai-bar__col-icon">🤔</span>
+        <HelpCircle class="pk-ai-bar__col-icon" :size="13" :stroke-width="2" />
         <span class="pk-ai-bar__col-title">猜你想问</span>
       </div>
       <div class="pk-ai-bar__question-list">
@@ -53,6 +53,7 @@
 
 <script setup>
 import { computed } from 'vue'
+import { Lightbulb, Zap, HelpCircle } from 'lucide-vue-next'
 
 const props = defineProps({
   summary: { type: String, default: '' },
@@ -77,7 +78,7 @@ const topRisks = computed(() => {
   background: var(--gray-0);
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.10), 0 8px 28px rgba(0, 0, 0, 0.07);
 }
 
 /* Column base */
@@ -97,8 +98,10 @@ const topRisks = computed(() => {
   gap: 6px;
 }
 .pk-ai-bar__col-icon {
-  font-size: 13px;
+  display: flex;
+  align-items: center;
   flex-shrink: 0;
+  color: var(--gray-600);
 }
 .pk-ai-bar__col-title {
   font-size: 13px;
@@ -114,6 +117,7 @@ const topRisks = computed(() => {
   margin: 0;
   cursor: pointer;
   transition: color 0.15s ease;
+  white-space: pre-wrap;
 }
 .pk-ai-bar__summary:hover {
   color: var(--gray-800);
@@ -210,8 +214,9 @@ const topRisks = computed(() => {
     padding: 18px 22px;
     gap: 12px;
   }
-  .pk-ai-bar__col-icon {
-    font-size: 14px;
+  .pk-ai-bar__col-icon :deep(svg) {
+    width: 14px;
+    height: 14px;
   }
   .pk-ai-bar__col-title {
     font-size: 14px;
@@ -248,8 +253,9 @@ const topRisks = computed(() => {
     padding: 20px 24px;
     gap: 14px;
   }
-  .pk-ai-bar__col-icon {
-    font-size: 15px;
+  .pk-ai-bar__col-icon :deep(svg) {
+    width: 15px;
+    height: 15px;
   }
   .pk-ai-bar__col-title {
     font-size: 15px;
@@ -286,8 +292,9 @@ const topRisks = computed(() => {
     padding: 22px 28px;
     gap: 16px;
   }
-  .pk-ai-bar__col-icon {
-    font-size: 16px;
+  .pk-ai-bar__col-icon :deep(svg) {
+    width: 16px;
+    height: 16px;
   }
   .pk-ai-bar__col-title {
     font-size: 16px;

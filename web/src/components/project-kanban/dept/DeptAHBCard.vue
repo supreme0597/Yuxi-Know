@@ -26,45 +26,36 @@
           <span class="pk-ahb-sub__label">{{ cat.label }}</span>
         </div>
 
-        <!-- 中部：圆环图 + 人员构成条 上下排列 -->
+        <!-- 中部：圆环图（画图用原百分比，中间文字显示偏差值，悬浮显示分数） -->
         <div class="pk-ahb-sub__body">
           <div class="pk-ahb-sub__ring">
-            <DonutChart :percentage="ringPercent(cat)" :size="44" :stroke-width="4" :color="ringColor(cat)" :label="deviationPercentText(cat)" />
-          </div>
-          <div v-if="compositionTotal(cat) > 0" class="pk-ahb-sub__composition">
-            <div class="pk-ahb-sub__bar">
-              <div
-                class="pk-ahb-sub__bar-seg pk-ahb-sub__bar-seg--internal"
-                :style="{ width: compositionPercent(cat, 'internal') + '%' }"
-              />
-              <div
-                class="pk-ahb-sub__bar-seg pk-ahb-sub__bar-seg--od"
-                :style="{ width: compositionPercent(cat, 'od') + '%' }"
-              />
-              <div
-                class="pk-ahb-sub__bar-seg pk-ahb-sub__bar-seg--outsource"
-                :style="{ width: compositionPercent(cat, 'outsource') + '%' }"
-              />
-            </div>
-            <div class="pk-ahb-sub__legend">
-              <span class="pk-ahb-sub__legend-item">
-                <span class="pk-ahb-sub__legend-dot pk-ahb-sub__legend-dot--internal" />自有{{ compositionValue(cat, 'internal') }}
-              </span>
-              <span class="pk-ahb-sub__legend-item">
-                <span class="pk-ahb-sub__legend-dot pk-ahb-sub__legend-dot--od" />OD{{ compositionValue(cat, 'od') }}
-              </span>
-              <span class="pk-ahb-sub__legend-item">
-                <span class="pk-ahb-sub__legend-dot pk-ahb-sub__legend-dot--outsource" />外包{{ compositionValue(cat, 'outsource') }}
-              </span>
-            </div>
+            <DonutChart
+              :percentage="ringPercent(cat)"
+              :size="38"
+              :stroke-width="3.5"
+              :color="ringColor(cat)"
+              :label="deviationPercentText(cat)"
+              :tooltip="scoreText(cat)"
+            />
           </div>
         </div>
 
-        <!-- 底部：人力数据 -->
-        <div class="pk-ahb-sub__amount">
-          <span class="pk-ahb-sub__executed">{{ cat.total }}</span>
-          <span class="pk-ahb-sub__divider">/</span>
-          <span class="pk-ahb-sub__total">{{ cat.workload }}人月</span>
+        <!-- 底部：人员构成统计区（参考 StatGrid 样式） -->
+        <div class="pk-ahb-sub__footer-stats">
+          <div class="pk-ahb-sub__stat-item">
+            <span class="pk-ahb-sub__stat-value">{{ compositionValue(cat, 'internal') }}</span>
+            <span class="pk-ahb-sub__stat-label">自有</span>
+          </div>
+          <div class="pk-ahb-sub__stat-divider" />
+          <div class="pk-ahb-sub__stat-item">
+            <span class="pk-ahb-sub__stat-value">{{ compositionValue(cat, 'od') }}</span>
+            <span class="pk-ahb-sub__stat-label">OD</span>
+          </div>
+          <div class="pk-ahb-sub__stat-divider" />
+          <div class="pk-ahb-sub__stat-item">
+            <span class="pk-ahb-sub__stat-value">{{ compositionValue(cat, 'outsource') }}</span>
+            <span class="pk-ahb-sub__stat-label">外包</span>
+          </div>
         </div>
       </div>
     </div>
@@ -135,11 +126,16 @@ function ringPercent(cat) {
   return Math.min(100, Math.round((cat.workload / cat.total) * 100))
 }
 
-/** 偏差百分比文字（带%） */
+/** 环形图中间文字：偏差值（带+/-号） */
 function deviationPercentText(cat) {
   if (!cat.workload) return '0%'
   const pct = Math.round(((cat.total - cat.workload) / cat.workload) * 100)
   return (pct >= 0 ? '+' : '') + pct + '%'
+}
+
+/** 悬浮气泡显示：分数（如 80/80人月） */
+function scoreText(cat) {
+  return `${cat.total || 0}/${cat.workload || 0}人月`
 }
 
 /** 人员构成：各类人员总数 */
@@ -163,15 +159,13 @@ function compositionPercent(cat, type) {
 </script>
 
 <style scoped>
-/* 2x2 子卡片网格 */
+/* 2x2 子卡片网格：内容自然撑开，底部留白 */
 .pk-ahb-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  grid-template-rows: 1fr 1fr;
   gap: 8px;
   margin-top: 4px;
   min-width: 0;
-  flex: 1;
 }
 
 /* 单个子卡片 */
@@ -187,11 +181,12 @@ function compositionPercent(cat, type) {
   cursor: pointer;
   transition: box-shadow 0.2s ease;
   overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 2px 8px rgba(0, 0, 0, 0.03);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08), 0 6px 20px rgba(0, 0, 0, 0.05);
+  aspect-ratio: 1 / 0.88;
 }
 
 .pk-ahb-sub:hover {
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.10), 0 8px 28px rgba(0, 0, 0, 0.07);
 }
 
 /* 头部 */
@@ -224,66 +219,39 @@ function compositionPercent(cat, type) {
   flex-shrink: 0;
 }
 
-/* 底部：人力数据 */
-.pk-ahb-sub__amount {
+/* 底部：人员构成统计区（参考 StatGrid 样式） */
+.pk-ahb-sub__footer-stats {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 3px;
+  gap: 0;
+  width: 100%;
+}
+
+.pk-ahb-sub__stat-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
+.pk-ahb-sub__stat-value {
   font-size: 13px;
+  font-weight: 700;
+  color: var(--gray-800);
 }
 
-.pk-ahb-sub__executed { font-weight: 700; color: var(--gray-800); }
-.pk-ahb-sub__divider { color: var(--gray-400); }
-.pk-ahb-sub__total { color: var(--gray-500); }
-
-/* 人员构成条 */
-.pk-ahb-sub__composition {
-  width: 80%;
-  margin: 0 auto;
-}
-
-.pk-ahb-sub__bar {
-  display: flex;
-  height: 6px;
-  border-radius: 3px;
-  overflow: hidden;
-  background: var(--pk-border-hover);
-  margin-bottom: 4px;
-}
-
-.pk-ahb-sub__bar-seg {
-  transition: width 0.3s ease;
-  min-width: 2px;
-}
-
-.pk-ahb-sub__bar-seg--internal { background: var(--pk-text-secondary); }
-.pk-ahb-sub__bar-seg--od { background: var(--pk-text-tertiary); }
-.pk-ahb-sub__bar-seg--outsource { background: var(--pk-border-hover); }
-
-.pk-ahb-sub__legend {
-  display: flex;
-  justify-content: space-between;
+.pk-ahb-sub__stat-label {
   font-size: 11px;
   color: var(--gray-500);
 }
 
-.pk-ahb-sub__legend-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
+.pk-ahb-sub__stat-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--gray-200);
+  flex-shrink: 0;
 }
-
-.pk-ahb-sub__legend-dot {
-  display: inline-block;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-}
-
-.pk-ahb-sub__legend-dot--internal { background: var(--pk-text-secondary); }
-.pk-ahb-sub__legend-dot--od { background: var(--pk-text-tertiary); }
-.pk-ahb-sub__legend-dot--outsource { background: var(--pk-border-hover); }
 
 /* Responsive */
 @media (max-width: 600px) {
@@ -299,14 +267,17 @@ function compositionPercent(cat, type) {
   .pk-ahb-sub__label {
     font-size: 14px;
   }
-  .pk-ahb-sub__amount {
+  .pk-ahb-sub__stat-value {
     font-size: 14px;
   }
-  .pk-ahb-sub__legend {
+  .pk-ahb-sub__stat-label {
     font-size: 12px;
   }
+  .pk-ahb-sub__stat-divider {
+    height: 22px;
+  }
   :deep(.pk-donut) {
-    --pk-donut-size: 52px !important;
+    --pk-donut-size: 46px !important;
   }
 }
 
@@ -314,14 +285,17 @@ function compositionPercent(cat, type) {
   .pk-ahb-sub__label {
     font-size: 15px;
   }
-  .pk-ahb-sub__amount {
+  .pk-ahb-sub__stat-value {
     font-size: 15px;
   }
-  .pk-ahb-sub__legend {
+  .pk-ahb-sub__stat-label {
     font-size: 13px;
   }
+  .pk-ahb-sub__stat-divider {
+    height: 24px;
+  }
   :deep(.pk-donut) {
-    --pk-donut-size: 62px !important;
+    --pk-donut-size: 54px !important;
   }
 }
 
@@ -329,14 +303,17 @@ function compositionPercent(cat, type) {
   .pk-ahb-sub__label {
     font-size: 16px;
   }
-  .pk-ahb-sub__amount {
+  .pk-ahb-sub__stat-value {
     font-size: 16px;
   }
-  .pk-ahb-sub__legend {
+  .pk-ahb-sub__stat-label {
     font-size: 14px;
   }
+  .pk-ahb-sub__stat-divider {
+    height: 26px;
+  }
   :deep(.pk-donut) {
-    --pk-donut-size: 72px !important;
+    --pk-donut-size: 78px !important;
   }
 }
 </style>

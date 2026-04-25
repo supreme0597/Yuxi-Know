@@ -30,35 +30,31 @@
           </span>
         </div>
 
-        <!-- 中部：圆环图 + 偏差指示条 上下排列 -->
+        <!-- 中部：圆环图 -->
         <div class="pk-budget-sub__body">
           <div class="pk-budget-sub__ring">
-            <DonutChart :percentage="proj.rate" :size="44" :stroke-width="4" />
-          </div>
-          <div class="pk-budget-sub__deviation">
-            <div class="pk-budget-sub__deviation-bar">
-              <div class="pk-budget-sub__deviation-zero" />
-              <div
-                class="pk-budget-sub__deviation-ptr"
-                :class="deviationPtrClass(proj.deviation)"
-                :style="{ left: deviationLeft(proj.deviation) }"
-              />
-            </div>
-            <div class="pk-budget-sub__deviation-scale">
-              <span>-20%</span>
-              <span class="pk-budget-sub__deviation-label" :class="deviationClass(proj.deviation)">
-                偏差 {{ proj.deviation > 0 ? '+' : '' }}{{ proj.deviation }}%
-              </span>
-              <span>+20%</span>
-            </div>
+            <DonutChart :percentage="proj.rate" :size="38" :stroke-width="3.5" />
           </div>
         </div>
 
-        <!-- 底部：金额 -->
-        <div class="pk-budget-sub__amount">
-          <span class="pk-budget-sub__executed">¥{{ proj.executed }}M</span>
-          <span class="pk-budget-sub__divider">/</span>
-          <span class="pk-budget-sub__total">¥{{ proj.budget }}M</span>
+        <!-- 底部：偏差值/总预算/已执行 统计区（参考 StatGrid 样式） -->
+        <div class="pk-budget-sub__footer-stats">
+          <div class="pk-budget-sub__stat-item">
+            <span class="pk-budget-sub__stat-value" :class="deviationValueClass(proj.deviation)">
+              {{ proj.deviation > 0 ? '+' : '' }}{{ proj.deviation }}%
+            </span>
+            <span class="pk-budget-sub__stat-label">偏差</span>
+          </div>
+          <div class="pk-budget-sub__stat-divider" />
+          <div class="pk-budget-sub__stat-item">
+            <span class="pk-budget-sub__stat-value">¥{{ proj.budget }}W</span>
+            <span class="pk-budget-sub__stat-label">总预算</span>
+          </div>
+          <div class="pk-budget-sub__stat-divider" />
+          <div class="pk-budget-sub__stat-item">
+            <span class="pk-budget-sub__stat-value">¥{{ proj.executed }}W</span>
+            <span class="pk-budget-sub__stat-label">已执行</span>
+          </div>
         </div>
       </div>
     </div>
@@ -98,8 +94,8 @@ const summaryItems = computed(() => {
   const warningCount = projs.filter(p => Math.abs(p.deviation || 0) > 10).length
   return [
     { value: projs.length || '-', label: '项目数' },
-    { value: totalBudget ? `¥${totalBudget}M` : '-', label: '总预算(M)' },
-    { value: totalExecuted ? `¥${totalExecuted}M` : '-', label: '已执行(M)' },
+    { value: totalBudget ? `¥${totalBudget}W` : '-', label: '总预算(W)' },
+    { value: totalExecuted ? `¥${totalExecuted}W` : '-', label: '已执行(W)' },
     { value: warningCount || '-', label: '预警项目', statusClass: warningCount > 0 ? 'warning' : '', clickable: true }
   ]
 })
@@ -121,23 +117,21 @@ function deviationPtrClass(deviation) {
   return 'pk-budget-sub__deviation-ptr--good'
 }
 
-function deviationClass(deviation) {
-  if (Math.abs(deviation) > 20) return 'pk-budget-sub__deviation-label--danger'
-  if (Math.abs(deviation) > 10) return 'pk-budget-sub__deviation-label--warning'
-  return 'pk-budget-sub__deviation-label--good'
+function deviationValueClass(deviation) {
+  if (Math.abs(deviation) > 20) return 'danger'
+  if (Math.abs(deviation) > 10) return 'warning'
+  return ''
 }
 </script>
 
 <style scoped>
-/* 2x2 子卡片网格 */
+/* 2x2 子卡片网格：内容自然撑开，底部留白 */
 .pk-budget-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  grid-template-rows: 1fr 1fr;
   gap: 8px;
   margin-top: 4px;
   min-width: 0;
-  flex: 1;
 }
 
 /* 单个子卡片 — 正方形 */
@@ -152,11 +146,12 @@ function deviationClass(deviation) {
   cursor: pointer;
   transition: box-shadow 0.2s ease;
   overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 2px 8px rgba(0, 0, 0, 0.03);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08), 0 6px 20px rgba(0, 0, 0, 0.05);
+  aspect-ratio: 1 / 0.88;
 }
 
 .pk-budget-sub:hover {
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.10), 0 8px 28px rgba(0, 0, 0, 0.07);
 }
 
 /* 头部 */
@@ -211,85 +206,41 @@ function deviationClass(deviation) {
   flex-shrink: 0;
 }
 
-/* 底部：金额 */
-.pk-budget-sub__amount {
+/* 底部：统计区（参考 StatGrid 样式） */
+.pk-budget-sub__footer-stats {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 3px;
-  font-size: 13px;
+  gap: 0;
+  width: 100%;
 }
 
-.pk-budget-sub__executed { font-weight: 700; color: var(--gray-800); }
-.pk-budget-sub__divider { color: var(--gray-400); }
-.pk-budget-sub__total { color: var(--gray-500); }
-
-/* 偏差指示条 */
-.pk-budget-sub__deviation {
+.pk-budget-sub__stat-item {
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  width: 80%;
-  margin: 0 auto;
-}
-
-.pk-budget-sub__deviation-bar {
-  height: 6px;
-  border-radius: 3px;
-  position: relative;
-  background: linear-gradient(90deg,
-    var(--pk-danger) 0%, var(--pk-danger) 16.67%,
-    var(--pk-warning) 16.67%, var(--pk-warning) 33.33%,
-    var(--pk-success) 33.33%, var(--pk-success) 66.67%,
-    var(--pk-warning) 66.67%, var(--pk-warning) 83.33%,
-    var(--pk-danger) 83.33%, var(--pk-danger) 100%
-  );
-}
-
-.pk-budget-sub__deviation-zero {
-  position: absolute;
-  left: 50%;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: rgba(255, 255, 255, 0.9);
-  transform: translateX(-50%);
-  z-index: 2;
-}
-
-.pk-budget-sub__deviation-scale {
-  display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 1px;
+}
+
+.pk-budget-sub__stat-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--gray-800);
+}
+.pk-budget-sub__stat-value.danger { color: var(--pk-danger); }
+.pk-budget-sub__stat-value.warning { color: var(--pk-warning); }
+
+.pk-budget-sub__stat-label {
   font-size: 11px;
-  color: var(--gray-400);
-  padding: 0 2px;
+  color: var(--gray-500);
 }
 
-.pk-budget-sub__deviation-ptr {
-  position: absolute;
-  top: -4px;
-  width: 0;
-  height: 0;
-  border-left: 6px solid transparent;
-  border-right: 6px solid transparent;
-  border-top: 9px solid;
-  transform: translateX(-50%);
-  z-index: 3;
+.pk-budget-sub__stat-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--gray-200);
+  flex-shrink: 0;
 }
-
-.pk-budget-sub__deviation-ptr--danger { border-top-color: var(--pk-danger); }
-.pk-budget-sub__deviation-ptr--warning { border-top-color: var(--pk-warning); }
-.pk-budget-sub__deviation-ptr--good { border-top-color: var(--pk-success); }
-
-.pk-budget-sub__deviation-label {
-  font-size: 11px;
-  font-weight: 500;
-}
-
-.pk-budget-sub__deviation-label--danger { color: var(--pk-danger); }
-.pk-budget-sub__deviation-label--warning { color: var(--pk-warning); }
-.pk-budget-sub__deviation-label--good { color: var(--pk-success); }
 
 /* Responsive */
 @media (max-width: 600px) {
@@ -308,14 +259,17 @@ function deviationClass(deviation) {
   .pk-budget-sub__status {
     font-size: 13px;
   }
-  .pk-budget-sub__amount {
+  .pk-budget-sub__stat-value {
     font-size: 14px;
   }
-  .pk-budget-sub__deviation-scale {
+  .pk-budget-sub__stat-label {
     font-size: 12px;
   }
+  .pk-budget-sub__stat-divider {
+    height: 22px;
+  }
   :deep(.pk-donut) {
-    --pk-donut-size: 52px !important;
+    --pk-donut-size: 46px !important;
   }
 }
 
@@ -326,14 +280,17 @@ function deviationClass(deviation) {
   .pk-budget-sub__status {
     font-size: 14px;
   }
-  .pk-budget-sub__amount {
+  .pk-budget-sub__stat-value {
     font-size: 15px;
   }
-  .pk-budget-sub__deviation-scale {
+  .pk-budget-sub__stat-label {
     font-size: 13px;
   }
+  .pk-budget-sub__stat-divider {
+    height: 24px;
+  }
   :deep(.pk-donut) {
-    --pk-donut-size: 62px !important;
+    --pk-donut-size: 54px !important;
   }
 }
 
@@ -344,14 +301,17 @@ function deviationClass(deviation) {
   .pk-budget-sub__status {
     font-size: 14px;
   }
-  .pk-budget-sub__amount {
+  .pk-budget-sub__stat-value {
     font-size: 16px;
   }
-  .pk-budget-sub__deviation-scale {
+  .pk-budget-sub__stat-label {
     font-size: 14px;
   }
+  .pk-budget-sub__stat-divider {
+    height: 26px;
+  }
   :deep(.pk-donut) {
-    --pk-donut-size: 72px !important;
+    --pk-donut-size: 78px !important;
   }
 }
 </style>
