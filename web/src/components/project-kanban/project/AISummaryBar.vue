@@ -23,7 +23,7 @@
           :class="`pk-ai-bar__risk-item--${risk.level}`"
           @click="$emit('risk-click', risk)"
         >
-          <span class="pk-ai-bar__risk-rank">{{ i + 1 }}</span>
+          <span class="pk-ai-bar__risk-dot"></span>
           <div class="pk-ai-bar__risk-body">
             <span class="pk-ai-bar__risk-text">{{ risk.text || risk.title }}</span>
           </div>
@@ -75,9 +75,9 @@ const topRisks = computed(() => {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
   background: var(--gray-0);
-  border: 1px solid var(--gray-200);
   border-radius: 12px;
   overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.04);
 }
 
 /* Column base */
@@ -129,8 +129,7 @@ const topRisks = computed(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
-  border-radius: 6px;
+  padding: 6px 0;
   cursor: pointer;
   transition: background 0.15s ease;
   min-height: 30px;
@@ -139,47 +138,21 @@ const topRisks = computed(() => {
 .pk-ai-bar__risk-item:hover {
   background: var(--gray-50);
 }
-.pk-ai-bar__risk-item--critical,
-.pk-ai-bar__risk-item--danger {
-  background: var(--pk-danger-light);
-}
-.pk-ai-bar__risk-item--critical:hover,
-.pk-ai-bar__risk-item--danger:hover {
-  background: var(--pk-danger-lighter);
-}
-.pk-ai-bar__risk-item--warning {
-  background: var(--pk-warning-light);
-}
-.pk-ai-bar__risk-item--warning:hover {
-  background: var(--pk-warning-lighter);
-}
-.pk-ai-bar__risk-item--normal {
-  background: var(--pk-success-light);
-}
-.pk-ai-bar__risk-item--normal:hover {
-  background: var(--pk-success-lighter);
-}
-.pk-ai-bar__risk-rank {
-  width: 18px;
-  height: 18px;
-  border-radius: 5px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  font-weight: 700;
+.pk-ai-bar__risk-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
   flex-shrink: 0;
   background: var(--gray-300);
-  color: var(--pk-card-bg);
 }
-.pk-ai-bar__risk-item--critical .pk-ai-bar__risk-rank,
-.pk-ai-bar__risk-item--danger .pk-ai-bar__risk-rank {
+.pk-ai-bar__risk-item--critical .pk-ai-bar__risk-dot,
+.pk-ai-bar__risk-item--danger .pk-ai-bar__risk-dot {
   background: var(--pk-danger-dark);
 }
-.pk-ai-bar__risk-item--warning .pk-ai-bar__risk-rank {
+.pk-ai-bar__risk-item--warning .pk-ai-bar__risk-dot {
   background: var(--pk-warning-dark);
 }
-.pk-ai-bar__risk-item--normal .pk-ai-bar__risk-rank {
+.pk-ai-bar__risk-item--normal .pk-ai-bar__risk-dot {
   background: var(--pk-success-dark);
 }
 .pk-ai-bar__risk-body {
@@ -206,20 +179,19 @@ const topRisks = computed(() => {
   text-align: left;
   font-size: 12px;
   padding: 6px 10px;
-  background: var(--gray-50);
   color: var(--gray-700);
-  border: 1px solid var(--gray-200);
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.15s ease;
   line-height: 1.4;
   min-height: 30px;
   box-sizing: border-box;
+  border: none;
+  background: transparent;
 }
 .pk-ai-bar__question:hover {
-  background: var(--pk-accent-light);
-  border-color: var(--pk-accent);
   color: var(--pk-accent-dark);
+  background: var(--pk-accent-light);
 }
 
 /* Responsive */
@@ -254,10 +226,9 @@ const topRisks = computed(() => {
     padding: 7px 12px;
     min-height: 34px;
   }
-  .pk-ai-bar__risk-rank {
-    width: 20px;
-    height: 20px;
-    font-size: 12px;
+  .pk-ai-bar__risk-dot {
+    width: 5px;
+    height: 5px;
   }
   .pk-ai-bar__risk-text {
     font-size: 13px;
@@ -293,10 +264,9 @@ const topRisks = computed(() => {
     padding: 8px 12px;
     min-height: 36px;
   }
-  .pk-ai-bar__risk-rank {
-    width: 22px;
-    height: 22px;
-    font-size: 13px;
+  .pk-ai-bar__risk-dot {
+    width: 5px;
+    height: 5px;
   }
   .pk-ai-bar__risk-text {
     font-size: 14px;
@@ -332,10 +302,9 @@ const topRisks = computed(() => {
     padding: 8px 14px;
     min-height: 40px;
   }
-  .pk-ai-bar__risk-rank {
-    width: 24px;
-    height: 24px;
-    font-size: 14px;
+  .pk-ai-bar__risk-dot {
+    width: 5px;
+    height: 5px;
   }
   .pk-ai-bar__risk-text {
     font-size: 15px;

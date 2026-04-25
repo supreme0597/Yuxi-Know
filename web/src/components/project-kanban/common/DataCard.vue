@@ -80,16 +80,14 @@ defineEmits(['ai-click', 'summary-click'])
 .pk-card {
   position: relative;
   background: var(--gray-0);
-  border: 1px solid var(--gray-200);
   border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.04);
+  transition: box-shadow 0.2s ease;
   display: flex;
   flex-direction: column;
 }
 .pk-card:hover {
-  border-color: var(--gray-300);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(0, 0, 0, 0.06);
 }
 .pk-card--clickable {
   cursor: pointer;
@@ -99,7 +97,7 @@ defineEmits(['ai-click', 'summary-click'])
 }
 
 .pk-card__content {
-  padding: 12px 14px;
+  padding: 14px 16px;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -143,22 +141,15 @@ defineEmits(['ai-click', 'summary-click'])
   align-items: flex-start;
   gap: 4px;
   padding: 4px 8px;
-  background: linear-gradient(135deg, var(--pk-accent-light), var(--pk-group-v2-light));
-  border-radius: 6px;
   font-size: 12px;
   color: var(--pk-text);
   line-height: 1.5;
   cursor: pointer;
-  transition: background 0.2s ease, box-shadow 0.2s ease;
   overflow: hidden;
   box-sizing: content-box;
 }
 .pk-card__ai-summary--1l { height: calc(1 * 1.5em); }
 .pk-card__ai-summary--2l { height: calc(2 * 1.5em); }
-.pk-card__ai-summary:hover {
-  background: linear-gradient(135deg, var(--pk-group-v3-light), var(--pk-group-v2-light));
-  box-shadow: 0 0 0 1px var(--pk-accent-glow);
-}
 .pk-card__ai-spark {
   flex-shrink: 0;
   font-size: 12px;

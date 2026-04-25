@@ -250,51 +250,50 @@
                   <span class="ai-sidepanel__risk-count">{{ panelData.risks.length }}项</span>
                 </div>
                 <div class="ai-sidepanel__risk-list">
-                  <div
-                    v-for="(risk, i) in panelData.risks"
-                    :key="i"
-                    class="ai-sidepanel__risk-card"
-                    :class="`ai-sidepanel__risk-card--${riskLevel(risk.level)}`"
-                  >
-                    <div class="ai-sidepanel__risk-header" @click="toggleRisk(i)">
-                      <span
-                        class="ai-sidepanel__risk-badge"
-                        :class="`ai-sidepanel__risk-badge--${riskLevel(risk.level)}`"
-                      >{{ riskLevelText(risk.level) }}</span>
-                      <span class="ai-sidepanel__risk-title">{{ risk.title }}</span>
-                      <ChevronDown
-                        :size="14"
-                        class="ai-sidepanel__risk-arrow"
-                        :class="{ 'ai-sidepanel__risk-arrow--open': expandedRisks.has(i) }"
-                      />
-                    </div>
-
-                    <Transition name="ai-collapse">
-                      <div v-if="expandedRisks.has(i)" class="ai-sidepanel__risk-body">
-                        <div v-if="risk.detail" class="ai-sidepanel__risk-section">
-                          <div class="ai-sidepanel__risk-section-header">
-                            <Search :size="12" />
-                            <span>根因分析</span>
-                          </div>
-                          <div class="ai-sidepanel__risk-section-content">{{ risk.detail }}</div>
-                        </div>
-                        <div v-if="risk.impact" class="ai-sidepanel__risk-section ai-sidepanel__risk-section--impact">
-                          <div class="ai-sidepanel__risk-section-header">
-                            <Info :size="12" />
-                            <span>影响范围</span>
-                          </div>
-                          <div class="ai-sidepanel__risk-section-content">{{ risk.impact }}</div>
-                        </div>
-                        <div v-if="risk.suggestion" class="ai-sidepanel__risk-section ai-sidepanel__risk-section--suggestion">
-                          <div class="ai-sidepanel__risk-section-header">
-                            <CheckCircle :size="12" />
-                            <span>消减建议</span>
-                          </div>
-                          <div class="ai-sidepanel__risk-section-content">{{ risk.suggestion }}</div>
-                        </div>
-                      </div>
-                    </Transition>
+                <div
+                  v-for="(risk, i) in panelData.risks"
+                  :key="i"
+                  class="ai-sidepanel__risk-card"
+                >
+                  <div class="ai-sidepanel__risk-header" @click="toggleRisk(i)">
+                    <span
+                      class="ai-sidepanel__risk-dot"
+                      :class="`ai-sidepanel__risk-dot--${riskLevel(risk.level)}`"
+                    />
+                    <span class="ai-sidepanel__risk-title">{{ risk.title }}</span>
+                    <ChevronDown
+                      :size="14"
+                      class="ai-sidepanel__risk-arrow"
+                      :class="{ 'ai-sidepanel__risk-arrow--open': expandedRisks.has(i) }"
+                    />
                   </div>
+
+                  <Transition name="ai-collapse">
+                    <div v-if="expandedRisks.has(i)" class="ai-sidepanel__risk-body">
+                      <div v-if="risk.detail" class="ai-sidepanel__risk-section">
+                        <div class="ai-sidepanel__risk-section-header">
+                          <Search :size="12" />
+                          <span>根因分析</span>
+                        </div>
+                        <div class="ai-sidepanel__risk-section-content">{{ risk.detail }}</div>
+                      </div>
+                      <div v-if="risk.impact" class="ai-sidepanel__risk-section">
+                        <div class="ai-sidepanel__risk-section-header">
+                          <Info :size="12" />
+                          <span>影响范围</span>
+                        </div>
+                        <div class="ai-sidepanel__risk-section-content">{{ risk.impact }}</div>
+                      </div>
+                      <div v-if="risk.suggestion" class="ai-sidepanel__risk-section ai-sidepanel__risk-section--suggestion">
+                        <div class="ai-sidepanel__risk-section-header">
+                          <CheckCircle :size="12" />
+                          <span>消减建议</span>
+                        </div>
+                        <div class="ai-sidepanel__risk-section-content">{{ risk.suggestion }}</div>
+                      </div>
+                    </div>
+                  </Transition>
+                </div>
                 </div>
               </div>
 
@@ -993,16 +992,13 @@ function initOrUpdateRadar() {
 .ai-sidepanel__progress {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
 }
 .ai-sidepanel__progress-item {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
-  background: var(--gray-50);
-  border-radius: 8px;
-  border: 1px solid var(--gray-100);
+  padding: 4px 0;
 }
 .ai-sidepanel__progress-dot {
   width: 7px;
@@ -1171,8 +1167,6 @@ function initOrUpdateRadar() {
 
 /* Current Phase */
 .ai-sidepanel__current-phase {
-  padding: 8px 12px;
-  background: var(--pk-group-v2-light);
   border-radius: 8px;
   font-size: 13px;
   color: var(--pk-group-v2);
@@ -1184,23 +1178,28 @@ function initOrUpdateRadar() {
 .ai-sidepanel__phases-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 .ai-sidepanel__phase-card {
-  padding: 10px 12px;
-  background: var(--pk-page-bg);
-  border-radius: 8px;
-  border: 1px solid var(--pk-border);
-  transition: border-color 0.2s;
+  padding: 12px 14px;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
+  transition: box-shadow 0.2s ease;
+}
+.ai-sidepanel__phase-card:hover {
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.06), 0 2px 4px rgba(0, 0, 0, 0.04);
 }
 .ai-sidepanel__phase-card--active {
-  background: var(--pk-warning-lighter);
+  border-left: 2px solid var(--pk-warning);
+  padding-left: 12px;
 }
 .ai-sidepanel__phase-card--risk-high {
-  border-color: var(--pk-danger-light);
+  border-left: 2px solid var(--pk-danger);
+  padding-left: 12px;
 }
 .ai-sidepanel__phase-card--risk-medium {
-  border-color: var(--pk-warning-light);
+  border-left: 2px solid var(--pk-warning);
+  padding-left: 12px;
 }
 .ai-sidepanel__phase-header {
   display: flex;
@@ -1286,8 +1285,6 @@ function initOrUpdateRadar() {
 .ai-sidepanel__phase-risk-reason {
   margin-top: 8px;
   padding: 6px 8px;
-  background: var(--pk-danger-light);
-  border-left: 3px solid var(--pk-danger);
   border-radius: 4px;
   font-size: 12px;
   color: var(--pk-danger-dark);
@@ -1349,9 +1346,7 @@ function initOrUpdateRadar() {
   font-size: 13px;
   color: var(--gray-700);
   line-height: 1.7;
-  padding: 12px 14px;
-  background: linear-gradient(135deg, var(--pk-accent-light), var(--pk-group-v2-light));
-  border-radius: 8px;
+  padding: 8px 0;
 }
 .ai-sidepanel__reasoning-text :deep(strong) {
   color: var(--gray-900);
@@ -1372,60 +1367,36 @@ function initOrUpdateRadar() {
 }
 
 .ai-sidepanel__risk-card {
-  border: 1px solid var(--gray-100);
+  padding: 12px 14px;
   border-radius: 10px;
-  overflow: hidden;
-  transition: box-shadow 0.2s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
+  transition: box-shadow 0.2s ease;
 }
-
-.ai-sidepanel__risk-card--danger {
-  border-left: 3px solid var(--pk-danger);
-  background: linear-gradient(135deg, var(--pk-danger-light), var(--pk-card-bg));
-}
-.ai-sidepanel__risk-card--warning {
-  border-left: 3px solid var(--pk-warning);
-  background: linear-gradient(135deg, var(--pk-warning-light), var(--pk-card-bg));
-}
-.ai-sidepanel__risk-card--normal {
-  border-left: 3px solid var(--pk-success);
-  background: linear-gradient(135deg, var(--pk-success-light), var(--pk-card-bg));
+.ai-sidepanel__risk-card:hover {
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.06), 0 2px 4px rgba(0, 0, 0, 0.04);
 }
 
 .ai-sidepanel__risk-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 14px;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: opacity 0.15s;
 }
 .ai-sidepanel__risk-header:hover {
-  background: rgba(0, 0, 0, 0.02);
+  opacity: 0.7;
 }
 
-.ai-sidepanel__risk-badge {
-  font-size: 12px;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 4px;
+.ai-sidepanel__risk-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
   flex-shrink: 0;
-  letter-spacing: 0.5px;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.8), 0 0 4px rgba(0, 0, 0, 0.08);
 }
-.ai-sidepanel__risk-badge--danger {
-  background: var(--pk-danger-light);
-  color: var(--pk-danger-dark);
-  border: 1px solid var(--pk-danger-light);
-}
-.ai-sidepanel__risk-badge--warning {
-  background: var(--pk-warning-light);
-  color: var(--pk-warning-dark);
-  border: 1px solid var(--pk-warning-light);
-}
-.ai-sidepanel__risk-badge--normal {
-  background: var(--pk-success-light);
-  color: var(--pk-success-dark);
-  border: 1px solid var(--pk-success-light);
-}
+.ai-sidepanel__risk-dot--danger { background: var(--pk-danger); }
+.ai-sidepanel__risk-dot--warning { background: var(--pk-warning); }
+.ai-sidepanel__risk-dot--normal { background: var(--pk-chart-green); }
 
 .ai-sidepanel__risk-title {
   flex: 1;
@@ -1445,7 +1416,7 @@ function initOrUpdateRadar() {
 }
 
 .ai-sidepanel__risk-body {
-  padding: 4px 14px 14px;
+  padding: 8px 0 4px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -1453,20 +1424,7 @@ function initOrUpdateRadar() {
 
 /* 三段式分区 */
 .ai-sidepanel__risk-section {
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: var(--pk-page-bg);
-  border: 1px solid var(--pk-border);
-}
-
-.ai-sidepanel__risk-section--impact {
-  background: var(--pk-warning-lighter);
-  border-color: var(--pk-warning-light);
-}
-
-.ai-sidepanel__risk-section--suggestion {
-  background: var(--pk-success-lighter);
-  border-color: var(--pk-success-light);
+  padding: 6px 0;
 }
 
 .ai-sidepanel__risk-section-header {
@@ -1479,22 +1437,21 @@ function initOrUpdateRadar() {
   margin-bottom: 4px;
 }
 
-.ai-sidepanel__risk-section--impact .ai-sidepanel__risk-section-header {
-  color: var(--pk-warning-dark);
-}
-
-.ai-sidepanel__risk-section--suggestion .ai-sidepanel__risk-section-header {
-  color: var(--pk-success-dark);
-}
-
 .ai-sidepanel__risk-section-content {
   font-size: 13px;
   line-height: 1.7;
   color: var(--gray-700);
 }
 
-.ai-sidepanel__risk-section--suggestion .ai-sidepanel__risk-section-content {
-  color: var(--pk-success-dark);
+.ai-sidepanel__risk-section--suggestion {
+  padding-left: 10px;
+  border-left: 2px solid var(--pk-accent);
+}
+.ai-sidepanel__risk-section--suggestion .ai-sidepanel__risk-section-header {
+  color: var(--pk-accent-dark);
+}
+.ai-sidepanel__risk-section--suggestion .ai-sidepanel__risk-section-header :deep(svg) {
+  color: var(--pk-accent);
 }
 
 /* Quick Questions */

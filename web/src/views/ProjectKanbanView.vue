@@ -523,7 +523,7 @@ function handleIndustryHighlight(industry) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px clamp(80px, 8vw, 200px);
+  padding: 16px clamp(140px, 12vw, 320px);
   background: var(--gray-0);
   border-bottom: 1px solid var(--gray-200);
   position: sticky;
@@ -584,7 +584,7 @@ function handleIndustryHighlight(industry) {
 .pk-kanban__content {
   max-width: clamp(1440px, 92vw, 2400px);
   margin: 0 auto;
-  padding: 0 clamp(80px, 8vw, 200px);
+  padding: 0 clamp(140px, 12vw, 320px);
 }
 
 /* Tabs */
@@ -596,8 +596,7 @@ function handleIndustryHighlight(industry) {
   margin-top: 24px;
   background: var(--gray-0);
   border-radius: 12px;
-  border: 1px solid var(--gray-200);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.04);
 }
 .pk-kanban__tab {
   padding: 8px 20px;
@@ -668,7 +667,6 @@ function handleIndustryHighlight(industry) {
 /* 防止子卡片内容溢出 grid */
 .pk-kanban__dept-grid > * {
   min-width: 0;
-  overflow: hidden;
 }
 
 /* Groups grid */

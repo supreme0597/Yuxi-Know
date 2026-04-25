@@ -93,22 +93,12 @@ const topRisks = computed(() => {
   margin-left: auto;
 }
 
-.pk-risk-item--critical,
-.pk-risk-item--danger {
-  background: var(--pk-danger-light);
-}
 .pk-risk-item--critical .pk-risk-item__dot,
 .pk-risk-item--danger .pk-risk-item__dot {
   background: var(--pk-danger-dark);
 }
-.pk-risk-item--warning {
-  background: var(--pk-warning-light);
-}
 .pk-risk-item--warning .pk-risk-item__dot {
   background: var(--pk-warning-dark);
-}
-.pk-risk-item--normal {
-  background: var(--pk-success-light);
 }
 .pk-risk-item--normal .pk-risk-item__dot {
   background: var(--pk-success-dark);

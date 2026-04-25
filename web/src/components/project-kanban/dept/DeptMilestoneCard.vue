@@ -25,8 +25,14 @@
         <!-- 头部：项目名 + 状态标签 -->
         <div class="pk-milestone-sub__header">
           <span class="pk-milestone-sub__title">{{ item.category }} {{ item.project }}</span>
-          <span v-if="item.deviation > 10" class="pk-milestone-sub__tag">延期</span>
-          <span v-else-if="item.deviation > 0" class="pk-milestone-sub__tag pk-milestone-sub__tag--warn">关注</span>
+          <span v-if="item.deviation > 10" class="pk-milestone-sub__tag">
+            <span class="pk-milestone-sub__tag-dot"></span>
+            <span class="pk-milestone-sub__tag-text">延期</span>
+          </span>
+          <span v-else-if="item.deviation > 0" class="pk-milestone-sub__tag">
+            <span class="pk-milestone-sub__tag-dot pk-milestone-sub__tag-dot--warn"></span>
+            <span class="pk-milestone-sub__tag-text">关注</span>
+          </span>
         </div>
 
         <!-- 圆环图 -->
@@ -201,26 +207,24 @@ function nodeClass(phase, idx, item) {
 /* ===== 子卡片 ===== */
 .pk-milestone-sub {
   background: var(--pk-card-bg);
-  border: 1px solid var(--pk-border);
   border-radius: 10px;
   padding: 8px 8px 10px;
   display: flex;
   flex-direction: column;
   gap: 4px;
   cursor: pointer;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: box-shadow 0.2s ease;
   overflow: hidden;
   min-width: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 2px 8px rgba(0, 0, 0, 0.03);
 }
 
 .pk-milestone-sub:hover {
-  border-color: var(--pk-border-hover);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(0, 0, 0, 0.04);
 }
 
 .pk-milestone-sub--active {
-  border-color: var(--pk-accent);
-  box-shadow: 0 0 0 2px var(--pk-accent-glow);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(0, 0, 0, 0.04);
 }
 
 /* ===== 头部 ===== */
@@ -244,16 +248,24 @@ function nodeClass(phase, idx, item) {
 .pk-milestone-sub__tag {
   font-size: 12px;
   font-weight: 600;
-  padding: 1px 6px;
-  border-radius: 4px;
   white-space: nowrap;
   flex-shrink: 0;
-  color: var(--pk-danger-dark);
-  background: var(--pk-danger-light);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
-.pk-milestone-sub__tag--warn {
-  color: var(--pk-warning-dark);
-  background: var(--pk-warning-light);
+.pk-milestone-sub__tag-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--pk-danger-dark);
+}
+.pk-milestone-sub__tag-dot--warn {
+  background: var(--pk-warning-dark);
+}
+.pk-milestone-sub__tag-text {
+  color: var(--gray-500);
 }
 
 /* ===== 圆环图 ===== */
@@ -271,6 +283,8 @@ function nodeClass(phase, idx, item) {
   /* 日期(11px行高) + gap(2px) + 圆点半径(9px) = 22px 为圆点中心 */
   /* 总高度 = 11 + 2 + 18 + 2 + 11 = 44px, 留点余量 */
   height: 48px;
+  width: 80%;
+  margin: auto;
 }
 
 /* 连线 — 精确穿过圆点中心 */

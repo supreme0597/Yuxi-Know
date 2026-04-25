@@ -1,12 +1,10 @@
 <template>
   <div class="pk-group" :style="{ '--group-color': meta.colorHex }">
-    <!-- 顶部彩色条纹 -->
-    <div class="pk-group__stripe" :style="{ background: meta.colorHex }" />
 
     <div class="pk-group__content">
       <!-- 头部：图标 + 标题 + 状态徽章 -->
       <div class="pk-group__header">
-        <div class="pk-group__icon" :style="{ background: meta.colorHex + '18', color: meta.colorHex }">
+        <div class="pk-group__icon" :style="{ color: meta.colorHex }">
           <Building2 :size="16" :stroke-width="2" />
         </div>
         <span class="pk-group__title">{{ meta.name }}</span>
@@ -93,17 +91,15 @@ const statusText = computed(() => {
 <style scoped>
 .pk-group {
   background: var(--gray-0);
-  border: 1px solid var(--gray-200);
   border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.04);
+  transition: box-shadow 0.2s ease;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 .pk-group:hover {
-  border-color: var(--group-color, var(--gray-300));
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(0, 0, 0, 0.06);
 }
 
 .pk-group__content {
@@ -124,7 +120,6 @@ const statusText = computed(() => {
 .pk-group__header {
   display: flex;
   align-items: center;
-  gap: 8px;
 }
 .pk-group__icon {
   width: 32px;
@@ -150,21 +145,13 @@ const statusText = computed(() => {
   align-items: flex-start;
   gap: 6px;
   padding: 8px 12px;
-  background: linear-gradient(135deg, var(--pk-group-v3-light), var(--pk-group-v2-light));
-  border-radius: 8px;
-  border: 1px solid var(--pk-accent-glow-weak);
   font-size: 13px;
   color: var(--gray-700);
   line-height: 1.6;
   cursor: pointer;
-  transition: background 0.2s ease, box-shadow 0.2s ease;
   overflow: hidden;
   box-sizing: content-box;
   height: calc(2 * 1.6em);
-}
-.pk-group__ai:hover {
-  background: linear-gradient(135deg, var(--pk-group-v3-light), var(--pk-accent-light));
-  box-shadow: 0 0 0 1px var(--pk-accent-glow);
 }
 .pk-group__ai-spark {
   flex-shrink: 0;

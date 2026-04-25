@@ -5,7 +5,6 @@
     icon-color="var(--pk-success-dark)"
     :status-text="statusText"
     :status-color="data?.statusColor || 'info'"
-    wide
     @ai-click="$emit('ai-click', 'milestone')"
   >
     <template #stats>
@@ -148,19 +147,12 @@ function phaseColor(status) {
   align-items: flex-start;
   gap: 4px;
   padding: 6px 10px;
-  background: linear-gradient(135deg, var(--pk-accent-gradient-from), var(--pk-accent-gradient-to));
-  border-radius: 6px;
   font-size: 12px;
   color: var(--pk-text);
   cursor: pointer;
-  transition: background 0.2s ease, box-shadow 0.2s ease;
   overflow: hidden;
   box-sizing: content-box;
   height: calc(1 * 1.5em);
-}
-.pk-card__ai-summary:hover {
-  background: linear-gradient(135deg, var(--pk-accent-gradient-from), var(--pk-accent-gradient-to));
-  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.2);
 }
 .pk-card__ai-spark {
   flex-shrink: 0;

@@ -7,12 +7,11 @@
         <ChevronRight class="pk-sub__id-arrow" :size="14" />
       </span>
       <StatusBadge :status="milestoneStatus" :text="milestoneText" />
-      <span class="pk-sub__progress" @click.stop="$emit('progress-click', project)">{{ project.progress }}%</span>
-    </div>
-
-    <!-- 进度条 -->
-    <div class="pk-sub__bar">
-      <div class="pk-sub__bar-fill" :style="{ width: Math.max(project.progress, 2) + '%' }" />
+      <span
+        class="pk-sub__progress"
+        :class="`pk-sub__progress--${milestoneStatus}`"
+        @click.stop="$emit('progress-click', project)"
+      >{{ project.progress }}%</span>
     </div>
 
     <!-- AI 一句话总结 -->
@@ -27,10 +26,10 @@
         v-for="dim in dimensions"
         :key="dim.key"
         class="pk-sub__dim"
-        :class="`pk-sub__dim--${dim.status}`"
         @click.stop="$emit('dim-click', { dim, project })"
       >
-        {{ dim.label }}
+        <span class="pk-sub__dim-dot" :class="`pk-sub__dim-dot--${dim.status}`"></span>
+        <span class="pk-sub__dim-text">{{ dim.label }}</span>
       </span>
     </div>
 
@@ -104,8 +103,8 @@ const milestoneText = computed(() => {
 .pk-sub {
   padding: 14px 16px;
   background: var(--gray-0);
-  border: 1px solid var(--gray-200);
   border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.04);
   cursor: pointer;
   transition: all 0.15s ease;
   display: flex;
@@ -113,9 +112,8 @@ const milestoneText = computed(() => {
   gap: 10px;
 }
 .pk-sub:hover {
-  border-color: var(--pk-accent);
   background: var(--pk-page-bg);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(0, 0, 0, 0.06);
 }
 
 /* Header */
@@ -169,6 +167,12 @@ const milestoneText = computed(() => {
 .pk-sub__progress:hover {
   color: var(--pk-accent-dark);
 }
+.pk-sub__progress--green { color: var(--pk-success-dark); }
+.pk-sub__progress--green:hover { color: var(--pk-success); }
+.pk-sub__progress--yellow { color: var(--pk-warning-dark); }
+.pk-sub__progress--yellow:hover { color: var(--pk-warning); }
+.pk-sub__progress--red { color: var(--pk-danger); }
+.pk-sub__progress--red:hover { color: var(--pk-danger-dark); }
 
 /* Progress bar */
 .pk-sub__bar {
@@ -193,8 +197,6 @@ const milestoneText = computed(() => {
   color: var(--gray-600);
   line-height: 1.5;
   padding: 6px 8px;
-  background: linear-gradient(135deg, var(--pk-accent-light), var(--pk-group-v3-light));
-  border-radius: 6px;
   overflow: hidden;
   box-sizing: content-box;
   height: calc(1 * 1.5em);
@@ -214,33 +216,30 @@ const milestoneText = computed(() => {
 /* Dimension tags */
 .pk-sub__dims {
   display: flex;
-  gap: 6px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 .pk-sub__dim {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-weight: 600;
-  transition: transform 0.1s ease, box-shadow 0.1s ease;
+  color: var(--gray-500);
   cursor: pointer;
+  transition: transform 0.1s ease;
 }
 .pk-sub__dim:hover {
   transform: scale(1.05);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
-.pk-sub__dim--normal {
-  background: var(--pk-success-light);
-  color: var(--pk-success);
+.pk-sub__dim-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
-.pk-sub__dim--warning {
-  background: var(--pk-warning-light);
-  color: var(--pk-warning-dark);
-}
-.pk-sub__dim--danger {
-  background: var(--pk-danger-light);
-  color: var(--pk-danger);
-}
+.pk-sub__dim-dot--normal { background: var(--pk-success-dark); }
+.pk-sub__dim-dot--warning { background: var(--pk-warning-dark); }
+.pk-sub__dim-dot--danger { background: var(--pk-danger-dark); }
 
 /* Milestone timeline */
 .pk-sub__timeline {
@@ -316,11 +315,10 @@ const milestoneText = computed(() => {
     padding: 7px 10px;
   }
   .pk-sub__dims {
-    gap: 7px;
+    gap: 12px;
   }
   .pk-sub__dim {
     font-size: 12px;
-    padding: 3px 10px;
   }
   .pk-sub__timeline {
     padding-top: 10px;
@@ -359,11 +357,10 @@ const milestoneText = computed(() => {
     padding: 8px 10px;
   }
   .pk-sub__dims {
-    gap: 8px;
+    gap: 14px;
   }
   .pk-sub__dim {
     font-size: 13px;
-    padding: 3px 10px;
   }
   .pk-sub__timeline {
     padding-top: 10px;
@@ -402,11 +399,10 @@ const milestoneText = computed(() => {
     padding: 8px 12px;
   }
   .pk-sub__dims {
-    gap: 9px;
+    gap: 16px;
   }
   .pk-sub__dim {
     font-size: 14px;
-    padding: 4px 12px;
   }
   .pk-sub__timeline {
     padding-top: 12px;

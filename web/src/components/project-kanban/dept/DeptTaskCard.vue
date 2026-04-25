@@ -208,10 +208,10 @@ function ringFgColor(to) {
 .pk-task-lanes {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--pk-border);
   border-radius: 8px;
   flex: 1;
   margin-top: 4px;
+  overflow: hidden;
 }
 
 /* 泳道行 */
@@ -219,34 +219,11 @@ function ringFgColor(to) {
   display: flex;
   align-items: stretch;
   flex: 1;
-  border-bottom: 1px solid var(--pk-border);
-  background: var(--pk-page-bg);
-}
-
-.pk-task-lane:first-child {
-  border-radius: 7px 7px 0 0;
+  border-bottom: 1px dashed var(--gray-150);
 }
 
 .pk-task-lane:last-child {
   border-bottom: none;
-  border-radius: 0 0 7px 7px;
-}
-
-.pk-task-lane:only-child {
-  border-radius: 7px;
-}
-
-/* 产业标签圆角跟随泳道行 */
-.pk-task-lane:first-child .pk-task-lane__label {
-  border-radius: 7px 0 0 0;
-}
-
-.pk-task-lane:last-child .pk-task-lane__label {
-  border-radius: 0 0 0 7px;
-}
-
-.pk-task-lane:only-child .pk-task-lane__label {
-  border-radius: 7px 0 0 7px;
 }
 
 /* 产业标签 */
@@ -258,16 +235,13 @@ function ringFgColor(to) {
   padding: 4px 8px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--gray-500);
-  background: var(--pk-neutral-bg);
-  border-right: 1px solid var(--pk-border);
+  color: var(--gray-400);
   cursor: pointer;
-  transition: background 0.15s;
+  transition: color 0.15s;
   /* 固定3字宽度，内容自适应换行 */
   width: 3em;
 }
 .pk-task-lane__label:hover {
-  background: var(--pk-accent-light);
   color: var(--pk-accent);
 }
 

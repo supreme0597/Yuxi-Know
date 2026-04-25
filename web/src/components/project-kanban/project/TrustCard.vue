@@ -7,7 +7,6 @@
     :status-color="trustStatusColor"
     :ai-summary="data?.aiSummary ? `${data.aiSummary}` : ''"
     ai-lines="1"
-    wide
     @ai-click="$emit('ai-click', 'trust')"
     @summary-click="$emit('ai-click', 'trust')"
   >
@@ -117,15 +116,13 @@ const trustItems = computed(() => {
 }
 .pk-trust__subcard {
   padding: 10px;
-  background: var(--gray-25);
-  border: 1px solid var(--gray-200);
   border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 2px 8px rgba(0, 0, 0, 0.03);
   cursor: pointer;
   transition: all 0.15s ease;
 }
 .pk-trust__subcard:hover {
-  border-color: var(--pk-accent);
-  background: var(--pk-accent-light);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08), 0 6px 16px rgba(0, 0, 0, 0.05);
 }
 
 .pk-trust__subcard-header {

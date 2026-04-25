@@ -36,8 +36,6 @@ const statusClass = computed(() => {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 8px;
-  border-radius: 4px;
   font-size: 12px;
   font-weight: 500;
   white-space: nowrap;
@@ -48,13 +46,12 @@ const statusClass = computed(() => {
   border-radius: 50%;
   flex-shrink: 0;
 }
+.pk-badge__text {
+  color: var(--gray-500);
+}
 
-.pk-badge--success { background: var(--pk-success-light); color: var(--pk-success-dark); }
 .pk-badge--success .pk-badge__dot { background: var(--pk-success-dark); }
-.pk-badge--warning { background: var(--pk-warning-light); color: var(--pk-warning-dark); }
 .pk-badge--warning .pk-badge__dot { background: var(--pk-warning-dark); }
-.pk-badge--danger { background: var(--pk-danger-light); color: var(--pk-danger-dark); }
 .pk-badge--danger .pk-badge__dot { background: var(--pk-danger-dark); }
-.pk-badge--info { background: var(--pk-success-light); color: var(--pk-success-dark); }
 .pk-badge--info .pk-badge__dot { background: var(--pk-success-dark); }
 </style>

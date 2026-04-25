@@ -14,7 +14,8 @@
           class="pk-domain__status"
           :class="`pk-domain__status--${domainStatus(key)}`"
         >
-          {{ domainLabel(key) }}
+          <span class="pk-domain__status-dot"></span>
+          <span class="pk-domain__status-text">{{ domainLabel(key) }}</span>
         </span>
       </div>
       <p class="pk-domain__summary" v-html="domainSummary(key)"></p>
@@ -84,7 +85,6 @@ function topRisks(key) {
 }
 .pk-domain {
   background: var(--gray-0);
-  border: 1px solid var(--gray-200);
   border-radius: 12px;
   padding: 14px;
   cursor: pointer;
@@ -92,10 +92,10 @@ function topRisks(key) {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.04);
 }
 .pk-domain:hover {
-  border-color: var(--pk-accent);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(0, 0, 0, 0.06);
 }
 
 .pk-domain__header {
@@ -129,15 +129,25 @@ function topRisks(key) {
 .pk-domain__status {
   margin-left: auto;
   font-size: 11px;
-  padding: 2px 6px;
-  border-radius: 3px;
   font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
-.pk-domain__status--green { background: var(--pk-success-light); color: var(--pk-success-dark); }
-.pk-domain__status--yellow,
-.pk-domain__status--warning { background: var(--pk-warning-light); color: var(--pk-warning-dark); }
-.pk-domain__status--red,
-.pk-domain__status--critical { background: var(--pk-danger-light); color: var(--pk-danger-dark); }
+.pk-domain__status-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.pk-domain__status-text {
+  color: var(--gray-500);
+}
+.pk-domain__status--green .pk-domain__status-dot { background: var(--pk-success-dark); }
+.pk-domain__status--yellow .pk-domain__status-dot,
+.pk-domain__status--warning .pk-domain__status-dot { background: var(--pk-warning-dark); }
+.pk-domain__status--red .pk-domain__status-dot,
+.pk-domain__status--critical .pk-domain__status-dot { background: var(--pk-danger-dark); }
 
 .pk-domain__summary {
   font-size: 13px;

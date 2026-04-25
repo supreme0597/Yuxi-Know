@@ -61,8 +61,7 @@ const options = computed(() =>
   padding: 12px 16px;
   background: var(--gray-0);
   border-radius: 12px;
-  border: 1px solid var(--gray-200);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.04);
 }
 .pk-selector__label {
   font-size: 14px;
@@ -92,15 +91,16 @@ const options = computed(() =>
   font-size: 12px;
   color: var(--gray-600);
   background: var(--gray-50);
-  border: 1px solid var(--gray-200);
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  border: none;
 }
 .pk-sweet-btn:hover {
   color: var(--pk-accent);
-  border-color: var(--pk-accent);
   background: var(--pk-accent-light);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
 }
 
 @media (min-width: 1600px) {

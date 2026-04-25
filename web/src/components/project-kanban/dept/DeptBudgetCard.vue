@@ -24,7 +24,10 @@
         <!-- 项目名 + 状态标签 -->
         <div class="pk-budget-sub__header">
           <span class="pk-budget-sub__name">{{ proj.category }}</span>
-          <span class="pk-budget-sub__status" :class="statusClass(proj)">{{ proj.status }}</span>
+          <span class="pk-budget-sub__status" :class="statusClass(proj)">
+            <span class="pk-budget-sub__status-dot"></span>
+            <span class="pk-budget-sub__status-text">{{ proj.status }}</span>
+          </span>
         </div>
 
         <!-- 中部：圆环图 + 偏差指示条 上下排列 -->
@@ -134,14 +137,12 @@ function deviationClass(deviation) {
   gap: 8px;
   margin-top: 4px;
   min-width: 0;
-  overflow: hidden;
   flex: 1;
 }
 
 /* 单个子卡片 — 正方形 */
 .pk-budget-sub {
   background: var(--pk-card-bg);
-  border: 1px solid var(--pk-border);
   border-radius: 10px;
   padding: 8px 8px 10px;
   min-width: 0;
@@ -149,13 +150,13 @@ function deviationClass(deviation) {
   flex-direction: column;
   gap: 5px;
   cursor: pointer;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: box-shadow 0.2s ease;
   overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 2px 8px rgba(0, 0, 0, 0.03);
 }
 
 .pk-budget-sub:hover {
-  border-color: var(--pk-border-hover);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(0, 0, 0, 0.04);
 }
 
 /* 头部 */
@@ -176,15 +177,24 @@ function deviationClass(deviation) {
 }
 
 .pk-budget-sub__status {
-  padding: 1px 6px;
-  border-radius: 4px;
   font-size: 12px;
   font-weight: 600;
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
-
-.pk-budget-sub__status--active { background: var(--pk-success-light); color: var(--pk-success-dark); }
-.pk-budget-sub__status--maintenance { background: var(--pk-warning-light); color: var(--pk-warning-dark); }
+.pk-budget-sub__status-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.pk-budget-sub__status-text {
+  color: var(--gray-500);
+}
+.pk-budget-sub__status--active .pk-budget-sub__status-dot { background: var(--pk-success-dark); }
+.pk-budget-sub__status--maintenance .pk-budget-sub__status-dot { background: var(--pk-warning-dark); }
 
 /* 中部：圆环图 + 偏差指示条 上下排列 */
 .pk-budget-sub__body {

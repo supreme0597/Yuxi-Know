@@ -60,7 +60,7 @@
             :class="`pk-group-risk-item--${risk.level}`"
             @click.stop="$emit('risk-click', risk, gc)"
           >
-            <span class="pk-group-risk-rank">{{ i + 1 }}</span>
+            <span class="pk-group-risk-dot"></span>
             <span class="pk-group-risk-text">{{ risk.text }}</span>
           </div>
         </div>
@@ -247,7 +247,6 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
   gap: 6px;
   cursor: pointer;
   transition: all 0.2s ease;
-  border-left: 4px solid var(--pk-success);
 }
 
 .pk-dim-card:hover {
@@ -325,11 +324,8 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
   flex-shrink: 0;
 }
 
-.pk-dim-card__sentence--danger { background: var(--pk-danger-light); color: var(--pk-danger-dark); }
 .pk-dim-card__sentence--danger .pk-dim-card__sentence-dot { background: var(--pk-danger); }
-.pk-dim-card__sentence--warning { background: var(--pk-warning-light); color: var(--pk-warning-dark); }
 .pk-dim-card__sentence--warning .pk-dim-card__sentence-dot { background: var(--pk-warning-dark); }
-.pk-dim-card__sentence--success { background: var(--pk-success-light); color: var(--pk-success-dark); }
 .pk-dim-card__sentence--success .pk-dim-card__sentence-dot { background: var(--pk-success-dark); }
 
 /* ===== 下行：三个项目群风险卡片（阴影渐变卡片样式） ===== */
@@ -412,8 +408,7 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
-  border-radius: 6px;
+  padding: 6px 0;
   font-size: 12px;
   line-height: 1.4;
   cursor: pointer;
@@ -424,52 +419,26 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
 .pk-group-risk-item:hover {
   background: var(--gray-50);
 }
-.pk-group-risk-rank {
-  width: 18px;
-  height: 18px;
-  border-radius: 5px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  font-weight: 700;
+.pk-group-risk-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
   flex-shrink: 0;
   background: var(--gray-300);
-  color: var(--pk-card-bg);
 }
 .pk-group-risk-text {
   color: var(--gray-800);
   font-weight: 500;
 }
 
-.pk-group-risk-item--critical,
-.pk-group-risk-item--danger {
-  background: var(--pk-danger-light);
-}
-.pk-group-risk-item--critical:hover,
-.pk-group-risk-item--danger:hover {
-  background: var(--pk-danger-lighter);
-}
-.pk-group-risk-item--critical .pk-group-risk-rank,
-.pk-group-risk-item--danger .pk-group-risk-rank {
+.pk-group-risk-item--critical .pk-group-risk-dot,
+.pk-group-risk-item--danger .pk-group-risk-dot {
   background: var(--pk-danger-dark);
 }
-.pk-group-risk-item--warning {
-  background: var(--pk-warning-light);
-}
-.pk-group-risk-item--warning:hover {
-  background: var(--pk-warning-lighter);
-}
-.pk-group-risk-item--warning .pk-group-risk-rank {
+.pk-group-risk-item--warning .pk-group-risk-dot {
   background: var(--pk-warning-dark);
 }
-.pk-group-risk-item--normal {
-  background: var(--pk-success-light);
-}
-.pk-group-risk-item--normal:hover {
-  background: var(--pk-success-lighter);
-}
-.pk-group-risk-item--normal .pk-group-risk-rank {
+.pk-group-risk-item--normal .pk-group-risk-dot {
   background: var(--pk-success-dark);
 }
 
@@ -492,19 +461,18 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
 
 .pk-overview-intent__tag {
   padding: 4px 10px;
-  background: linear-gradient(135deg, var(--pk-group-v3-light), var(--pk-group-v2-light));
+  background: transparent;
   border-radius: 6px;
   font-size: 12px;
   color: var(--gray-600);
   cursor: pointer;
   transition: all 0.15s ease;
-  border: 1px solid transparent;
+  border: none;
 }
 
 .pk-overview-intent__tag:hover {
-  background: linear-gradient(135deg, var(--pk-group-v3-light), var(--pk-accent-light));
-  border-color: var(--pk-accent-glow);
-  color: var(--gray-800);
+  background: var(--pk-accent-light);
+  color: var(--pk-accent-dark);
 }
 
 /* Responsive */
@@ -578,10 +546,9 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
     font-size: 13px;
     min-height: 34px;
   }
-  .pk-group-risk-rank {
-    width: 20px;
-    height: 20px;
-    font-size: 12px;
+  .pk-group-risk-dot {
+    width: 5px;
+    height: 5px;
   }
   .pk-overview-footer {
     padding: 10px 16px;
@@ -641,10 +608,9 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
     font-size: 14px;
     min-height: 36px;
   }
-  .pk-group-risk-rank {
-    width: 22px;
-    height: 22px;
-    font-size: 13px;
+  .pk-group-risk-dot {
+    width: 5px;
+    height: 5px;
   }
   .pk-overview-footer {
     padding: 10px 18px;
@@ -704,10 +670,9 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
     font-size: 15px;
     min-height: 40px;
   }
-  .pk-group-risk-rank {
-    width: 24px;
-    height: 24px;
-    font-size: 14px;
+  .pk-group-risk-dot {
+    width: 5px;
+    height: 5px;
   }
   .pk-overview-footer {
     padding: 12px 20px;

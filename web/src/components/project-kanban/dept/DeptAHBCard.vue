@@ -171,14 +171,12 @@ function compositionPercent(cat, type) {
   gap: 8px;
   margin-top: 4px;
   min-width: 0;
-  overflow: hidden;
   flex: 1;
 }
 
 /* 单个子卡片 */
 .pk-ahb-sub {
   background: var(--pk-card-bg);
-  border: 1px solid var(--pk-border);
   border-radius: 10px;
   padding: 8px 8px 10px;
   min-width: 0;
@@ -187,13 +185,13 @@ function compositionPercent(cat, type) {
   align-items: center;
   gap: 3px;
   cursor: pointer;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: box-shadow 0.2s ease;
   overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 2px 8px rgba(0, 0, 0, 0.03);
 }
 
 .pk-ahb-sub:hover {
-  border-color: var(--pk-border-hover);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(0, 0, 0, 0.04);
 }
 
 /* 头部 */
