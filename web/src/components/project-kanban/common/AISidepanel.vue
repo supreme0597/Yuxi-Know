@@ -93,35 +93,35 @@
                 </div>
               </div>
 
-              <!-- 各产业进展（任务令AI概览：产业分组卡片+进度条） -->
-              <div v-if="panelData.industryCards?.length" class="ai-sidepanel__industries">
+              <!-- 各分组进展（任务令AI概览：分组卡片+进度条） -->
+              <div v-if="panelData.groupCards?.length" class="ai-sidepanel__industries">
                 <div class="ai-sidepanel__section-title">
                   <Target :size="13" style="color: var(--pk-accent)" />
-                  <span>各产业进展</span>
+                  <span>各分组进展</span>
                 </div>
                 <div class="ai-sidepanel__industry-list">
                   <div
-                    v-for="(ind, i) in panelData.industryCards"
+                    v-for="(card, i) in panelData.groupCards"
                     :key="i"
                     class="ai-sidepanel__industry-card"
                   >
                     <div class="ai-sidepanel__industry-header">
-                      <span class="ai-sidepanel__industry-name">🏭 {{ ind.name }}</span>
-                      <span class="ai-sidepanel__industry-pct" :class="`ai-sidepanel__industry-pct--${ind.status}`">
-                        {{ ind.completed }}/{{ ind.total }}（{{ ind.pct }}%）
+                      <span class="ai-sidepanel__industry-name">📋 {{ card.name }}</span>
+                      <span class="ai-sidepanel__industry-pct" :class="`ai-sidepanel__industry-pct--${card.status}`">
+                        {{ card.completed }}/{{ card.total }}（{{ card.pct }}%）
                       </span>
                     </div>
                     <div class="ai-sidepanel__industry-bar">
                       <div
                         class="ai-sidepanel__industry-bar-fill"
-                        :class="`ai-sidepanel__industry-bar-fill--${ind.status}`"
-                        :style="{ width: ind.pct + '%' }"
+                        :class="`ai-sidepanel__industry-bar-fill--${card.status}`"
+                        :style="{ width: card.pct + '%' }"
                       />
                     </div>
                     <div class="ai-sidepanel__industry-meta">
-                      <span class="ai-sidepanel__industry-meta-item">已完成 {{ ind.completed }}</span>
-                      <span v-if="ind.highRisk > 0" class="ai-sidepanel__industry-meta-item ai-sidepanel__industry-meta-item--danger">高风险 {{ ind.highRisk }}</span>
-                      <span v-if="ind.mediumRisk > 0" class="ai-sidepanel__industry-meta-item ai-sidepanel__industry-meta-item--warning">中风险 {{ ind.mediumRisk }}</span>
+                      <span class="ai-sidepanel__industry-meta-item">已完成 {{ card.completed }}</span>
+                      <span v-if="card.highRisk > 0" class="ai-sidepanel__industry-meta-item ai-sidepanel__industry-meta-item--danger">高风险 {{ card.highRisk }}</span>
+                      <span v-if="card.mediumRisk > 0" class="ai-sidepanel__industry-meta-item ai-sidepanel__industry-meta-item--warning">中风险 {{ card.mediumRisk }}</span>
                     </div>
                   </div>
                 </div>
@@ -619,7 +619,7 @@ const panelData = reactive({
   currentPhase: '',
   riskReason: '',
   overviewStats: null,
-  industryCards: [],
+  groupCards: [],
   criticalOrders: [],
   timeDistribution: null,
   reasoning: '',
@@ -644,7 +644,7 @@ watch(() => [props.visible, props.data], ([vis, data]) => {
     panelData.currentPhase = data.currentPhase || ''
     panelData.riskReason = data.riskReason || ''
     panelData.overviewStats = data.overviewStats || null
-    panelData.industryCards = data.industryCards || []
+    panelData.groupCards = data.groupCards || []
     panelData.criticalOrders = data.criticalOrders || []
     panelData.timeDistribution = data.timeDistribution || null
     panelData.reasoning = data.reasoning || ''

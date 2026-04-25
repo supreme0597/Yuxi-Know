@@ -805,7 +805,9 @@ const sectionBuilders = {
 
   'task-dept'(deptData, extra) {
     const task = deptData?.department?.task || {}
-    const taskOrders = task.taskOrders || []
+    const rawTaskOrders = task.taskOrders || []
+    // 兼容对象型 { PMC:[], RWL:[], DQ:[] } 和数组型 taskOrders
+    const taskOrders = Array.isArray(rawTaskOrders) ? rawTaskOrders : Object.values(rawTaskOrders).flat()
 
     // 从 taskOrders[].risks 汇总风险（带分组前缀，与设计稿一致：order.group · r.title）
     const risks = []
@@ -1301,27 +1303,29 @@ const sectionBuilders = {
   // 任务令 AI 概览（L任务：按产业分组统计 — 与设计稿 _openTaskOrderAIOverview 一致）
   'task-overview'(deptData) {
     const task = deptData?.department?.task || {}
-    const taskOrders = task.taskOrders || []
+    const rawTaskOrders = task.taskOrders || []
+    // 兼容对象型 { PMC:[], RWL:[], DQ:[] } 和数组型 taskOrders
+    const taskOrders = Array.isArray(rawTaskOrders) ? rawTaskOrders : Object.values(rawTaskOrders).flat()
 
     // 概览统计
     const completedCount = taskOrders.filter(o => o.progress >= 100 || o.status === 'completed').length
     const inProgressCount = taskOrders.filter(o => o.progress > 0 && o.progress < 100 && o.status !== 'completed').length
     const pendingCount = taskOrders.filter(o => o.progress === 0 && o.status !== 'completed').length
 
-    // 按产业分组
-    const industryMap = {}
+    // 按分组（group）分组
+    const groupMap = {}
     taskOrders.forEach(to => {
-      const ind = to.industry || '其他'
-      if (!industryMap[ind]) industryMap[ind] = []
-      industryMap[ind].push(to)
+      const g = to.group || '其他'
+      if (!groupMap[g]) groupMap[g] = []
+      groupMap[g].push(to)
     })
-    const industryCards = Object.entries(industryMap).map(([ind, orders]) => {
+    const groupCards = Object.entries(groupMap).map(([g, orders]) => {
       const iCompleted = orders.filter(o => o.progress >= 100 || o.status === 'completed').length
       const iCritical = orders.filter(o => o.status === 'critical' || o.risk === 'high').length
       const iWarning = orders.filter(o => o.status === 'warning' || o.risk === 'medium').length
       const pct = Math.round(iCompleted / orders.length * 100)
       return {
-        name: ind,
+      name: g,
         total: orders.length,
         completed: iCompleted,
         pct,
@@ -1353,7 +1357,7 @@ const sectionBuilders = {
         inProgress: inProgressCount,
         pending: pendingCount
       },
-      industryCards,
+      groupCards,
       criticalOrders: criticalOrders.map(o => ({
         name: o.name,
         industry: o.industry,

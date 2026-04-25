@@ -164,7 +164,7 @@
           @summary-click="handleDeptSummaryClick"
           @task-click="handleDeptTaskClick"
           @metric-click="handleMetricClick"
-          @industry-click="handleIndustryHighlight"
+          @group-click="handleGroupHighlight"
         />
 
         <!-- 第3行：综合风险卡片全宽 -->
@@ -474,6 +474,7 @@ function handleDeptBudgetProjectClick(project) {
 }
 
 function handleDeptTaskClick(taskOrder) {
+  console.log(taskOrder)
   sidepanel.open('task-dept', deptData, { taskOrder })
 }
 
@@ -501,10 +502,13 @@ function handleMilestonePhaseClick({ phase, offering, timelineItem }) {
   sidepanel.open('milestone-phase', deptData, { phase, offering, timelineItem })
 }
 
-// 产业高亮（N任务）
-function handleIndustryHighlight(industry) {
+// 分组高亮
+function handleGroupHighlight(group) {
   const task = deptData.department.task
-  const matchingOrders = task.taskOrders.filter(t => t.industry === industry)
+  const allOrders = task.taskOrders && typeof task.taskOrders === 'object' && !Array.isArray(task.taskOrders)
+    ? Object.values(task.taskOrders).flat()
+    : task.taskOrders || []
+  const matchingOrders = allOrders.filter(t => t.group === group)
   if (matchingOrders.length > 0) {
     sidepanel.open('task-dept', deptData, { taskOrder: matchingOrders[0] })
   }

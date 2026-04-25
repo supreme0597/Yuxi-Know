@@ -188,209 +188,539 @@ export const deptData = {
             "hasAlert": false,
             "text": "任务令达成有风险",
             "aiSummary": "6个任务推进中，2个严重滞后。芯片空闲功耗优化和小区数据提升均延期，建议本周内拉通责任人推进",
-            "taskOrders": [
-                {
-                    "id": "TO-2026-001",
-                    "name": "芯片空闲功耗优化",
-                    "industry": "无线",
-                    "owner": "陈xx",
-                    "deadline": "4/10",
-                    "progress": 85,
-                    "status": "overdue",
-                    "risk": "high",
-                    "project": "301.0-301.1开发项目",
-                    "group": "V3",
-                    "phases": [
-                        { "name": "方案设计", "status": "completed", "date": "3/15" },
-                        { "name": "开发实施", "status": "active", "date": "4/5" },
-                        { "name": "验收测试", "status": "pending", "date": "4/10" }
-                    ],
-                    "risks": [
-                        {
-                            "level": "high",
-                            "title": "开发实施阶段已逾期",
-                            "rootCause": "开发实施进度85%，截止4/5已逾期，验收测试尚未启动",
-                            "impact": "影响V3项目RR准入节点，可能导致版本发布延期",
-                            "suggestion": "建议本周内拉通责任人陈xx，制定追赶计划，评估是否需要增调开发资源"
-                        },
-                        {
-                            "level": "warning",
-                            "title": "验收测试资源未确认",
-                            "rootCause": "开发延期导致验收测试排期不确定，测试人力可能冲突",
-                            "impact": "验收延迟可能影响301.0-301.1项目的整体交付节奏",
-                            "suggestion": "建议提前与测试团队沟通，预留验收窗口"
-                        }
-                    ],
-                    "quickQuestions": [
-                        "芯片空闲功耗优化逾期的主要原因是什么？",
-                        "能否增调开发资源加速追赶？",
-                        "验收测试预计何时可以启动？"
-                    ]
-                },
-                {
-                    "id": "TO-2026-002",
-                    "name": "小区数据提升1.5倍",
-                    "industry": "无线",
-                    "owner": "王xx",
-                    "deadline": "6/30",
-                    "progress": 60,
-                    "status": "normal",
-                    "risk": "medium",
-                    "project": "301.0-301.1开发项目",
-                    "group": "V3",
-                    "phases": [
-                        { "name": "需求分析", "status": "completed", "date": "4/15" },
-                        { "name": "算法优化", "status": "active", "date": "5/31" },
-                        { "name": "集成验证", "status": "pending", "date": "6/30" }
-                    ],
-                    "risks": [
-                        {
-                            "level": "warning",
-                            "title": "算法优化阶段进展偏慢",
-                            "rootCause": "当前进度60%，算法优化仍在进行中，技术方案需反复验证",
-                            "impact": "若5月底未完成算法优化，将影响6月集成验证和最终交付",
-                            "suggestion": "建议定期跟进王xx的算法验证进展，必要时组织技术评审"
-                        }
-                    ],
-                    "quickQuestions": [
-                        "小区数据提升1.5倍的算法方案是否可行？",
-                        "算法优化阶段有哪些技术难点？",
-                        "集成验证是否需要额外的环境支持？"
-                    ]
-                },
-                {
-                    "id": "TO-2026-003",
-                    "name": "SIG转发性能优化",
-                    "industry": "数通",
-                    "owner": "李xx",
-                    "deadline": "5/30",
-                    "progress": 0,
-                    "status": "normal",
-                    "risk": "none",
-                    "project": "208.11-208.12开发项目",
-                    "group": "V2",
-                    "phases": [
-                        { "name": "性能分析", "status": "pending", "date": "8/15" },
-                        { "name": "优化开发", "status": "pending", "date": "10/31" },
-                        { "name": "效果验证", "status": "pending", "date": "11/30" }
-                    ],
-                    "risks": [
-                        {
-                            "level": "normal",
-                            "title": "任务令尚未启动",
-                            "rootCause": "当前进度0%，性能分析阶段计划8月启动",
-                            "impact": "暂无影响，远期任务按计划推进",
-                            "suggestion": "建议提前完成性能基线评估，为8月启动做好准备"
-                        }
-                    ],
-                    "quickQuestions": [
-                        "SIG转发性能优化的技术方案是什么？",
-                        "性能基线数据是否已收集？",
-                        "该任务令与V2项目其他任务的依赖关系？"
-                    ]
-                },
-                {
-                    "id": "TO-2026-004",
-                    "name": "主力设备商用",
-                    "industry": "数通",
-                    "owner": "杨xx",
-                    "deadline": "7/30",
-                    "progress": 0,
-                    "status": "normal",
-                    "risk": "none",
-                    "project": "208.11-208.12开发项目",
-                    "group": "V2",
-                    "phases": [
-                        { "name": "兼容性测试", "status": "pending", "date": "9/30" },
-                        { "name": "现场试点", "status": "pending", "date": "11/15" },
-                        { "name": "正式商用", "status": "pending", "date": "12/31" }
-                    ],
-                    "risks": [
-                        {
-                            "level": "normal",
-                            "title": "任务令尚未启动",
-                            "rootCause": "当前进度0%，兼容性测试计划9月启动",
-                            "impact": "暂无影响，远期任务按计划推进",
-                            "suggestion": "建议提前确认测试设备和环境就绪情况"
-                        }
-                    ],
-                    "quickQuestions": [
-                        "主力设备商用的兼容性测试范围？",
-                        "现场试点的客户和场景是否已确定？",
-                        "正式商用的时间节点是否可提前？"
-                    ]
-                },
-                {
-                    "id": "TO-2026-005",
-                    "name": "启动时间优化",
-                    "industry": "MCU",
-                    "owner": "张xx",
-                    "deadline": "6/15",
-                    "progress": 90,
-                    "status": "normal",
-                    "risk": "none",
-                    "project": "1.0-1.1开发项目",
-                    "group": "MCU",
-                    "phases": [
-                        { "name": "启动流程分析", "status": "completed", "date": "4/15" },
-                        { "name": "优化实现", "status": "active", "date": "5/31" },
-                        { "name": "验证测试", "status": "pending", "date": "6/15" }
-                    ],
-                    "risks": [
-                        {
-                            "level": "normal",
-                            "title": "推进正常，即将完成",
-                            "rootCause": "当前进度90%，优化实现阶段接近完成",
-                            "impact": "暂无影响",
-                            "suggestion": "保持当前节奏，关注验证测试的启动准备"
-                        }
-                    ],
-                    "quickQuestions": [
-                        "启动时间优化的具体效果如何？",
-                        "验证测试的计划和用例是否已就绪？",
-                        "优化成果如何推广到其他MCU项目？"
-                    ]
-                },
-                {
-                    "id": "TO-2026-006",
-                    "name": "端到端优化",
-                    "industry": "MCU",
-                    "owner": "赵xx",
-                    "deadline": "9/30",
-                    "progress": 25,
-                    "status": "normal",
-                    "risk": "high",
-                    "project": "1.0-1.1开发项目",
-                    "group": "MCU",
-                    "phases": [
-                        { "name": "架构设计", "status": "completed", "date": "5/15" },
-                        { "name": "模块开发", "status": "active", "date": "8/31" },
-                        { "name": "联调测试", "status": "pending", "date": "9/30" }
-                    ],
-                    "risks": [
-                        {
-                            "level": "high",
-                            "title": "模块开发进度严重滞后",
-                            "rootCause": "当前进度仅25%，架构设计刚完成，模块开发进展缓慢，截止8/31时间紧迫",
-                            "impact": "可能影响MCU项目9/30的联调测试和整体交付计划",
-                            "suggestion": "建议评估模块开发的人力投入，考虑拆分并行开发以追赶进度"
-                        },
-                        {
-                            "level": "warning",
-                            "title": "联调测试时间窗口偏紧",
-                            "rootCause": "模块开发延期将压缩联调测试时间，9/30截止日期压力较大",
-                            "impact": "若模块开发未能8月底完成，联调测试将延期",
-                            "suggestion": "建议提前准备联调环境和测试用例，确保开发完成后可立即进入联调"
-                        }
-                    ],
-                    "quickQuestions": [
-                        "端到端优化模块开发进展缓慢的原因？",
-                        "能否增加开发人力加速推进？",
-                        "联调测试的依赖项有哪些？",
-                        "对MCU项目整体里程碑有什么影响？"
-                    ]
-                }
-            ],
+            "taskOrders": {
+                PMC: [
+                    {
+                        "id": "TO-2026-PMC-001",
+                        "name": "芯片空闲功耗优化",
+                        "industry": "无线",
+                        "owner": "陈xx",
+                        "deadline": "11/15",
+                        "progress": 30,
+                        "status": "normal",
+                        "risk": "medium",
+                        "project": "NICE项目",
+                        "group": "多打粮食",
+                        "phases": [
+                            { "name": "方案设计", "status": "completed", "date": "3/15" },
+                            { "name": "开发实施", "status": "active", "date": "4/5" },
+                            { "name": "验收测试", "status": "pending", "date": "4/10" }
+                        ],
+                        "risks": [
+                            {
+                                "level": "high",
+                                "title": "开发实施阶段已逾期",
+                                "rootCause": "开发实施进度85%，截止4/5已逾期，验收测试尚未启动",
+                                "impact": "影响V3项目RR准入节点，可能导致版本发布延期",
+                                "suggestion": "建议本周内拉通责任人陈xx，制定追赶计划，评估是否需要增调开发资源"
+                            },
+                            {
+                                "level": "warning",
+                                "title": "验收测试资源未确认",
+                                "rootCause": "开发延期导致验收测试排期不确定，测试人力可能冲突",
+                                "impact": "验收延迟可能影响301.0-301.1项目的整体交付节奏",
+                                "suggestion": "建议提前与测试团队沟通，预留验收窗口"
+                            }
+                        ],
+                        "quickQuestions": [
+                            "芯片空闲功耗优化逾期的主要原因是什么？",
+                            "能否增调开发资源加速追赶？",
+                            "验收测试预计何时可以启动？"
+                        ]
+                    },
+                    {
+                        "id": "TO-2026-PMC-002",
+                        "name": "小区数据提升1.5倍",
+                        "industry": "无线",
+                        "owner": "王xx",
+                        "deadline": "11/3",
+                        "progress": 30,
+                        "status": "normal",
+                        "risk": "medium",
+                        "project": "RTOS V3项目",
+                        "group": "多打粮食",
+                        "phases": [
+                            { "name": "需求分析", "status": "completed", "date": "4/15" },
+                            { "name": "算法优化", "status": "active", "date": "5/31" },
+                            { "name": "集成验证", "status": "pending", "date": "6/30" }
+                        ],
+                        "risks": [
+                            {
+                                "level": "warning",
+                                "title": "算法优化阶段进展偏慢",
+                                "rootCause": "当前进度60%，算法优化仍在进行中，技术方案需反复验证",
+                                "impact": "若5月底未完成算法优化，将影响6月集成验证和最终交付",
+                                "suggestion": "建议定期跟进王xx的算法验证进展，必要时组织技术评审"
+                            }
+                        ],
+                        "quickQuestions": [
+                            "小区数据提升1.5倍的算法方案是否可行？",
+                            "算法优化阶段有哪些技术难点？",
+                            "集成验证是否需要额外的环境支持？"
+                        ]
+                    },
+                    {
+                        "id": "TO-2026-PMC-003",
+                        "name": "SIG转发性能优化",
+                        "industry": "数通",
+                        "owner": "李xx",
+                        "deadline": "10/3",
+                        "progress": 30,
+                        "status": "normal",
+                        "risk": "medium",
+                        "project": "RTOS V2项目",
+                        "group": "多打粮食",
+                        "phases": [
+                            { "name": "性能分析", "status": "pending", "date": "8/15" },
+                            { "name": "优化开发", "status": "pending", "date": "10/31" },
+                            { "name": "效果验证", "status": "pending", "date": "11/30" }
+                        ],
+                        "risks": [
+                            {
+                                "level": "normal",
+                                "title": "任务令尚未启动",
+                                "rootCause": "当前进度0%，性能分析阶段计划8月启动",
+                                "impact": "暂无影响，远期任务按计划推进",
+                                "suggestion": "建议提前完成性能基线评估，为8月启动做好准备"
+                            }
+                        ],
+                        "quickQuestions": [
+                            "SIG转发性能优化的技术方案是什么？",
+                            "性能基线数据是否已收集？",
+                            "该任务令与V2项目其他任务的依赖关系？"
+                        ]
+                    },
+                    {
+                        "id": "TO-2026-PMC-004",
+                        "name": "主力设备商用",
+                        "industry": "数通",
+                        "owner": "杨xx",
+                        "deadline": "10/3",
+                        "progress": 20,
+                        "status": "normal",
+                        "risk": "high",
+                        "project": "RTOS MCU项目",
+                        "group": "操作系统部",
+                        "phases": [
+                            { "name": "兼容性测试", "status": "pending", "date": "9/30" },
+                            { "name": "现场试点", "status": "pending", "date": "11/15" },
+                            { "name": "正式商用", "status": "pending", "date": "12/31" }
+                        ],
+                        "risks": [
+                            {
+                                "level": "normal",
+                                "title": "任务令尚未启动",
+                                "rootCause": "当前进度0%，兼容性测试计划9月启动",
+                                "impact": "暂无影响，远期任务按计划推进",
+                                "suggestion": "建议提前确认测试设备和环境就绪情况"
+                            }
+                        ],
+                        "quickQuestions": [
+                            "主力设备商用的兼容性测试范围？",
+                            "现场试点的客户和场景是否已确定？",
+                            "正式商用的时间节点是否可提前？"
+                        ]
+                    },
+                    {
+                        "id": "TO-2026-PMC-005",
+                        "name": "启动时间优化",
+                        "industry": "MCU",
+                        "owner": "张xx",
+                        "deadline": "10/3",
+                        "progress": 40,
+                        "status": "normal",
+                        "risk": "medium",
+                        "project": "具身智能项目",
+                        "group": "操作系统部",
+                        "phases": [
+                            { "name": "启动流程分析", "status": "completed", "date": "4/15" },
+                            { "name": "优化实现", "status": "active", "date": "5/31" },
+                            { "name": "验证测试", "status": "pending", "date": "6/15" }
+                        ],
+                        "risks": [
+                            {
+                                "level": "normal",
+                                "title": "推进正常，即将完成",
+                                "rootCause": "当前进度90%，优化实现阶段接近完成",
+                                "impact": "暂无影响",
+                                "suggestion": "保持当前节奏，关注验证测试的启动准备"
+                            }
+                        ],
+                        "quickQuestions": [
+                            "启动时间优化的具体效果如何？",
+                            "验证测试的计划和用例是否已就绪？",
+                            "优化成果如何推广到其他MCU项目？"
+                        ]
+                    }
+                ],
+                RWL: [
+                    {
+                        "id": "TO-2026-TASK-001",
+                        "name": "芯片空闲功耗优化",
+                        "industry": "无线",
+                        "owner": "陈xx",
+                        "deadline": "11/3",
+                        "progress": 70,
+                        "status": "normal",
+                        "risk": "low",
+                        "project": "RTOS V3项目",
+                        "group": "无线任务交付令",
+                        "phases": [
+                            { "name": "方案设计", "status": "completed", "date": "3/15" },
+                            { "name": "开发实施", "status": "active", "date": "4/5" },
+                            { "name": "验收测试", "status": "pending", "date": "4/10" }
+                        ],
+                        "risks": [
+                            {
+                                "level": "high",
+                                "title": "开发实施阶段已逾期",
+                                "rootCause": "开发实施进度85%，截止4/5已逾期，验收测试尚未启动",
+                                "impact": "影响V3项目RR准入节点，可能导致版本发布延期",
+                                "suggestion": "建议本周内拉通责任人陈xx，制定追赶计划，评估是否需要增调开发资源"
+                            },
+                            {
+                                "level": "warning",
+                                "title": "验收测试资源未确认",
+                                "rootCause": "开发延期导致验收测试排期不确定，测试人力可能冲突",
+                                "impact": "验收延迟可能影响301.0-301.1项目的整体交付节奏",
+                                "suggestion": "建议提前与测试团队沟通，预留验收窗口"
+                            }
+                        ],
+                        "quickQuestions": [
+                            "芯片空闲功耗优化逾期的主要原因是什么？",
+                            "能否增调开发资源加速追赶？",
+                            "验收测试预计何时可以启动？"
+                        ]
+                    },
+                    {
+                        "id": "TO-2026-TASK-002",
+                        "name": "小区数据提升1.5倍",
+                        "industry": "无线",
+                        "owner": "王xx",
+                        "deadline": "11/3",
+                        "progress": 60,
+                        "status": "normal",
+                        "risk": "medium",
+                        "project": "RTOS V3项目",
+                        "group": "无线任务交付令",
+                        "phases": [
+                            { "name": "需求分析", "status": "completed", "date": "4/15" },
+                            { "name": "算法优化", "status": "active", "date": "5/31" },
+                            { "name": "集成验证", "status": "pending", "date": "6/30" }
+                        ],
+                        "risks": [
+                            {
+                                "level": "warning",
+                                "title": "算法优化阶段进展偏慢",
+                                "rootCause": "当前进度60%，算法优化仍在进行中，技术方案需反复验证",
+                                "impact": "若5月底未完成算法优化，将影响6月集成验证和最终交付",
+                                "suggestion": "建议定期跟进王xx的算法验证进展，必要时组织技术评审"
+                            }
+                        ],
+                        "quickQuestions": [
+                            "小区数据提升1.5倍的算法方案是否可行？",
+                            "算法优化阶段有哪些技术难点？",
+                            "集成验证是否需要额外的环境支持？"
+                        ]
+                    },
+                    {
+                        "id": "TO-2026-TASK-003",
+                        "name": "SIG转发性能优化",
+                        "industry": "数通",
+                        "owner": "李xx",
+                        "deadline": "11/3",
+                        "progress": 30,
+                        "status": "normal",
+                        "risk": "medium",
+                        "project": "RTOS_Lite项目",
+                        "group": "无线任务交付令",
+                        "phases": [
+                            { "name": "性能分析", "status": "pending", "date": "8/15" },
+                            { "name": "优化开发", "status": "pending", "date": "10/31" },
+                            { "name": "效果验证", "status": "pending", "date": "11/30" }
+                        ],
+                        "risks": [
+                            {
+                                "level": "normal",
+                                "title": "任务令尚未启动",
+                                "rootCause": "当前进度0%，性能分析阶段计划8月启动",
+                                "impact": "暂无影响，远期任务按计划推进",
+                                "suggestion": "建议提前完成性能基线评估，为8月启动做好准备"
+                            }
+                        ],
+                        "quickQuestions": [
+                            "SIG转发性能优化的技术方案是什么？",
+                            "性能基线数据是否已收集？",
+                            "该任务令与V2项目其他任务的依赖关系？"
+                        ]
+                    },
+                    {
+                        "id": "TO-2026-TASK-004",
+                        "name": "主力设备商用",
+                        "industry": "数通",
+                        "owner": "杨xx",
+                        "deadline": "11/3",
+                        "progress": 30,
+                        "status": "normal",
+                        "risk": "medium",
+                        "project": "NICE项目",
+                        "group": "无线创新交付令-弹性池化",
+                        "phases": [
+                            { "name": "兼容性测试", "status": "pending", "date": "9/30" },
+                            { "name": "现场试点", "status": "pending", "date": "11/15" },
+                            { "name": "正式商用", "status": "pending", "date": "12/31" }
+                        ],
+                        "risks": [
+                            {
+                                "level": "normal",
+                                "title": "任务令尚未启动",
+                                "rootCause": "当前进度0%，兼容性测试计划9月启动",
+                                "impact": "暂无影响，远期任务按计划推进",
+                                "suggestion": "建议提前确认测试设备和环境就绪情况"
+                            }
+                        ],
+                        "quickQuestions": [
+                            "主力设备商用的兼容性测试范围？",
+                            "现场试点的客户和场景是否已确定？",
+                            "正式商用的时间节点是否可提前？"
+                        ]
+                    },
+                    {
+                        "id": "TO-2026-TASK-005",
+                        "name": "启动时间优化",
+                        "industry": "MCU",
+                        "owner": "张xx",
+                        "deadline": "11/3",
+                        "progress": 30,
+                        "status": "normal",
+                        "risk": "medium",
+                        "project": "NICE项目",
+                        "group": "无线创新交付令-AIRAN",
+                        "phases": [
+                            { "name": "启动流程分析", "status": "completed", "date": "4/15" },
+                            { "name": "优化实现", "status": "active", "date": "5/31" },
+                            { "name": "验证测试", "status": "pending", "date": "6/15" }
+                        ],
+                        "risks": [
+                            {
+                                "level": "normal",
+                                "title": "推进正常，即将完成",
+                                "rootCause": "当前进度90%，优化实现阶段接近完成",
+                                "impact": "暂无影响",
+                                "suggestion": "保持当前节奏，关注验证测试的启动准备"
+                            }
+                        ],
+                        "quickQuestions": [
+                            "启动时间优化的具体效果如何？",
+                            "验证测试的计划和用例是否已就绪？",
+                            "优化成果如何推广到其他MCU项目？"
+                        ]
+                    },
+                    {
+                        "id": "TO-2026-TASK-006",
+                        "name": "端到端优化",
+                        "industry": "MCU",
+                        "owner": "赵xx",
+                        "deadline": "12/3",
+                        "progress": 25,
+                        "status": "normal",
+                        "risk": "medium",
+                        "project": "RTOS V3项目",
+                        "group": "软件扎到根",
+                        "phases": [
+                            { "name": "架构设计", "status": "completed", "date": "5/15" },
+                            { "name": "模块开发", "status": "active", "date": "8/31" },
+                            { "name": "联调测试", "status": "pending", "date": "9/30" }
+                        ],
+                        "risks": [
+                            {
+                                "level": "high",
+                                "title": "模块开发进度严重滞后",
+                                "rootCause": "当前进度仅25%，架构设计刚完成，模块开发进展缓慢，截止8/31时间紧迫",
+                                "impact": "可能影响MCU项目9/30的联调测试和整体交付计划",
+                                "suggestion": "建议评估模块开发的人力投入，考虑拆分并行开发以追赶进度"
+                            },
+                            {
+                                "level": "warning",
+                                "title": "联调测试时间窗口偏紧",
+                                "rootCause": "模块开发延期将压缩联调测试时间，9/30截止日期压力较大",
+                                "impact": "若模块开发未能8月底完成，联调测试将延期",
+                                "suggestion": "建议提前准备联调环境和测试用例，确保开发完成后可立即进入联调"
+                            }
+                        ],
+                        "quickQuestions": [
+                            "端到端优化模块开发进展缓慢的原因？",
+                            "能否增加开发人力加速推进？",
+                            "联调测试的依赖项有哪些？",
+                            "对MCU项目整体里程碑有什么影响？"
+                        ]
+                    }
+                ],
+                DQ: [
+                    {
+                        "id": "TO-2026-FLAG-001",
+                        "name": "芯片空闲功耗优化",
+                        "industry": "无线",
+                        "owner": "陈xx",
+                        "deadline": "6/30",
+                        "progress": 85,
+                        "status": "normal",
+                        "risk": "low",
+                        "project": "RTOS V3项目",
+                        "group": "操作系统夺旗-无线",
+                        "phases": [
+                            { "name": "方案设计", "status": "completed", "date": "3/15" },
+                            { "name": "开发实施", "status": "active", "date": "4/5" },
+                            { "name": "验收测试", "status": "pending", "date": "4/10" }
+                        ],
+                        "risks": [
+                            {
+                                "level": "high",
+                                "title": "开发实施阶段已逾期",
+                                "rootCause": "开发实施进度85%，截止4/5已逾期，验收测试尚未启动",
+                                "impact": "影响V3项目RR准入节点，可能导致版本发布延期",
+                                "suggestion": "建议本周内拉通责任人陈xx，制定追赶计划，评估是否需要增调开发资源"
+                            },
+                            {
+                                "level": "warning",
+                                "title": "验收测试资源未确认",
+                                "rootCause": "开发延期导致验收测试排期不确定，测试人力可能冲突",
+                                "impact": "验收延迟可能影响301.0-301.1项目的整体交付节奏",
+                                "suggestion": "建议提前与测试团队沟通，预留验收窗口"
+                            }
+                        ],
+                        "quickQuestions": [
+                            "芯片空闲功耗优化逾期的主要原因是什么？",
+                            "能否增调开发资源加速追赶？",
+                            "验收测试预计何时可以启动？"
+                        ]
+                    },
+                    {
+                        "id": "TO-2026-FLAG-002",
+                        "name": "小区数据提升1.5倍",
+                        "industry": "无线",
+                        "owner": "王xx",
+                        "deadline": "6/30",
+                        "progress": 60,
+                        "status": "normal",
+                        "risk": "medium",
+                        "project": "RTOS MCU项目",
+                        "group": "操作系统夺旗-能源",
+                        "phases": [
+                            { "name": "需求分析", "status": "completed", "date": "4/15" },
+                            { "name": "算法优化", "status": "active", "date": "5/31" },
+                            { "name": "集成验证", "status": "pending", "date": "6/30" }
+                        ],
+                        "risks": [
+                            {
+                                "level": "warning",
+                                "title": "算法优化阶段进展偏慢",
+                                "rootCause": "当前进度60%，算法优化仍在进行中，技术方案需反复验证",
+                                "impact": "若5月底未完成算法优化，将影响6月集成验证和最终交付",
+                                "suggestion": "建议定期跟进王xx的算法验证进展，必要时组织技术评审"
+                            }
+                        ],
+                        "quickQuestions": [
+                            "小区数据提升1.5倍的算法方案是否可行？",
+                            "算法优化阶段有哪些技术难点？",
+                            "集成验证是否需要额外的环境支持？"
+                        ]
+                    },
+                    {
+                        "id": "TO-2026-FLAG-003",
+                        "name": "SIG转发性能优化",
+                        "industry": "数通",
+                        "owner": "李xx",
+                        "deadline": "11/30",
+                        "progress": 0,
+                        "status": "normal",
+                        "risk": "medium",
+                        "project": "RTOS V3项目",
+                        "group": "操作系统夺旗-数通",
+                        "phases": [
+                            { "name": "性能分析", "status": "pending", "date": "8/15" },
+                            { "name": "优化开发", "status": "pending", "date": "10/31" },
+                            { "name": "效果验证", "status": "pending", "date": "11/30" }
+                        ],
+                        "risks": [
+                            {
+                                "level": "normal",
+                                "title": "任务令尚未启动",
+                                "rootCause": "当前进度0%，性能分析阶段计划8月启动",
+                                "impact": "暂无影响，远期任务按计划推进",
+                                "suggestion": "建议提前完成性能基线评估，为8月启动做好准备"
+                            }
+                        ],
+                        "quickQuestions": [
+                            "SIG转发性能优化的技术方案是什么？",
+                            "性能基线数据是否已收集？",
+                            "该任务令与V2项目其他任务的依赖关系？"
+                        ]
+                    },
+                    {
+                        "id": "TO-2026-FLAG-004",
+                        "name": "主力设备商用",
+                        "industry": "数通",
+                        "owner": "杨xx",
+                        "deadline": "11/30",
+                        "progress": 0,
+                        "status": "normal",
+                        "risk": "medium",
+                        "project": "NICE项目",
+                        "group": "操作系统夺旗-无线",
+                        "phases": [
+                            { "name": "兼容性测试", "status": "pending", "date": "9/30" },
+                            { "name": "现场试点", "status": "pending", "date": "11/15" },
+                            { "name": "正式商用", "status": "pending", "date": "12/31" }
+                        ],
+                        "risks": [
+                            {
+                                "level": "normal",
+                                "title": "任务令尚未启动",
+                                "rootCause": "当前进度0%，兼容性测试计划9月启动",
+                                "impact": "暂无影响，远期任务按计划推进",
+                                "suggestion": "建议提前确认测试设备和环境就绪情况"
+                            }
+                        ],
+                        "quickQuestions": [
+                            "主力设备商用的兼容性测试范围？",
+                            "现场试点的客户和场景是否已确定？",
+                            "正式商用的时间节点是否可提前？"
+                        ]
+                    },
+                    {
+                        "id": "TO-2026-FLAG-005",
+                        "name": "启动时间优化",
+                        "industry": "MCU",
+                        "owner": "张xx",
+                        "deadline": "12/31",
+                        "progress": 90,
+                        "status": "normal",
+                        "risk": "medium",
+                        "project": "RTOS V3项目",
+                        "group": "操作系统夺旗-数通",
+                        "phases": [
+                            { "name": "启动流程分析", "status": "completed", "date": "4/15" },
+                            { "name": "优化实现", "status": "active", "date": "5/31" },
+                            { "name": "验证测试", "status": "pending", "date": "6/15" }
+                        ],
+                        "risks": [
+                            {
+                                "level": "normal",
+                                "title": "推进正常，即将完成",
+                                "rootCause": "当前进度90%，优化实现阶段接近完成",
+                                "impact": "暂无影响",
+                                "suggestion": "保持当前节奏，关注验证测试的启动准备"
+                            }
+                        ],
+                        "quickQuestions": [
+                            "启动时间优化的具体效果如何？",
+                            "验证测试的计划和用例是否已就绪？",
+                            "优化成果如何推广到其他MCU项目？"
+                        ]
+                    },
+                ],
+            },
             "quickQuestions": [
                 "哪些任务令滞后？原因是什么？",
                 "需要哪些部门协调？",
