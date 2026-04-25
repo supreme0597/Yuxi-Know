@@ -296,7 +296,7 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
   line-height: 1;
 }
 .pk-dim-card__stat-value--danger { color: var(--pk-danger); }
-.pk-dim-card__stat-value--warning { color: var(--pk-warning-dark); }
+.pk-dim-card__stat-value--warning { color: var(--pk-warning); }
 
 .pk-dim-card__stat-label {
   font-size: 11px;
@@ -325,8 +325,8 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
 }
 
 .pk-dim-card__sentence--danger .pk-dim-card__sentence-dot { background: var(--pk-danger); }
-.pk-dim-card__sentence--warning .pk-dim-card__sentence-dot { background: var(--pk-warning-dark); }
-.pk-dim-card__sentence--success .pk-dim-card__sentence-dot { background: var(--pk-success-dark); }
+.pk-dim-card__sentence--warning .pk-dim-card__sentence-dot { background: var(--pk-warning); }
+.pk-dim-card__sentence--success .pk-dim-card__sentence-dot { background: var(--pk-success); }
 
 /* ===== 下行：三个项目群风险卡片（阴影渐变卡片样式） ===== */
 .pk-overview-groups {
@@ -433,13 +433,13 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
 
 .pk-group-risk-item--critical .pk-group-risk-dot,
 .pk-group-risk-item--danger .pk-group-risk-dot {
-  background: var(--pk-danger-dark);
+  background: var(--pk-danger);
 }
 .pk-group-risk-item--warning .pk-group-risk-dot {
-  background: var(--pk-warning-dark);
+  background: var(--pk-warning);
 }
 .pk-group-risk-item--normal .pk-group-risk-dot {
-  background: var(--pk-success-dark);
+  background: var(--pk-success);
 }
 
 /* 底部猜你想问 */

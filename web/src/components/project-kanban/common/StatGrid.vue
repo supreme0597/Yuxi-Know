@@ -55,9 +55,9 @@ defineEmits(['item-click'])
   font-weight: 700;
   color: var(--gray-800);
 }
-.pk-stat-item__value.success { color: var(--pk-success-dark); }
-.pk-stat-item__value.warning { color: var(--pk-warning-dark); }
-.pk-stat-item__value.danger { color: var(--pk-danger-dark); }
+.pk-stat-item__value.success { color: var(--pk-success); }
+.pk-stat-item__value.warning { color: var(--pk-warning); }
+.pk-stat-item__value.danger { color: var(--pk-danger); }
 
 .pk-stat-item__label {
   font-size: 12px;

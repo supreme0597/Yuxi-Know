@@ -1,5 +1,5 @@
 <template>
-  <div class="pk-sub" @click="$emit('click', project)">
+  <div class="pk-sub" :class="`pk-sub--${milestoneStatus}`" @click="$emit('click', project)">
     <!-- 头部：项目ID（可点击跳转项目级）+ 状态徽章 + 进度 -->
     <div class="pk-sub__header">
       <span class="pk-sub__id" @click.stop="$emit('id-click', project)">
@@ -105,6 +105,8 @@ const milestoneText = computed(() => {
   background: var(--gray-0);
   border-radius: 10px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.04);
+  border: none;
+  border-left: 3px solid var(--gray-300);
   cursor: pointer;
   transition: all 0.15s ease;
   display: flex;
@@ -115,6 +117,9 @@ const milestoneText = computed(() => {
   background: var(--pk-page-bg);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(0, 0, 0, 0.06);
 }
+.pk-sub--green { border-left-color: var(--pk-success); }
+.pk-sub--yellow { border-left-color: var(--pk-warning); }
+.pk-sub--red { border-left-color: var(--pk-danger); }
 
 /* Header */
 .pk-sub__header {
@@ -167,10 +172,10 @@ const milestoneText = computed(() => {
 .pk-sub__progress:hover {
   color: var(--pk-accent-dark);
 }
-.pk-sub__progress--green { color: var(--pk-success-dark); }
-.pk-sub__progress--green:hover { color: var(--pk-success); }
-.pk-sub__progress--yellow { color: var(--pk-warning-dark); }
-.pk-sub__progress--yellow:hover { color: var(--pk-warning); }
+.pk-sub__progress--green { color: var(--pk-success); }
+.pk-sub__progress--green:hover { color: var(--pk-success-dark); }
+.pk-sub__progress--yellow { color: var(--pk-warning); }
+.pk-sub__progress--yellow:hover { color: var(--pk-warning-dark); }
 .pk-sub__progress--red { color: var(--pk-danger); }
 .pk-sub__progress--red:hover { color: var(--pk-danger-dark); }
 
@@ -237,9 +242,9 @@ const milestoneText = computed(() => {
   border-radius: 50%;
   flex-shrink: 0;
 }
-.pk-sub__dim-dot--normal { background: var(--pk-success-dark); }
-.pk-sub__dim-dot--warning { background: var(--pk-warning-dark); }
-.pk-sub__dim-dot--danger { background: var(--pk-danger-dark); }
+.pk-sub__dim-dot--normal { background: var(--pk-success); }
+.pk-sub__dim-dot--warning { background: var(--pk-warning); }
+.pk-sub__dim-dot--danger { background: var(--pk-danger); }
 
 /* Milestone timeline */
 .pk-sub__timeline {

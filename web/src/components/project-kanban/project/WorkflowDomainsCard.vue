@@ -7,7 +7,6 @@
       @click="$emit('domain-click', key)"
     >
       <div class="pk-domain__header">
-        <span class="pk-domain__dot" :class="`pk-domain__dot--${domainStatus(key)}`"></span>
         <span class="pk-domain__tag">{{ meta.tag }}</span>
         <span class="pk-domain__title">{{ meta.label }}</span>
         <span
@@ -135,19 +134,19 @@ function topRisks(key) {
   gap: 4px;
 }
 .pk-domain__status-dot {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   flex-shrink: 0;
 }
 .pk-domain__status-text {
   color: var(--gray-500);
 }
-.pk-domain__status--green .pk-domain__status-dot { background: var(--pk-success-dark); }
+.pk-domain__status--green .pk-domain__status-dot { background: var(--pk-success); }
 .pk-domain__status--yellow .pk-domain__status-dot,
-.pk-domain__status--warning .pk-domain__status-dot { background: var(--pk-warning-dark); }
+.pk-domain__status--warning .pk-domain__status-dot { background: var(--pk-warning); }
 .pk-domain__status--red .pk-domain__status-dot,
-.pk-domain__status--critical .pk-domain__status-dot { background: var(--pk-danger-dark); }
+.pk-domain__status--critical .pk-domain__status-dot { background: var(--pk-danger); }
 
 .pk-domain__summary {
   font-size: 13px;

@@ -259,10 +259,10 @@ function nodeClass(phase, idx, item) {
   height: 5px;
   border-radius: 50%;
   flex-shrink: 0;
-  background: var(--pk-danger-dark);
+  background: var(--pk-danger);
 }
 .pk-milestone-sub__tag-dot--warn {
-  background: var(--pk-warning-dark);
+  background: var(--pk-warning);
 }
 .pk-milestone-sub__tag-text {
   color: var(--gray-500);

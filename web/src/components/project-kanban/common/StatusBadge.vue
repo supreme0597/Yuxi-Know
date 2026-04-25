@@ -41,8 +41,8 @@ const statusClass = computed(() => {
   white-space: nowrap;
 }
 .pk-badge__dot {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   flex-shrink: 0;
 }
@@ -50,8 +50,8 @@ const statusClass = computed(() => {
   color: var(--gray-500);
 }
 
-.pk-badge--success .pk-badge__dot { background: var(--pk-success-dark); }
-.pk-badge--warning .pk-badge__dot { background: var(--pk-warning-dark); }
-.pk-badge--danger .pk-badge__dot { background: var(--pk-danger-dark); }
-.pk-badge--info .pk-badge__dot { background: var(--pk-success-dark); }
+.pk-badge--success .pk-badge__dot { background: var(--pk-success); }
+.pk-badge--warning .pk-badge__dot { background: var(--pk-warning); }
+.pk-badge--danger .pk-badge__dot { background: var(--pk-danger); }
+.pk-badge--info .pk-badge__dot { background: var(--pk-success); }
 </style>

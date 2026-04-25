@@ -193,8 +193,8 @@ function deviationClass(deviation) {
 .pk-budget-sub__status-text {
   color: var(--gray-500);
 }
-.pk-budget-sub__status--active .pk-budget-sub__status-dot { background: var(--pk-success-dark); }
-.pk-budget-sub__status--maintenance .pk-budget-sub__status-dot { background: var(--pk-warning-dark); }
+.pk-budget-sub__status--active .pk-budget-sub__status-dot { background: var(--pk-success); }
+.pk-budget-sub__status--maintenance .pk-budget-sub__status-dot { background: var(--pk-warning); }
 
 /* 中部：圆环图 + 偏差指示条 上下排列 */
 .pk-budget-sub__body {

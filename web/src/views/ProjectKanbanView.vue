@@ -642,7 +642,7 @@ function handleGroupHighlight(group) {
   height: 6px;
   border-radius: 50%;
 }
-.pk-kanban__stat-dot--red { background: var(--pk-danger-dark); }
+.pk-kanban__stat-dot--red { background: var(--pk-danger); }
 .pk-kanban__stat-dot--yellow { background: var(--pk-warning); }
 
 /* Body */

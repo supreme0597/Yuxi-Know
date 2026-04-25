@@ -192,9 +192,7 @@
                         <svg v-else viewBox="0 0 16 16" width="14" height="14"><circle cx="8" cy="8" r="7" fill="var(--pk-border-hover)"/><circle cx="8" cy="8" r="3" fill="var(--pk-card-bg)"/></svg>
                       </span>
                       <span class="ai-sidepanel__phase-name">{{ phase.name }}</span>
-                      <span v-if="phase.risk && phase.risk !== 'none'" class="ai-sidepanel__phase-risk-tag" :class="`ai-sidepanel__phase-risk-tag--${phase.risk}`">
-                        {{ phase.risk === 'high' ? '高风险' : '中风险' }}
-                      </span>
+
                       <span class="ai-sidepanel__phase-status" :class="`ai-sidepanel__phase-status--${phase.status}`">{{ phase.statusText }}</span>
                       <span class="ai-sidepanel__phase-date">{{ phase.date }}</span>
                     </div>
@@ -1023,7 +1021,7 @@ function initOrUpdateRadar() {
   word-break: break-word;
 }
 .ai-sidepanel__progress-value--danger { color: var(--pk-danger); }
-.ai-sidepanel__progress-value--warning { color: var(--pk-warning-dark); }
+.ai-sidepanel__progress-value--warning { color: var(--pk-warning); }
 
 /* Radar Chart */
 .ai-sidepanel__radar-chart {
@@ -1216,20 +1214,6 @@ function initOrUpdateRadar() {
   font-weight: 600;
   font-size: 14px;
   color: var(--pk-text);
-}
-.ai-sidepanel__phase-risk-tag {
-  display: inline-block;
-  padding: 1px 6px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--pk-card-bg);
-}
-.ai-sidepanel__phase-risk-tag--high {
-  background: var(--pk-danger);
-}
-.ai-sidepanel__phase-risk-tag--medium {
-  background: var(--pk-warning);
 }
 .ai-sidepanel__phase-status {
   margin-left: auto;

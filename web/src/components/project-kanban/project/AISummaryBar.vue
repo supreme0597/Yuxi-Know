@@ -147,13 +147,13 @@ const topRisks = computed(() => {
 }
 .pk-ai-bar__risk-item--critical .pk-ai-bar__risk-dot,
 .pk-ai-bar__risk-item--danger .pk-ai-bar__risk-dot {
-  background: var(--pk-danger-dark);
+  background: var(--pk-danger);
 }
 .pk-ai-bar__risk-item--warning .pk-ai-bar__risk-dot {
-  background: var(--pk-warning-dark);
+  background: var(--pk-warning);
 }
 .pk-ai-bar__risk-item--normal .pk-ai-bar__risk-dot {
-  background: var(--pk-success-dark);
+  background: var(--pk-success);
 }
 .pk-ai-bar__risk-body {
   display: flex;
