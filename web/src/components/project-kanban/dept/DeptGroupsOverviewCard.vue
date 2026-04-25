@@ -239,7 +239,6 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
 }
 
 .pk-dim-card {
-  background: var(--pk-page-bg);
   border-radius: 10px;
   padding: 10px 12px;
   display: flex;
@@ -247,17 +246,18 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
   gap: 6px;
   cursor: pointer;
   transition: all 0.2s ease;
+  border: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.04);
 }
 
 .pk-dim-card:hover {
-  background: var(--pk-neutral-bg);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(0, 0, 0, 0.06);
   transform: translateY(-1px);
 }
 
-.pk-dim-card--danger { border-left-color: var(--pk-danger); }
-.pk-dim-card--warning { border-left-color: var(--pk-warning); }
-.pk-dim-card--success { border-left-color: var(--pk-success); }
+.pk-dim-card--danger { border-left: 3px solid var(--pk-danger); }
+.pk-dim-card--warning { border-left: 3px solid var(--pk-warning); }
+.pk-dim-card--success { border-left: 3px solid var(--pk-success); }
 
 .pk-dim-card__header {
   display: flex;
@@ -318,8 +318,8 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
 }
 
 .pk-dim-card__sentence-dot {
-  width: 5px;
-  height: 5px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   flex-shrink: 0;
 }
@@ -420,8 +420,8 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
   background: var(--gray-50);
 }
 .pk-group-risk-dot {
-  width: 5px;
-  height: 5px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   flex-shrink: 0;
   background: var(--gray-300);
@@ -547,8 +547,8 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
     min-height: 34px;
   }
   .pk-group-risk-dot {
-    width: 5px;
-    height: 5px;
+    width: 7px;
+    height: 7px;
   }
   .pk-overview-footer {
     padding: 10px 16px;
@@ -609,8 +609,8 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
     min-height: 36px;
   }
   .pk-group-risk-dot {
-    width: 5px;
-    height: 5px;
+    width: 7px;
+    height: 7px;
   }
   .pk-overview-footer {
     padding: 10px 18px;
@@ -671,8 +671,8 @@ const quickQuestions = computed(() => props.data?.projectRisk?.quickQuestions ||
     min-height: 40px;
   }
   .pk-group-risk-dot {
-    width: 5px;
-    height: 5px;
+    width: 7px;
+    height: 7px;
   }
   .pk-overview-footer {
     padding: 12px 20px;

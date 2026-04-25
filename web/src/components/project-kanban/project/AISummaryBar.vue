@@ -139,8 +139,8 @@ const topRisks = computed(() => {
   background: var(--gray-50);
 }
 .pk-ai-bar__risk-dot {
-  width: 5px;
-  height: 5px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   flex-shrink: 0;
   background: var(--gray-300);
@@ -227,8 +227,8 @@ const topRisks = computed(() => {
     min-height: 34px;
   }
   .pk-ai-bar__risk-dot {
-    width: 5px;
-    height: 5px;
+    width: 7px;
+    height: 7px;
   }
   .pk-ai-bar__risk-text {
     font-size: 13px;
@@ -265,8 +265,8 @@ const topRisks = computed(() => {
     min-height: 36px;
   }
   .pk-ai-bar__risk-dot {
-    width: 5px;
-    height: 5px;
+    width: 7px;
+    height: 7px;
   }
   .pk-ai-bar__risk-text {
     font-size: 14px;
@@ -303,8 +303,8 @@ const topRisks = computed(() => {
     min-height: 40px;
   }
   .pk-ai-bar__risk-dot {
-    width: 5px;
-    height: 5px;
+    width: 7px;
+    height: 7px;
   }
   .pk-ai-bar__risk-text {
     font-size: 15px;
