@@ -919,7 +919,7 @@ export const deptData = {
             "categories": {
                 "RTOS V2": {
                     "label": "RTOS 208.11-208.12开发项目",
-                    "workload": 80.1234,
+                    "workload": 80.1234123213,
                     "dev": 14,
                     "test": 6,
                     "total": 80,

@@ -186,6 +186,17 @@
       @update:visible="sidepanel.visible.value = $event"
       @question-click="handleSidepanelQuestion"
     />
+
+    <!-- Markdown 文档侧边栏（甜点工具栏） -->
+    <MdSidepanel
+      :visible="mdSidepanel.visible.value"
+      :title="mdSidepanel.title.value"
+      :subtitle="mdSidepanel.subtitle.value"
+      :tool-type="mdSidepanel.toolType.value"
+      :fetch-content="fetchMdContent"
+      @update:visible="mdSidepanel.visible.value = $event"
+      @close="mdSidepanel.close"
+    />
   </div>
 </template>
 
@@ -195,6 +206,7 @@ import { ref, computed } from 'vue'
 import { projectData } from '@/components/project-kanban/data/projectData'
 import { groupData } from '@/components/project-kanban/data/groupData'
 import { useAISidepanel } from '@/components/project-kanban/composables/useAISidepanel'
+import { useMdSidepanel, fetchMdContent } from '@/components/project-kanban/composables/useMdSidepanel'
 import ProjectSelector from '@/components/project-kanban/project/ProjectSelector.vue'
 import MilestoneCard from '@/components/project-kanban/project/MilestoneCard.vue'
 import TrustCard from '@/components/project-kanban/project/TrustCard.vue'
@@ -212,6 +224,7 @@ import DeptAHBCard from '@/components/project-kanban/dept/DeptAHBCard.vue'
 import DeptBudgetCard from '@/components/project-kanban/dept/DeptBudgetCard.vue'
 import DeptTaskCard from '@/components/project-kanban/dept/DeptTaskCard.vue'
 import DeptGroupsOverviewCard from '@/components/project-kanban/dept/DeptGroupsOverviewCard.vue'
+import MdSidepanel from '@/components/project-kanban/common/MdSidepanel.vue'
 
 const tabs = [
   { key: 'dept', label: '部门级' },
@@ -221,6 +234,7 @@ const tabs = [
 
 const activeTab = ref('dept')
 const sidepanel = useAISidepanel()
+const mdSidepanel = useMdSidepanel()
 
 // 派生数据
 const projectList = computed(() => Object.keys(projectData).map(key => ({
@@ -376,7 +390,7 @@ function handleWorkflowRiskClick({ domain, riskIndex }) {
 }
 
 function handleToolAction(action) {
-  console.log('[Tool Action]', action)
+  mdSidepanel.open(action)
 }
 
 function handleRiskClick(risk) {

@@ -144,7 +144,7 @@ function deviationPercentText(cat) {
 
 /** 悬浮气泡显示：分数（如 80/80人月） */
 function scoreText(cat) {
-  return `${cat.total || 0}/${cat.workload || 0}人月`
+  return `${fmt(cat.total) || 0}/${fmt(cat.workload) || 0}人月`
 }
 
 /** 人员构成：各类人员总数 */

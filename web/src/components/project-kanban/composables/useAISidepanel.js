@@ -682,10 +682,10 @@ const sectionBuilders = {
       if (Math.abs(deviation) > 5) {
         progressItems.push({ label: '焦点问题', value: focusText, status: focusLevel })
       }
-      progressItems.push({ label: '工作量', value: `${cat.workload || 0}人月`, status: 'normal' })
+      progressItems.push({ label: '工作量', value: `${fmt(cat.workload) || 0}人月`, status: 'normal' })
       progressItems.push({ label: '人力', value: `${cat.total || 0}人月`, status: 'normal' })
       progressItems.push({ label: '利用率', value: `${catUtil}%`, status: catUtil > 100 ? 'danger' : (catUtil > 90 ? 'warning' : 'normal') })
-      progressItems.push({ label: '偏差', value: `${deviation > 0 ? '+' : ''}${deviation}人月`, status: Math.abs(deviation) > 10 ? 'danger' : (Math.abs(deviation) > 5 ? 'warning' : 'normal') })
+      progressItems.push({ label: '偏差', value: `${deviation > 0 ? '+' : ''}${fmt(deviation)}人月`, status: Math.abs(deviation) > 10 ? 'danger' : (Math.abs(deviation) > 5 ? 'warning' : 'normal') })
 
       return {
         title: `AHB人力 · ${cat.label || ''}`,
@@ -710,9 +710,9 @@ const sectionBuilders = {
       progressItems.push({ label: '焦点问题', value: focusText, status: focusStatus })
     }
     progressItems.push({ label: '总人力容量', value: `${totalCapacity}人月`, status: 'normal' })
-    progressItems.push({ label: '已分配工作量', value: `${totalWorkload}人月`, status: utilRate > 100 ? 'danger' : 'normal' })
+    progressItems.push({ label: '已分配工作量', value: `${fmt(totalWorkload)}人月`, status: utilRate > 100 ? 'danger' : 'normal' })
     progressItems.push({ label: '利用率', value: `${utilRate}%`, status: utilRate > 100 ? 'danger' : (utilRate > 90 ? 'warning' : 'normal') })
-    progressItems.push({ label: '偏差', value: `${totalDeviation > 0 ? '+' : ''}${totalDeviation}人月`, status: totalDeviation < 0 ? 'danger' : (totalDeviation > 10 ? 'warning' : 'normal') })
+    progressItems.push({ label: '偏差', value: `${totalDeviation > 0 ? '+' : ''}${fmt(totalDeviation)}人月`, status: totalDeviation < 0 ? 'danger' : (totalDeviation > 10 ? 'warning' : 'normal') })
 
     // 各分类详情（与设计稿一致）
     Object.entries(categories).forEach(([, catData]) => {
@@ -1387,6 +1387,16 @@ const sectionBuilders = {
 }
 
 // ========== 工具函数 ==========
+
+
+/** 格式化数字：有小数最多保留2位并去掉末尾0，整数就显示整数 */
+function fmt(n) {
+  if (n === 0) return '0'
+  const abs = Math.abs(n)
+  if (Number.isInteger(abs)) return String(n)
+  const rounded = Math.round(n * 100) / 100
+  return rounded % 1 === 0 ? String(rounded) : rounded.toString()
+}
 
 /**
  * 格式化风险列表 — 将原始风险数据转为侧边栏展示格式
