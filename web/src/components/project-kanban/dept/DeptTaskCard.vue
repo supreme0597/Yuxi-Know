@@ -448,7 +448,7 @@ function ringFgColor(to) {
 /* 截止日期 */
 .pk-task-node__date {
   font-size: 11px;
-  color: var(--gray-400);
+  color: var(--gray-600);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
