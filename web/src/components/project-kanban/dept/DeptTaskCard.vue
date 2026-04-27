@@ -49,6 +49,9 @@
                 :style="{ left: node._left + '%' }"
                 @click="$emit('task-click', node)"
               >
+                <span class="pk-task-node__date" :class="{ 'pk-task-node__date--overdue': node.status === 'overdue' }">
+                  {{ node.deadline }}
+                </span>
                 <DonutChart
                   :percentage="node.progress"
                   :size="42"
@@ -57,9 +60,6 @@
                   :label="`${node.progress}%`"
                 />
                 <span class="pk-task-node__name" :title="node.name">{{ node.name }}</span>
-                <span class="pk-task-node__date" :class="{ 'pk-task-node__date--overdue': node.status === 'overdue' }">
-                  {{ node.deadline }}
-                </span>
               </div>
             </div>
           </div>
@@ -388,9 +388,6 @@ function ringFgColor(to) {
   transition: color 0.15s;
   /* 固定3字宽度，内容自适应换行 */
   width: 3em;
-}
-.pk-task-lane__label:hover {
-  color: var(--pk-accent);
 }
 
 .pk-task-lane__label-text {

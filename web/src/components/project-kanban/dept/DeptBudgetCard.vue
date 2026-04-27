@@ -1,6 +1,6 @@
 <template>
   <DataCard
-    title="费用执行率"
+    title="费用执行率（万人民币）"
     :icon="DollarIcon"
     icon-color="var(--pk-warning)"
     :status-text="statusText"
@@ -24,10 +24,6 @@
         <!-- 项目名 + 状态标签 -->
         <div class="pk-budget-sub__header">
           <span class="pk-budget-sub__name">{{ proj.category }}</span>
-          <span class="pk-budget-sub__status" :class="statusClass(proj)">
-            <span class="pk-budget-sub__status-dot"></span>
-            <span class="pk-budget-sub__status-text">{{ proj.status }}</span>
-          </span>
         </div>
 
         <!-- 中部：圆环图 -->
@@ -47,12 +43,12 @@
           </div>
           <div class="pk-budget-sub__stat-divider" />
           <div class="pk-budget-sub__stat-item">
-            <span class="pk-budget-sub__stat-value">¥{{ proj.budget }}W</span>
+            <span class="pk-budget-sub__stat-value">{{ proj.budget }}</span>
             <span class="pk-budget-sub__stat-label">总预算</span>
           </div>
           <div class="pk-budget-sub__stat-divider" />
           <div class="pk-budget-sub__stat-item">
-            <span class="pk-budget-sub__stat-value">¥{{ proj.executed }}W</span>
+            <span class="pk-budget-sub__stat-value">{{ proj.executed }}</span>
             <span class="pk-budget-sub__stat-label">已执行</span>
           </div>
         </div>
@@ -94,8 +90,8 @@ const summaryItems = computed(() => {
   const warningCount = projs.filter(p => Math.abs(p.deviation || 0) > 10).length
   return [
     { value: projs.length || '-', label: '项目数' },
-    { value: totalBudget ? `¥${totalBudget}W` : '-', label: '总预算(W)' },
-    { value: totalExecuted ? `¥${totalExecuted}W` : '-', label: '已执行(W)' },
+    { value: totalBudget ? `${totalBudget}` : '-', label: '总预算' },
+    { value: totalExecuted ? `${totalExecuted}` : '-', label: '已执行' },
     { value: warningCount || '-', label: '预警项目', statusClass: warningCount > 0 ? 'warning' : '', clickable: true }
   ]
 })

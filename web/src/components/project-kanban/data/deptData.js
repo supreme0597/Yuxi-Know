@@ -20,12 +20,12 @@ export const deptData = {
                     "group": "V2",
                     "category": "RTOS V2",
                     "status": "在研",
-                    "nextMilestone": "审视",
-                    "nextDate": "4/1",
+                    "nextMilestone": "OBP结项",
+                    "nextDate": "2025/7/30",
                     "deviation": -8.3,
                     "phases": [
                         {
-                            "name": "立项", "date": "2026/2/15", "status": "completed", "risk": "none",
+                            "name": "OBP立项", "date": "2025/7/14", "status": "completed", "risk": "none",
                             "objectives": ["完成产品需求规格书v1.0", "通过立项评审", "确认资源预算"],
                             "aiSummary": "立项节点已正常完成，产品需求规格书v1.0已通过评审，资源预算已确认。",
                             "risks": [
@@ -33,7 +33,7 @@ export const deptData = {
                             ]
                         },
                         {
-                            "name": "审视", "date": "2026/4/1", "status": "pending", "risk": "yellow",
+                            "name": "OBP Review", "date": "2026/3/13", "status": "completed", "risk": "none",
                             "overduePercent": 8,
                             "objectives": ["需求基线冻结", "架构评审通过", "关键风险闭环"],
                             "riskReason": "需求变更频繁，架构方案仍在评审中",
@@ -43,13 +43,13 @@ export const deptData = {
                             ]
                         },
                         {
-                            "name": "结项", "date": "2026/12/31", "status": "pending", "risk": "none",
+                            "name": "OBP结项", "date": "2026/7/30", "status": "pending", "risk": "yellow",
                             "objectives": ["所有特性开发完成", "集成测试通过率≥95%", "发布文档齐套"],
                             "aiSummary": "结项节点尚远，当前关键是审视阶段的推进情况将直接影响结项节奏。",
                             "risks": []
                         }
                     ],
-                    "currentPhase": "审视中",
+                    "currentPhase": "OBP结项阶段进行中",
                     "aiSummary": "208.11-208.12开发项目审视节点有8%延期风险，需求变更频繁，架构方案仍在评审中。立项已正常完成，结项节点尚远，当前关键是尽快完成架构评审锁定需求基线。",
                     "quickQuestions": [
                         "审视节点延期8%如何补救？",

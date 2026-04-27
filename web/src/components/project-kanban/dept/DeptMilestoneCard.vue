@@ -25,14 +25,6 @@
         <!-- 头部：项目名 + 状态标签 -->
         <div class="pk-milestone-sub__header">
           <span class="pk-milestone-sub__title">{{ item.category }} {{ item.project }}</span>
-          <span v-if="item.deviation > 10" class="pk-milestone-sub__tag">
-            <span class="pk-milestone-sub__tag-dot"></span>
-            <span class="pk-milestone-sub__tag-text">延期</span>
-          </span>
-          <span v-else-if="item.deviation > 0" class="pk-milestone-sub__tag">
-            <span class="pk-milestone-sub__tag-dot pk-milestone-sub__tag-dot--warn"></span>
-            <span class="pk-milestone-sub__tag-text">关注</span>
-          </span>
         </div>
 
         <!-- 圆环图 -->
@@ -45,7 +37,7 @@
           />
           <!-- 阶段名：放在环形图和时间轴中间 -->
           <div v-if="nextPhase(item)" class="pk-milestone-sub__phase-label">
-            {{ nextPhase(item).name }}
+            {{item.nextMilestone }}
           </div>
         </div>
 
@@ -96,10 +88,6 @@ const FlagIcon = {
   }
 }
 
-const SHORT_NAMES = { '立项': 'RR', '审视': '审视', '结项': 'GA', 'RR准入': 'RR', 'TR5评审': 'TR5', '季度评审': '季度' }
-function shortName(name) {
-  return SHORT_NAMES[name] || (name ? name.substring(0, 2) : '?')
-}
 
 const statusText = computed(() => props.data?.status || '正常')
 const statusColor = computed(() => {
@@ -147,10 +135,14 @@ function dateToDecimal(date) {
 
 /** 弧形仪表进度百分比（按设计稿：根据日期计算时间进度） */
 function arcPercent(phase, item) {
+  console.log(phase)
   if (phase.status === 'completed') return 100
+  console.log(phase.status)
   const now = new Date()
   const todayVal = now.getFullYear() * 12 + (now.getMonth() + 1) + now.getDate() / 31
   const phaseVal = dateToDecimal(phase.date)
+  console.log(todayVal)
+  console.log(phaseVal)
   if (todayVal >= phaseVal) return 100 // 已延期
   // 找前一个节点的日期作为起始
   const idx = item.phases.indexOf(phase)
@@ -158,6 +150,7 @@ function arcPercent(phase, item) {
   const range = phaseVal - prevVal
   if (range <= 0) return 0
   const elapsed = todayVal - prevVal
+  console.log(prevVal)
   return Math.max(0, Math.min(100, Math.round((elapsed / range) * 100)))
 }
 

@@ -1,6 +1,6 @@
 <template>
   <DataCard
-    title="AHB人力"
+    title="AHB人力（人月）"
     :icon="UsersIcon"
     icon-color="var(--pk-text-secondary)"
     :status-text="statusText"
