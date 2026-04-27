@@ -918,7 +918,7 @@ export const deptData = {
             // 新增：按项目分类聚合（RTOS V2/V3/MCU）
             "categories": {
                 "RTOS V2": {
-                    "label": "RTOS V2",
+                    "label": "RTOS 208.11-208.12开发项目",
                     "workload": 80.1234,
                     "dev": 14,
                     "test": 6,

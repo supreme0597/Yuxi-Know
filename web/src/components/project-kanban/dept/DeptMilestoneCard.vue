@@ -231,7 +231,7 @@ function nodeClass(phase, idx, item) {
 }
 
 .pk-milestone-sub__title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--pk-text);
   overflow: hidden;
@@ -397,7 +397,7 @@ function nodeClass(phase, idx, item) {
 
 @media (min-width: 1600px) {
   .pk-milestone-sub__title {
-    font-size: 15px;
+    font-size: 14px;
   }
   .pk-milestone-sub__tag {
     font-size: 13px;
@@ -432,13 +432,13 @@ function nodeClass(phase, idx, item) {
 
 @media (min-width: 1920px) {
   .pk-milestone-sub__title {
-    font-size: 16px;
+    font-size: 15px;
   }
   .pk-milestone-sub__tag {
-    font-size: 14px;
+    font-size: 13px;
   }
   .pk-milestone-sub__phase-label {
-    font-size: 13px;
+    font-size: 12px;
   }
   :deep(.pk-donut) {
     --pk-donut-size: 54px !important;
@@ -467,13 +467,13 @@ function nodeClass(phase, idx, item) {
 
 @media (min-width: 2560px) {
   .pk-milestone-sub__title {
-    font-size: 17px;
+    font-size: 16px;
   }
   .pk-milestone-sub__tag {
-    font-size: 14px;
+    font-size: 13px;
   }
   .pk-milestone-sub__phase-label {
-    font-size: 14px;
+    font-size: 13px;
   }
   :deep(.pk-donut) {
     --pk-donut-size: 78px !important;

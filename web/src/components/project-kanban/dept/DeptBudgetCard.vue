@@ -142,7 +142,7 @@ function deviationValueClass(deviation) {
 }
 
 .pk-budget-sub__name {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--gray-700);
   overflow: hidden;
@@ -233,6 +233,27 @@ function deviationValueClass(deviation) {
 
 @media (min-width: 1600px) {
   .pk-budget-sub__name {
+    font-size: 13px;
+  }
+  .pk-budget-sub__status {
+    font-size: 12px;
+  }
+  .pk-budget-sub__stat-value {
+    font-size: 12px;
+  }
+  .pk-budget-sub__stat-label {
+    font-size: 11px;
+  }
+  .pk-budget-sub__stat-divider {
+    height: 22px;
+  }
+  :deep(.pk-donut) {
+    --pk-donut-size: 46px !important;
+  }
+}
+
+@media (min-width: 1920px) {
+  .pk-budget-sub__name {
     font-size: 14px;
   }
   .pk-budget-sub__status {
@@ -245,27 +266,6 @@ function deviationValueClass(deviation) {
     font-size: 12px;
   }
   .pk-budget-sub__stat-divider {
-    height: 22px;
-  }
-  :deep(.pk-donut) {
-    --pk-donut-size: 46px !important;
-  }
-}
-
-@media (min-width: 1920px) {
-  .pk-budget-sub__name {
-    font-size: 15px;
-  }
-  .pk-budget-sub__status {
-    font-size: 14px;
-  }
-  .pk-budget-sub__stat-value {
-    font-size: 14px;
-  }
-  .pk-budget-sub__stat-label {
-    font-size: 13px;
-  }
-  .pk-budget-sub__stat-divider {
     height: 24px;
   }
   :deep(.pk-donut) {
@@ -275,16 +275,16 @@ function deviationValueClass(deviation) {
 
 @media (min-width: 2560px) {
   .pk-budget-sub__name {
-    font-size: 16px;
-  }
-  .pk-budget-sub__status {
-    font-size: 14px;
-  }
-  .pk-budget-sub__stat-value {
     font-size: 15px;
   }
-  .pk-budget-sub__stat-label {
+  .pk-budget-sub__status {
+    font-size: 13px;
+  }
+  .pk-budget-sub__stat-value {
     font-size: 14px;
+  }
+  .pk-budget-sub__stat-label {
+    font-size: 13px;
   }
   .pk-budget-sub__stat-divider {
     height: 26px;

@@ -208,9 +208,12 @@ function compositionPercent(cat, type) {
 }
 
 .pk-ahb-sub__label {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--gray-700);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* 中部：圆环图 + 人员构成条 上下排列 */
@@ -275,7 +278,7 @@ function compositionPercent(cat, type) {
 
 @media (min-width: 1600px) {
   .pk-ahb-sub__label {
-    font-size: 14px;
+    font-size: 13px;
   }
   .pk-ahb-sub__stat-value {
     font-size: 14px;
@@ -293,13 +296,13 @@ function compositionPercent(cat, type) {
 
 @media (min-width: 1920px) {
   .pk-ahb-sub__label {
-    font-size: 15px;
+    font-size: 14px;
   }
   .pk-ahb-sub__stat-value {
-    font-size: 15px;
+    font-size: 14px;
   }
   .pk-ahb-sub__stat-label {
-    font-size: 13px;
+    font-size: 12px;
   }
   .pk-ahb-sub__stat-divider {
     height: 24px;
@@ -311,13 +314,13 @@ function compositionPercent(cat, type) {
 
 @media (min-width: 2560px) {
   .pk-ahb-sub__label {
-    font-size: 16px;
+    font-size: 15px;
   }
   .pk-ahb-sub__stat-value {
-    font-size: 16px;
+    font-size: 15px;
   }
   .pk-ahb-sub__stat-label {
-    font-size: 14px;
+    font-size: 13px;
   }
   .pk-ahb-sub__stat-divider {
     height: 26px;
