@@ -43,12 +43,12 @@
             :stroke-width="3.5"
             :color="arcColor(nextPhase(item))"
           />
+          <!-- 阶段名：放在环形图和时间轴中间 -->
+          <div v-if="nextPhase(item)" class="pk-milestone-sub__phase-label">
+            {{ nextPhase(item).name }}
+          </div>
         </div>
 
-        <!-- 阶段名：放在环形图和时间轴中间 -->
-        <div v-if="nextPhase(item)" class="pk-milestone-sub__phase-label">
-          {{ nextPhase(item).name }}
-        </div>
 
         <!-- 时间轴 -->
         <div class="pk-milestone-sub__track">
@@ -275,6 +275,8 @@ function nodeClass(phase, idx, item) {
 .pk-milestone-sub__donut {
   flex: 1;
   display: flex;
+  flex-direction: column;
+  gap: 4px;
   align-items: center;
   justify-content: center;
   min-height: 0;
@@ -287,7 +289,6 @@ function nodeClass(phase, idx, item) {
   color: var(--pk-text-secondary);
   text-align: center;
   line-height: 1;
-  padding: 4px 0;
 }
 
 /* ===== 时间轴 ===== */

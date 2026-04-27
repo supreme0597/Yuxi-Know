@@ -271,21 +271,21 @@
                       <div v-if="risk.detail" class="ai-sidepanel__risk-section">
                         <div class="ai-sidepanel__risk-section-header">
                           <Search :size="12" />
-                          <span>根因分析</span>
+                          <span style="font-weight: 600;">根因分析</span>
                         </div>
                         <div class="ai-sidepanel__risk-section-content">{{ risk.detail }}</div>
                       </div>
                       <div v-if="risk.impact" class="ai-sidepanel__risk-section">
                         <div class="ai-sidepanel__risk-section-header">
                           <Info :size="12" />
-                          <span>影响范围</span>
+                          <span style="font-weight: 600;">影响范围</span>
                         </div>
                         <div class="ai-sidepanel__risk-section-content">{{ risk.impact }}</div>
                       </div>
                       <div v-if="risk.suggestion" class="ai-sidepanel__risk-section ai-sidepanel__risk-section--suggestion">
                         <div class="ai-sidepanel__risk-section-header">
                           <CheckCircle :size="12" />
-                          <span>消减建议</span>
+                          <span style="font-weight: 600;">消减建议</span>
                         </div>
                         <div class="ai-sidepanel__risk-section-content">{{ risk.suggestion }}</div>
                       </div>
@@ -1416,8 +1416,8 @@ function initOrUpdateRadar() {
   align-items: center;
   gap: 5px;
   font-size: 12px;
-  font-weight: 600;
-  color: var(--gray-600);
+  font-weight: 800 !important;
+  color: var(--gray-800);
   margin-bottom: 4px;
 }
 

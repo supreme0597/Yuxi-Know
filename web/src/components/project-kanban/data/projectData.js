@@ -108,8 +108,9 @@ export const projectData = {
         { "type": "费用", "text": "项目刚启动暂无费用发生", "level": "normal", "title": "预算执行正常", "rootCause": "项目处于需求收集阶段，尚未进入开发", "impact": "暂无影响", "suggestion": "保持现状监控即可" }
       ]
     }, "quality": {
-      "di": 0, "defects": 0, "warnings": 0, "resolveRate": 0, "status": "green", "text": "暂无数据", "aiSummary": "DI值0，缺陷0个，项目刚启动暂无数据，质量状态正常", "quickQuestions": ["质量问题的根本原因是什么？", "如何提升代码质量？", "测试覆盖率如何提升？"], "risks": [
-        { "type": "质量", "text": "暂无数据", "level": "normal", "title": "质量状态正常", "rootCause": "项目刚启动，无代码产出", "impact": "暂无影响", "suggestion": "保持现状监控即可" }
+      "di": 0, "defects": 0, "warnings": 0, "resolveRate": 0, "status": "green", "text": "", "aiSummary": "DI值0，缺陷0个，项目刚启动暂无数据，质量状态正常", 
+      "quickQuestions": ["质量问题的根本原因是什么？", "如何提升代码质量？", "测试覆盖率如何提升？"], 
+      "risks": [
       ]
     }, "workflow": { "design": { "status": "warning", "aiSummary": "需求收集阶段，<br>尚未冻结", "risks": [{ "type": "作业流-需求", "text": "需求尚未冻结", "level": "warning", "title": "需求尚未冻结", "rootCause": "客户侧需求评审排期在4月中旬，当前处于需求收集阶段", "impact": "需求未冻结将影响后续架构设计和开发基线建立", "suggestion": "建议PM协调客户提前进行需求评审，目标4月15日前完成冻结" }, { "type": "作业流-需求", "text": "客户评审排期中", "level": "normal", "title": "客户评审排期中", "rootCause": "客户内部评审流程需要时间协调各方资源", "impact": "评审排期可能影响需求冻结时间点", "suggestion": "提前准备评审材料，缩短评审周期" }, { "type": "作业流-需求", "text": "SE团队组建中", "level": "normal", "title": "SE团队组建中", "rootCause": "项目刚启动，系统工程师正在陆续到位", "impact": "SE人员未全部到位可能影响设计文档产出效率", "suggestion": "加快SE人员招聘和入职流程，确保关键设计角色优先到位" }], "quickQuestions": ["需求评审何时完成冻结？", "客户评审排期能否提前？", "SE团队组建进展如何？"] }, "dev": { "status": "green", "aiSummary": "开发团队组建中，<br>尚未开始编码", "risks": [{ "type": "作业流-开发", "text": "团队组建中", "level": "normal", "title": "团队组建中", "rootCause": "计划8人，实际到位6人，缺口2人正在招聘", "impact": "开发人力不足可能影响后续迭代启动时间", "suggestion": "加快招聘进度或从其他项目协调临时支援" }], "quickQuestions": ["团队组建进展如何？", "开发人员缺口如何快速补齐？", "开发环境何时准备就绪？"] }, "build": { "status": "green", "aiSummary": "构建环境准备中，<br>流水线就绪", "risks": [], "quickQuestions": ["构建流水线准备情况如何？", "构建环境何时就绪？", "CI/CD流程是否已配置？"] }, "test": { "status": "green", "aiSummary": "测试团队待组建，<br>测试策略制定中", "risks": [], "quickQuestions": ["测试团队组建计划是什么？", "测试策略何时完成制定？", "测试环境准备情况如何？"] }, "release": { "status": "green", "aiSummary": "发布计划制定中，<br>距发布较远", "risks": [], "quickQuestions": ["发布计划制定进展如何？", "发布窗口是否已确认？", "发布流程是否已规划？"] } }
   },

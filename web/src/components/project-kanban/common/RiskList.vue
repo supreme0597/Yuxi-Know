@@ -1,5 +1,5 @@
 <template>
-  <div v-if="risks && risks.length" class="pk-risk-list">
+  <div class="pk-risk-list">
     <div class="pk-risk-list__title">
       <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -7,18 +7,24 @@
       TOP3风险
     </div>
     <div class="pk-risk-list__items">
-      <div
-        v-for="(risk, index) in topRisks"
-        :key="index"
-        class="pk-risk-item"
-        :class="`pk-risk-item--${risk.level}`"
-        @click="$emit('risk-click', risk, index)"
-      >
+      <template v-if="topRisks.length">
+        <div
+          v-for="(risk, index) in topRisks"
+          :key="index"
+          class="pk-risk-item"
+          :class="`pk-risk-item--${risk.level}`"
+          @click="$emit('risk-click', risk, index)"
+        >
+          <span class="pk-risk-item__dot"></span>
+          <span class="pk-risk-item__text">{{ risk.text || risk.title }}</span>
+          <svg class="pk-risk-item__arrow" width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+          </svg>
+        </div>
+      </template>
+      <div v-else class="pk-risk-item pk-risk-item--normal pk-risk-item--empty">
         <span class="pk-risk-item__dot"></span>
-        <span class="pk-risk-item__text">{{ risk.text || risk.title }}</span>
-        <svg class="pk-risk-item__arrow" width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-        </svg>
+        <span class="pk-risk-item__text">暂无风险</span>
       </div>
     </div>
   </div>
@@ -73,9 +79,12 @@ const topRisks = computed(() => {
   cursor: pointer;
   transition: all 0.15s;
 }
-.pk-risk-item:hover {
+.pk-risk-item:hover:not(.pk-risk-item--empty) {
   filter: brightness(0.97);
   transform: translateX(2px);
+}
+.pk-risk-item--empty {
+  cursor: default;
 }
 .pk-risk-item__dot {
   width: 5px;
