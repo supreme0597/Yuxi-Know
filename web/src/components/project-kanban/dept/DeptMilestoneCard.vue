@@ -412,7 +412,7 @@ function nodeClass(phase, idx, item) {
     flex: 1.2;
   }
   .pk-milestone-sub__node-date {
-    font-size: 12px;
+    font-size: 11px;
   }
   .pk-milestone-sub__node-dot {
     width: 12px;
@@ -447,7 +447,7 @@ function nodeClass(phase, idx, item) {
     flex: 1.2;
   }
   .pk-milestone-sub__node-date {
-    font-size: 13px;
+    font-size: 12px;
   }
   .pk-milestone-sub__node-dot {
     width: 14px;
