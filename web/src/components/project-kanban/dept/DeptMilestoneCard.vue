@@ -47,7 +47,7 @@
 
         <!-- 阶段名：放在环形图和时间轴中间 -->
         <div v-if="nextPhase(item)" class="pk-milestone-sub__phase-label">
-          {{ shortName(nextPhase(item).name) }}
+          {{ nextPhase(item).name }}
         </div>
 
         <!-- 时间轴 -->
