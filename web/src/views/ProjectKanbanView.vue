@@ -79,7 +79,7 @@
 
           <!-- 进度 + 费用 (并排) -->
           <ScheduleCard :data="currentProject?.schedule" @ai-click="handleAIClick" @risk-click="handleRiskClick" />
-          <BudgetCard :data="currentProject?.budget" @ai-click="handleAIClick" @risk-click="handleRiskClick" />
+          <BudgetCard :data="currentBudgetFromDept" @ai-click="handleAIClick" @risk-click="handleRiskClick" />
         </div>
 
         <!-- 五领域卡片 -->
@@ -236,6 +236,30 @@ const groupSummaryData = computed(() => groupData.summary || {})
 const currentProjectId = ref(projectList.value[0]?.id || '')
 
 const currentProject = computed(() => projectData[currentProjectId.value] || null)
+
+// 费用执行卡片：从部门级 budget.projects 中查找当前版本所属项目，使用其数据
+const currentBudgetFromDept = computed(() => {
+  const versionId = currentProjectId.value
+  if (!versionId) return null
+  const projects = deptData.department?.budget?.projects || []
+  const match = projects.find(p => Array.isArray(p.versions) && p.versions.includes(versionId))
+  if (!match) return null
+  // 将部门级项目预算数据映射为 BudgetCard 所需格式
+  // status 基于偏差值，与部门级子卡片偏差颜色逻辑一致
+  const absDeviation = Math.abs(match.deviation || 0)
+  let status = 'green'
+  if (absDeviation > 20) status = 'red'
+  else if (absDeviation > 10) status = 'yellow'
+  return {
+    status,
+    aiSummary: match.aiSummary || '',
+    executionRate: match.rate ?? 0,
+    total: match.budget ?? 0,
+    executed: match.executed ?? 0,
+    deviation: match.deviation,
+    risks: match.risks || []
+  }
+})
 
 const selectorInfo = computed(() => {
   const p = currentProject.value

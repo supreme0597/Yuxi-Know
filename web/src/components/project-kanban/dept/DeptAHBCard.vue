@@ -94,6 +94,15 @@ const categories = computed(() => {
   return Object.values(cats)
 })
 
+/** 格式化数字：有小数最多保留2位并去掉末尾0，整数就显示整数 */
+function fmt(n) {
+  if (n === 0) return '0'
+  const abs = Math.abs(n)
+  if (Number.isInteger(abs)) return String(n)
+  const rounded = Math.round(n * 100) / 100
+  return rounded % 1 === 0 ? String(rounded) : rounded.toString()
+}
+
 const summaryItems = computed(() => {
   const cats = categories.value
   const totalWorkload = cats.reduce((s, c) => s + (c.workload || 0), 0)
@@ -101,9 +110,9 @@ const summaryItems = computed(() => {
   const totalDeviation = cats.reduce((s, c) => s + (c.deviation || 0), 0)
   const utilization = totalCapacity > 0 ? Math.round(totalWorkload / totalCapacity * 100) : 0
   return [
-    { value: totalWorkload || '-', label: '总工作量' },
-    { value: totalCapacity || '-', label: '总人力' },
-    { value: totalDeviation || '-', label: '总偏差', statusClass: totalDeviation < 0 ? 'warning' : '', clickable: true },
+    { value: totalWorkload ? fmt(totalWorkload) : '-', label: '总工作量' },
+    { value: totalCapacity ? fmt(totalCapacity) : '-', label: '总人力' },
+    { value: totalDeviation ? fmt(totalDeviation) : '-', label: '总偏差', statusClass: totalDeviation < 0 ? 'warning' : '', clickable: true },
     { value: utilization + '%', label: '利用率' }
   ]
 })
@@ -147,7 +156,8 @@ function compositionTotal(cat) {
 /** 人员构成：某类人员总数 */
 function compositionValue(cat, type) {
   if (!cat.roles) return 0
-  return Object.values(cat.roles).reduce((sum, r) => sum + (r[type] || 0), 0)
+  const val = Object.values(cat.roles).reduce((sum, r) => sum + (r[type] || 0), 0)
+  return val
 }
 
 /** 人员构成：某类人员占比 */

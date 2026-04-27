@@ -23,7 +23,7 @@
       >
         <!-- 项目名 + 状态标签 -->
         <div class="pk-budget-sub__header">
-          <span class="pk-budget-sub__name">{{ proj.category }}</span>
+          <span class="pk-budget-sub__name">{{ proj.name }}</span>
         </div>
 
         <!-- 中部：圆环图 -->
@@ -95,23 +95,6 @@ const summaryItems = computed(() => {
     { value: warningCount || '-', label: '预警项目', statusClass: warningCount > 0 ? 'warning' : '', clickable: true }
   ]
 })
-
-function statusClass(proj) {
-  return proj.status === '维护态' ? 'pk-budget-sub__status--maintenance' : 'pk-budget-sub__status--active'
-}
-
-/** 偏差 → 指针位置百分比 (0%=最左, 100%=最右, 50%=零点) */
-function deviationLeft(deviation) {
-  // deviation 范围约 -30 ~ +30, 映射到 0~100%
-  const pct = 50 + (deviation / 30) * 50
-  return Math.max(5, Math.min(95, pct)) + '%'
-}
-
-function deviationPtrClass(deviation) {
-  if (Math.abs(deviation) > 20) return 'pk-budget-sub__deviation-ptr--danger'
-  if (Math.abs(deviation) > 10) return 'pk-budget-sub__deviation-ptr--warning'
-  return 'pk-budget-sub__deviation-ptr--good'
-}
 
 function deviationValueClass(deviation) {
   if (Math.abs(deviation) > 20) return 'danger'
@@ -219,7 +202,7 @@ function deviationValueClass(deviation) {
 }
 
 .pk-budget-sub__stat-value {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--gray-800);
 }
@@ -256,7 +239,7 @@ function deviationValueClass(deviation) {
     font-size: 13px;
   }
   .pk-budget-sub__stat-value {
-    font-size: 14px;
+    font-size: 13px;
   }
   .pk-budget-sub__stat-label {
     font-size: 12px;
@@ -277,7 +260,7 @@ function deviationValueClass(deviation) {
     font-size: 14px;
   }
   .pk-budget-sub__stat-value {
-    font-size: 15px;
+    font-size: 14px;
   }
   .pk-budget-sub__stat-label {
     font-size: 13px;
@@ -298,7 +281,7 @@ function deviationValueClass(deviation) {
     font-size: 14px;
   }
   .pk-budget-sub__stat-value {
-    font-size: 16px;
+    font-size: 15px;
   }
   .pk-budget-sub__stat-label {
     font-size: 14px;

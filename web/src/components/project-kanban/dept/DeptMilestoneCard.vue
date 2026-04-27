@@ -24,7 +24,7 @@
       >
         <!-- 头部：项目名 + 状态标签 -->
         <div class="pk-milestone-sub__header">
-          <span class="pk-milestone-sub__title">{{ item.category }} {{ item.project }}</span>
+          <span class="pk-milestone-sub__title">{{ item.project }}</span>
         </div>
 
         <!-- 圆环图 -->

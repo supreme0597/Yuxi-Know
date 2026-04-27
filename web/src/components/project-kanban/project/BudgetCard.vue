@@ -36,8 +36,7 @@ const statusMap = { green: '正常', normal: '正常', yellow: '关注', warning
 const statusText = computed(() => statusMap[props.data?.status] || '正常')
 
 const deviation = computed(() => {
-  const rate = props.data?.executionRate ?? 0
-  return Math.round(rate - 100)
+  return props.data?.deviation ?? 0
 })
 
 const deviationClass = computed(() => {
