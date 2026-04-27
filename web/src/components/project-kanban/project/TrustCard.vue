@@ -18,15 +18,17 @@
         class="pk-trust__subcard"
         @click="$emit('subcard-click', { key, label: item.label })"
       >
-        <div class="pk-trust__subcard-header">
-          <span class="pk-trust__subcard-title">{{ item.label }}</span>
+        <!-- 第一行：点 + 指标名称 + 指标数据 -->
+        <div class="pk-trust__subcard-row1">
           <span class="pk-trust__subcard-dot" :class="`pk-trust__subcard-dot--${item.level}`"></span>
+          <span class="pk-trust__subcard-title">{{ item.label }}</span>
+          <span class="pk-trust__metric">
+            <span class="pk-trust__metric-ok">{{ item.ok }}</span>
+            <span class="pk-trust__metric-sep">/</span>
+            <span class="pk-trust__metric-total">{{ item.total }}</span>
+          </span>
         </div>
-        <div class="pk-trust__metric">
-          <span class="pk-trust__metric-ok">{{ item.ok }}</span>
-          <span class="pk-trust__metric-sep">/</span>
-          <span class="pk-trust__metric-total">{{ item.total }}</span>
-        </div>
+        <!-- 第二行：条形图 -->
         <div class="pk-trust__progress-bar">
           <div
             class="pk-trust__progress-fill"
@@ -125,31 +127,36 @@ const trustItems = computed(() => {
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.10), 0 8px 28px rgba(0, 0, 0, 0.07);
 }
 
-.pk-trust__subcard-header {
+.pk-trust__subcard-row1 {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 6px;
-}
-.pk-trust__subcard-title {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--gray-700);
+  gap: 6px;
+  margin-bottom: 8px;
 }
 .pk-trust__subcard-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
+  flex-shrink: 0;
 }
 .pk-trust__subcard-dot--green { background: var(--pk-chart-green); }
 .pk-trust__subcard-dot--yellow { background: var(--pk-chart-orange); }
 .pk-trust__subcard-dot--red { background: var(--pk-chart-red); }
-
+.pk-trust__subcard-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--gray-700);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .pk-trust__metric {
   display: flex;
   align-items: baseline;
   gap: 2px;
-  margin-bottom: 6px;
+  flex-shrink: 0;
 }
 .pk-trust__metric-ok {
   font-size: 17px;
@@ -187,14 +194,11 @@ const trustItems = computed(() => {
   .pk-trust__subcard {
     padding: 12px;
   }
+  .pk-trust__subcard-row1 {
+    margin-bottom: 10px;
+  }
   .pk-trust__subcard-title {
     font-size: 13px;
-  }
-  .pk-trust__subcard-header {
-    margin-bottom: 8px;
-  }
-  .pk-trust__metric {
-    margin-bottom: 8px;
   }
   .pk-trust__metric-ok {
     font-size: 18px;
@@ -212,14 +216,11 @@ const trustItems = computed(() => {
   .pk-trust__subcard {
     padding: 14px;
   }
+  .pk-trust__subcard-row1 {
+    margin-bottom: 12px;
+  }
   .pk-trust__subcard-title {
     font-size: 14px;
-  }
-  .pk-trust__subcard-header {
-    margin-bottom: 10px;
-  }
-  .pk-trust__metric {
-    margin-bottom: 10px;
   }
   .pk-trust__metric-ok {
     font-size: 19px;
@@ -237,14 +238,11 @@ const trustItems = computed(() => {
   .pk-trust__subcard {
     padding: 16px;
   }
+  .pk-trust__subcard-row1 {
+    margin-bottom: 14px;
+  }
   .pk-trust__subcard-title {
     font-size: 15px;
-  }
-  .pk-trust__subcard-header {
-    margin-bottom: 12px;
-  }
-  .pk-trust__metric {
-    margin-bottom: 12px;
   }
   .pk-trust__metric-ok {
     font-size: 21px;
