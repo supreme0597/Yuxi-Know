@@ -54,7 +54,7 @@
           <div class="pk-ahb-sub__stat-divider" />
           <div class="pk-ahb-sub__stat-item">
             <span class="pk-ahb-sub__stat-value">{{ compositionValue(cat, 'outsource') }}</span>
-            <span class="pk-ahb-sub__stat-label">外包</span>
+            <span class="pk-ahb-sub__stat-label">合作方</span>
           </div>
         </div>
       </div>
