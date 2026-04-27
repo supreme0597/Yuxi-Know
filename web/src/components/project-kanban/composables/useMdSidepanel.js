@@ -14,17 +14,17 @@ const TOOL_META = {
  * 目前直接读取 src/components/project-kanban/data/README.md（通过 fetch）
  * 后续替换为真实接口即可
  */
-export async function fetchMdContent(toolType) {
+export async function fetchMdContent(toolType, currentProjectId) {
   // 模拟网络延迟
   await new Promise(resolve => setTimeout(resolve, 300))
 
   // 尝试读取组件目录下的 README.md
   try {
-    const response = await fetch('/src/components/project-kanban/data/README.md')
+    const response = await fetch(`/src/components/project-kanban/data/AIREPORT-${currentProjectId}-${toolType}`)
     if (response.ok) {
       const text = await response.text()
       // 如果 README 有内容就返回，否则返回 mock 内容
-      if (text.trim().length > 10) {
+      if (text.trim().length > 10 && !text.includes('<!DOCTYPE html>')) {
         return wrapWithToolHeader(text, toolType)
       }
     }

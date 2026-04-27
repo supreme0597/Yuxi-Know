@@ -50,6 +50,7 @@ const props = defineProps({
   title: { type: String, default: '' },
   subtitle: { type: String, default: '' },
   toolType: { type: String, default: '' },
+  currentProjectId: { type: String, default: '' },
   fetchContent: { type: Function, default: null }
 })
 
@@ -99,7 +100,7 @@ async function loadContent() {
   rawContent.value = ''
   try {
     if (typeof props.fetchContent === 'function') {
-      const content = await props.fetchContent(props.toolType)
+      const content = await props.fetchContent(props.toolType, props.currentProjectId)
       rawContent.value = content || ''
     } else {
       error.value = '未提供内容获取函数'

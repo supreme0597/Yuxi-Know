@@ -194,6 +194,7 @@
       :subtitle="mdSidepanel.subtitle.value"
       :tool-type="mdSidepanel.toolType.value"
       :fetch-content="fetchMdContent"
+      :current-project-id="currentProjectId"
       @update:visible="mdSidepanel.visible.value = $event"
       @close="mdSidepanel.close"
     />

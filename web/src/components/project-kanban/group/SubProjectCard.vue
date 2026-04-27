@@ -119,6 +119,7 @@ const milestoneText = computed(() => {
 }
 .pk-sub--green { border-left-color: var(--pk-success); }
 .pk-sub--yellow { border-left-color: var(--pk-warning); }
+.pk-sub--orange { border-left-color: var(--pk-warning); }
 .pk-sub--red { border-left-color: var(--pk-danger); }
 
 /* Header */
