@@ -242,7 +242,7 @@ const currentBudgetFromDept = computed(() => {
   const versionId = currentProjectId.value
   if (!versionId) return null
   const projects = deptData.department?.budget?.projects || []
-  const match = projects.find(p => Array.isArray(p.versions) && p.versions.includes(versionId))
+  const match = projects.find(p => Array.isArray(p.relations) && p.relations.includes(versionId))
   if (!match) return null
   // 将部门级项目预算数据映射为 BudgetCard 所需格式
   // status 基于偏差值，与部门级子卡片偏差颜色逻辑一致
