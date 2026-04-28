@@ -267,6 +267,21 @@ function compositionPercent(cat, type) {
 }
 
 /* Responsive */
+@media (max-width: 1024px) {
+  .pk-ahb-sub__label {
+    font-size: 11px;
+  }
+  .pk-ahb-sub__stat-value {
+    font-size: 12px;
+  }
+  .pk-ahb-sub__stat-label {
+    font-size: 10px;
+  }
+  .pk-ahb-sub__stat-divider {
+    height: 18px;
+  }
+}
+
 @media (max-width: 600px) {
   .pk-ahb-grid {
     grid-template-columns: 1fr;

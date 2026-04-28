@@ -222,6 +222,21 @@ function deviationValueClass(deviation) {
 }
 
 /* Responsive */
+@media (max-width: 1024px) {
+  .pk-budget-sub__name {
+    font-size: 11px;
+  }
+  .pk-budget-sub__stat-value {
+    font-size: 11px;
+  }
+  .pk-budget-sub__stat-label {
+    font-size: 10px;
+  }
+  .pk-budget-sub__stat-divider {
+    height: 18px;
+  }
+}
+
 @media (max-width: 600px) {
   .pk-budget-grid {
     grid-template-columns: 1fr;

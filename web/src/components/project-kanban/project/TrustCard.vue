@@ -187,6 +187,15 @@ const trustItems = computed(() => {
 .pk-trust__progress-fill--yellow { background: var(--pk-warning); }
 .pk-trust__progress-fill--red { background: var(--pk-danger); }
 
+@media (max-width: 1599px) {
+  .pk-trust__grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .pk-trust__metric-ok {
+    font-size: 16px;
+  }
+}
+
 @media (min-width: 1600px) {
   .pk-trust__grid {
     gap: 10px;

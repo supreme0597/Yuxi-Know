@@ -301,6 +301,55 @@ const milestoneText = computed(() => {
   background: var(--pk-chart-green);
 }
 
+@media (max-width: 1024px) {
+  .pk-sub {
+    padding: 12px 14px;
+    gap: 8px;
+  }
+  .pk-sub__dims {
+    gap: 6px;
+  }
+  .pk-sub__id {
+    font-size: 13px;
+  }
+  .pk-sub__progress {
+    font-size: 12px;
+  }
+  .pk-sub__ai {
+    font-size: 11px;
+    padding: 5px 7px;
+  }
+  .pk-sub__dim {
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 768px) {
+  .pk-sub {
+    padding: 10px 12px;
+    gap: 6px;
+  }
+  .pk-sub__dims {
+    gap: 5px;
+  }
+  .pk-sub__id {
+    font-size: 12px;
+  }
+  .pk-sub__progress {
+    font-size: 12px;
+  }
+  .pk-sub__ai {
+    font-size: 11px;
+    padding: 4px 6px;
+  }
+  .pk-sub__dim {
+    font-size: 10px;
+  }
+  .pk-sub__phase-label {
+    font-size: 9px;
+  }
+}
+
 @media (min-width: 1600px) {
   .pk-sub {
     padding: 16px 18px;

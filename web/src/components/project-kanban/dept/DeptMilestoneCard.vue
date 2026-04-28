@@ -135,14 +135,10 @@ function dateToDecimal(date) {
 
 /** 弧形仪表进度百分比（按设计稿：根据日期计算时间进度） */
 function arcPercent(phase, item) {
-  console.log(phase)
   if (phase.status === 'completed') return 100
-  console.log(phase.status)
   const now = new Date()
   const todayVal = now.getFullYear() * 12 + (now.getMonth() + 1) + now.getDate() / 31
   const phaseVal = dateToDecimal(phase.date)
-  console.log(todayVal)
-  console.log(phaseVal)
   if (todayVal >= phaseVal) return 100 // 已延期
   // 找前一个节点的日期作为起始
   const idx = item.phases.indexOf(phase)
@@ -150,7 +146,6 @@ function arcPercent(phase, item) {
   const range = phaseVal - prevVal
   if (range <= 0) return 0
   const elapsed = todayVal - prevVal
-  console.log(prevVal)
   return Math.max(0, Math.min(100, Math.round((elapsed / range) * 100)))
 }
 
@@ -389,6 +384,32 @@ function nodeClass(phase, idx, item) {
 }
 
 /* Responsive */
+@media (max-width: 1024px) {
+  .pk-milestone-sub__track {
+    height: 36px;
+  }
+  .pk-milestone-sub__track-line {
+    top: 16px;
+  }
+  .pk-milestone-sub__node-dot {
+    width: 8px;
+    height: 8px;
+  }
+  .pk-milestone-sub__node-date {
+    font-size: 10px;
+  }
+  .pk-milestone-sub__node-label {
+    font-size: 10px;
+    max-width: 48px;
+  }
+  .pk-milestone-sub__title {
+    font-size: 12px;
+  }
+  .pk-milestone-sub__phase-label {
+    font-size: 10px;
+  }
+}
+
 @media (max-width: 600px) {
   .pk-milestone-grid {
     grid-template-columns: 1fr;

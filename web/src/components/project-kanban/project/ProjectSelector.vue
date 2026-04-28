@@ -103,6 +103,30 @@ const options = computed(() =>
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
 }
 
+@media (max-width: 1024px) {
+  .pk-selector__select {
+    min-width: 150px;
+  }
+  .pk-sweet-btn {
+    padding: 3px 8px;
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 768px) {
+  .pk-selector {
+    flex-wrap: wrap;
+  }
+  .pk-selector__select {
+    min-width: 120px;
+  }
+  .pk-sweet-toolbar {
+    flex-wrap: wrap;
+    margin-left: 0;
+    width: 100%;
+  }
+}
+
 @media (min-width: 1600px) {
   .pk-selector {
     padding: 14px 18px;

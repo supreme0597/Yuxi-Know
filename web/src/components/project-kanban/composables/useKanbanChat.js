@@ -15,11 +15,9 @@ import { ref, reactive, computed, nextTick } from 'vue'
 import { message as antMessage } from 'ant-design-vue'
 import { useAgentStore } from '@/stores/agent'
 import { agentApi, threadApi } from '@/apis'
-import { storeToRefs } from 'pinia'
 import { useAgentThreadState } from '@/composables/useAgentThreadState'
 import { useAgentStreamHandler } from '@/composables/useAgentStreamHandler'
 import { useStreamSmoother } from '@/composables/useStreamSmoother'
-import { useAgentMentionConfig } from '@/composables/useAgentMentionConfig'
 import { MessageProcessor } from '@/utils/messageProcessor'
 
 // 单例状态：多个组件共享同一个对话会话
@@ -293,37 +291,17 @@ const conversations = computed(() => {
 })
 
 // ==================== Agent 状态 & Mention 配置 ====================
-// 从 agentStore 获取 mention 需要的配置数据
-function getAgentStoreData() {
+// 看板场景：defaultAgent 固定、用户不可切换，
+// @提及应展示全部可用资源（不受 agentConfig/configurableItems 过滤限制）。
+// 直接从 store 读取，单层 computed，Vue 模板自动解包 ComputedRef。
+const mentionConfig = computed(() => {
   const agentStore = useAgentStore()
-  return storeToRefs(agentStore)
-}
-
-const _mentionDeps = computed(() => {
-  const { configurableItems, agentConfig, availableKnowledgeBases, availableMcps, availableSkills } = getAgentStoreData()
-  return { configurableItems, agentConfig, availableKnowledgeBases, availableMcps, availableSkills }
-})
-
-const mentionConfig = useAgentMentionConfig({
-  currentAgentState: computed(() => {
-    const threadId = chatState.currentThreadId
-    return threadId ? getThreadState(threadId)?.agentState || null : null
-  }),
-  currentThreadFiles: computed(() => {
-    const threadId = chatState.currentThreadId
-    const threadState = threadId ? getThreadState(threadId) : null
-    return threadState?.agentState?.files ? Object.entries(threadState.agentState.files).map(([path, data]) => ({ path, ...data })) : []
-  }),
-  currentThreadAttachments: computed(() => {
-    const threadId = chatState.currentThreadId
-    const threadState = threadId ? getThreadState(threadId) : null
-    return threadState?.agentState?.attachments || []
-  }),
-  configurableItems: computed(() => _mentionDeps.value.configurableItems?.value || {}),
-  agentConfig: computed(() => _mentionDeps.value.agentConfig?.value || {}),
-  availableKnowledgeBases: computed(() => _mentionDeps.value.availableKnowledgeBases?.value || []),
-  availableMcps: computed(() => _mentionDeps.value.availableMcps?.value || []),
-  availableSkills: computed(() => _mentionDeps.value.availableSkills?.value || [])
+  const kb = agentStore.availableKnowledgeBases || []
+  const mcps = agentStore.availableMcps || []
+  const skills = agentStore.availableSkills || []
+  const hasAny = kb.length || mcps.length || skills.length
+  const result = hasAny ? { files: [], knowledgeBases: kb, mcps: mcps, skills: skills, subagents: [] } : null
+  return result
 })
 
 const supportsFileUpload = computed(() => {

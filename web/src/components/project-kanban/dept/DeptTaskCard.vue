@@ -461,8 +461,34 @@ function ringFgColor(to) {
 }
 
 /* Responsive */
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
+  .pk-task-subcard {
+    flex: 1 1 220px;
+  }
   .pk-task-lane__label {
+    width: 2.5em;
+  }
+  .pk-task-subcard .pk-task-lane__label {
+    width: 48px;
+  }
+  .pk-task-subcard .pk-task-lane__content {
+    min-height: 98px;
+  }
+  .pk-task-subcard .pk-task-node__name {
+    font-size: 10px;
+    max-width: 48px;
+  }
+  .pk-task-subcard .pk-task-node__date {
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 768px) {
+  .pk-task-subcard {
+    flex: 1 1 100%;
+  }
+  .pk-task-lane__label {
+    width: 2em;
     min-width: 24px;
     padding: 4px 5px;
     font-size: 10px;

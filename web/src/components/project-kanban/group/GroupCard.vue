@@ -181,6 +181,54 @@ const statusText = computed(() => {
   border-top: 1px solid var(--gray-100);
 }
 
+@media (max-width: 1024px) {
+  .pk-group__content {
+    padding: 14px;
+    gap: 8px;
+  }
+  .pk-group__icon {
+    width: 28px;
+    height: 28px;
+  }
+  .pk-group__title {
+    font-size: 15px;
+  }
+  .pk-group__ai {
+    padding: 7px 10px;
+    font-size: 12px;
+  }
+  .pk-group__projects {
+    gap: 8px;
+  }
+  .pk-group__footer {
+    padding: 6px 14px 12px;
+  }
+}
+
+@media (max-width: 768px) {
+  .pk-group__content {
+    padding: 12px;
+    gap: 6px;
+  }
+  .pk-group__icon {
+    width: 24px;
+    height: 24px;
+  }
+  .pk-group__title {
+    font-size: 14px;
+  }
+  .pk-group__ai {
+    padding: 6px 8px;
+    font-size: 11px;
+  }
+  .pk-group__projects {
+    gap: 6px;
+  }
+  .pk-group__footer {
+    padding: 4px 12px 10px;
+  }
+}
+
 @media (min-width: 1600px) {
   .pk-group__content {
     padding: 18px;
