@@ -2,6 +2,7 @@
 web/project-manager
 web/project-manager2
 .workbuddy
+.learnings
 
 *.egg-info
 

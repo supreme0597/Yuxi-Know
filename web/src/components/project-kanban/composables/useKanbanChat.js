@@ -5,7 +5,7 @@
  * 复用主项目的 agentStore、API、消息处理工具，但不依赖 chatUIStore/sidebar/route 等。
  *
  * 简化点：
- * - 直接使用 defaultAgent，无 agent 选择器
+ * - 使用 defaultAgent，自动选中名字含"项目管理"的 Config（配置档案）
  * - 发送消息时自动创建线程，无手动创建对话流程
  * - 仅使用 legacy stream 模式，不用 Run 模式 SSE
  * - 无人工审批流程
@@ -35,6 +35,47 @@ const streamSmoother = useStreamSmoother({
   getThreadState: (threadId) => chatState.threadStates[threadId] || null
 })
 
+// ==================== 看板 Agent & Config 选择逻辑 ====================
+/**
+ * 看板 AI 对话使用的 Agent：
+ * 直接使用 defaultAgent（看板不切换 Agent）
+ */
+function resolveKanbanAgentId(agentStore) {
+  return agentStore.defaultAgentId || (agentStore.agents?.length > 0 ? agentStore.agents[0].id : null)
+}
+
+/**
+ * 看板 AI 对话使用的 Config（配置档案）：
+ * 1. 遍历当前 Agent 的 configs 列表，找名字含"项目管理"的第一个
+ * 2. 找不到则回退 is_default 配置
+ * 3. 再没有则取第一个
+ *
+ * 注意："项目管理"是 Config 名（/agent/{agentId}/configs 返回的），
+ *       不是 Agent 名（/api/chat/agent 返回的）
+ */
+function resolveKanbanConfigId(agentStore) {
+  const agentId = resolveKanbanAgentId(agentStore)
+  if (!agentId) return null
+  const list = agentStore.agentConfigs?.[agentId] || []
+  const matched = list.find((c) => c.name && c.name.includes('项目管理'))
+  if (matched) return matched.id
+  return list.find((c) => c.is_default)?.id || (list.length > 0 ? list[0].id : null)
+}
+
+/** 看板对话专用的 Agent 对象 */
+const kanbanAgent = computed(() => {
+  const agentStore = useAgentStore()
+  const id = resolveKanbanAgentId(agentStore)
+  if (!id) return null
+  return (agentStore.agents || []).find((a) => a.id === id) || null
+})
+
+/** 看板对话专用的 Agent ID */
+const kanbanAgentId = computed(() => kanbanAgent.value?.id || null)
+
+/** 看板对话专用的 Config ID */
+const kanbanConfigId = computed(() => resolveKanbanConfigId(useAgentStore()))
+
 const { getThreadState, resetOnGoingConv, stopThreadStream } = useAgentThreadState({
   chatState,
   getCurrentThreadId: () => chatState.currentThreadId,
@@ -46,10 +87,7 @@ const { getThreadState, resetOnGoingConv, stopThreadStream } = useAgentThreadSta
 const { handleAgentResponse } = useAgentStreamHandler({
   getThreadState,
   processApprovalInStream: () => false, // 看板版不处理审批
-  currentAgentId: computed(() => {
-    const agentStore = useAgentStore()
-    return agentStore.defaultAgentId
-  }),
+  currentAgentId: computed(() => kanbanAgentId.value),
   supportsFiles: computed(() => true),
   streamSmoother
 })
@@ -96,7 +134,7 @@ async function ensureActiveThread(title = '新的对话') {
   if (chatState.currentThreadId) return chatState.currentThreadId
 
   const agentStore = useAgentStore()
-  const agentId = agentStore.defaultAgentId
+  const agentId = kanbanAgentId.value
   if (!agentId) {
     antMessage.error('未找到可用的 AI 智能体')
     return null
@@ -154,13 +192,14 @@ async function sendMessage(text, options = {}) {
   if (!text?.trim()) return
 
   const agentStore = useAgentStore()
-  const agentId = agentStore.defaultAgentId
+  const agentId = kanbanAgentId.value
+  const configId = kanbanConfigId.value
   if (!agentId) {
     antMessage.error('AI 智能体未就绪，请稍后再试')
     return
   }
 
-  if (!agentStore.selectedAgentConfigId) {
+  if (!configId) {
     antMessage.error('智能体配置未就绪')
     return
   }
@@ -195,7 +234,7 @@ async function sendMessage(text, options = {}) {
       {
         query,
         thread_id: threadId,
-        agent_config_id: agentStore.selectedAgentConfigId
+        agent_config_id: configId
       },
       { signal: threadState.streamAbortController.signal }
     )
@@ -243,13 +282,11 @@ const isProcessing = computed(() => {
 })
 
 const currentAgentName = computed(() => {
-  const agentStore = useAgentStore()
-  return agentStore.defaultAgent?.name || 'AI 助手'
+  return kanbanAgent.value?.name || 'AI 助手'
 })
 
 const currentAgentId = computed(() => {
-  const agentStore = useAgentStore()
-  return agentStore.defaultAgentId
+  return kanbanAgentId.value
 })
 
 const chatActive = computed(() => {
@@ -291,7 +328,7 @@ const conversations = computed(() => {
 })
 
 // ==================== Agent 状态 & Mention 配置 ====================
-// 看板场景：defaultAgent 固定、用户不可切换，
+// 看板场景：自动选择"项目管理"Agent（或回退 defaultAgent），用户不可切换。
 // @提及应展示全部可用资源（不受 agentConfig/configurableItems 过滤限制）。
 // 直接从 store 读取，单层 computed，Vue 模板自动解包 ComputedRef。
 const mentionConfig = computed(() => {
@@ -305,8 +342,7 @@ const mentionConfig = computed(() => {
 })
 
 const supportsFileUpload = computed(() => {
-  const agentStore = useAgentStore()
-  const agent = agentStore.defaultAgent
+  const agent = kanbanAgent.value
   if (!agent) return false
   return (agent.capabilities || []).includes('file_upload')
 })
@@ -353,7 +389,7 @@ export function useKanbanChat() {
     chatActive,
     currentAgentName,
     currentAgentId,
-    selectedAgentConfigId: computed(() => agentStore.selectedAgentConfigId),
+    selectedAgentConfigId: kanbanConfigId,
     agentState: computed(() => {
       const threadId = chatState.currentThreadId
       return threadId ? getThreadState(threadId)?.agentState || null : null
