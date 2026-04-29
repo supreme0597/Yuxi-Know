@@ -95,18 +95,102 @@ const { handleAgentResponse } = useAgentStreamHandler({
 // ==================== 自动滚动管理 ====================
 let scrollContainerRef = null
 
-export function setScrollContainer(el) {
-  scrollContainerRef = el
+/** 流式输出是否活跃（由 isProcessing watcher 控制） */
+let isStreamActive = false
+
+/** 用户是否主动向上滚动了（暂停自动跟滚，直到下次发消息才恢复） */
+let userScrolledUp = false
+
+/** 强制滚到底部后的延迟补滚定时器 */
+let scrollRetryTimer = null
+
+// ==================== RAF 跟滚循环 ====================
+let streamFollowRafId = null
+
+function startStreamFollow() {
+  stopStreamFollow()
+  function tick() {
+    if (scrollContainerRef) {
+      scrollContainerRef.scrollTop = scrollContainerRef.scrollHeight
+    }
+    streamFollowRafId = requestAnimationFrame(tick)
+  }
+  streamFollowRafId = requestAnimationFrame(tick)
 }
 
+function stopStreamFollow() {
+  if (streamFollowRafId != null) {
+    cancelAnimationFrame(streamFollowRafId)
+    streamFollowRafId = null
+  }
+}
+
+// ==================== 滚动容器管理 ====================
+
+export function setScrollContainer(el) {
+  if (scrollContainerRef && scrollContainerRef !== el) {
+    scrollContainerRef.removeEventListener('wheel', onWheelUp)
+  }
+  scrollContainerRef = el
+  if (el) {
+    // wheel 事件：比 scroll 更早触发，能在 RAF tick 之前捕获用户意图
+    el.addEventListener('wheel', onWheelUp, { passive: true })
+  }
+}
+
+/**
+ * wheel 事件处理器：检测向上滚动意图
+ * wheel 事件在 scroll 事件之前触发，比 RAF tick 更早
+ * 一旦检测到向上滚轮，立即停止 RAF 并标记状态
+ * 跟滚不会自动恢复——只有下次发消息时 resetAutoScroll() 才恢复
+ */
+function onWheelUp(e) {
+  if (e.deltaY < 0) {
+    userScrolledUp = true
+    stopStreamFollow()
+  }
+}
+
+/**
+ * 滚动到底部
+ * @param {boolean} force - true 时忽略用户滚动状态（发消息等场景）
+ */
 function scrollToBottom(force = false) {
   if (!scrollContainerRef) return
-  const el = scrollContainerRef
-  const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120
-  if (force || isNearBottom) {
-    nextTick(() => {
-      el.scrollTop = el.scrollHeight
-    })
+  if (!force && userScrolledUp) return
+
+  const doScroll = () => {
+    if (!scrollContainerRef) return
+    scrollContainerRef.scrollTop = scrollContainerRef.scrollHeight
+  }
+
+  requestAnimationFrame(() => {
+    doScroll()
+    if (force) {
+      clearTimeout(scrollRetryTimer)
+      scrollRetryTimer = setTimeout(() => {
+        if (scrollContainerRef) {
+          scrollContainerRef.scrollTop = scrollContainerRef.scrollHeight
+        }
+      }, 350)
+    }
+  })
+}
+
+/** 重置用户滚动状态（新消息发送时调用，恢复自动跟滚） */
+function resetAutoScroll() {
+  userScrolledUp = false
+}
+
+/** 设置流式活跃状态（由 AISidepanel 的 isProcessing watcher 调用） */
+function setStreamActive(active) {
+  isStreamActive = active
+  if (active) {
+    if (!userScrolledUp) {
+      startStreamFollow()
+    }
+  } else {
+    stopStreamFollow()
   }
 }
 
@@ -412,6 +496,8 @@ export function useKanbanChat() {
     sendMessage,
     stopGeneration,
     scrollToBottom,
+    resetAutoScroll,
+    setStreamActive,
     handleAttachmentUpload,
 
     // 内部引用（供组件直接使用）

@@ -79,7 +79,7 @@
 
           <!-- 进度 + 费用 (并排) -->
           <ScheduleCard :data="currentProject?.schedule" @ai-click="handleAIClick" @risk-click="handleRiskClick" />
-          <BudgetCard :data="currentBudgetFromDept" @ai-click="handleAIClick" @risk-click="handleRiskClick" />
+          <BudgetCard :data="currentBudgetFromDept" @ai-click="handleBudgetAIClick" @risk-click="handleRiskClick" />
         </div>
 
         <!-- 五领域卡片 -->
@@ -253,11 +253,15 @@ const currentProjectId = ref(projectList.value[0]?.id || '')
 const currentProject = computed(() => projectData[currentProjectId.value] || null)
 
 // 费用执行卡片：从部门级 budget.projects 中查找当前版本所属项目，使用其数据
-const currentBudgetFromDept = computed(() => {
+const currentDeptBudgetProject = computed(() => {
   const versionId = currentProjectId.value
   if (!versionId) return null
   const projects = deptData.department?.budget?.projects || []
-  const match = projects.find(p => Array.isArray(p.relations) && p.relations.includes(versionId))
+  return projects.find(p => Array.isArray(p.relations) && p.relations.includes(versionId)) || null
+})
+
+const currentBudgetFromDept = computed(() => {
+  const match = currentDeptBudgetProject.value
   if (!match) return null
   // 将部门级项目预算数据映射为 BudgetCard 所需格式
   // status 基于偏差值，与部门级子卡片偏差颜色逻辑一致
@@ -373,6 +377,16 @@ function getDeptCardStatuses() {
 }
 
 // 项目群级 computed
+
+// 费用执行卡片 AI 点击 — 使用部门级 budget-dept builder，与部门级子卡片侧边栏一致
+function handleBudgetAIClick() {
+  const match = currentDeptBudgetProject.value
+  if (match) {
+    sidepanel.open('budget-dept', deptData, { project: match })
+  } else {
+    sidepanel.open('budget-dept', deptData)
+  }
+}
 
 function handleAIClick(section) {
   sidepanel.open(section, currentProject.value)

@@ -14,7 +14,7 @@ export const groupData = {
     "risks": [
       { "level": "critical", "title": "301.1.0 TR5节点延误概率>80%", "source": "301.1.0", "rootCause": "迭代1延期5天，编码进度滞后导致测试时间被压缩", "impact": "下游集成计划延后，影响客户交付承诺", "suggestion": "建议PM立即召集核心开发评审，目标3天内追回3天进度" },
       { "level": "warning", "title": "208.10.0安全加固滞后2周", "source": "208.10.0", "rootCause": "安全模块开发人员被抽调至301.1.0应急", "impact": "影响TR4审视节点达成", "suggestion": "建议申请安全专家支援" },
-      { "level": "warning", "title": "208.10.0测试人力缺口2人", "source": "208.10.0", "rootCause": "测试团队被301.1.0借调2人", "impact": "测试进度42%，存在覆盖不足风险", "suggestion": "建议申请2名外包测试人员支撑" },
+      { "level": "warning", "title": "208.10.0测试人力缺口2人", "source": "208.10.0", "rootCause": "测试团队被301.1.0借调2人", "impact": "测试进度42%，存在覆盖不足风险", "suggestion": "建议申请2名合作方测试人员支撑" },
       { "level": "warning", "title": "301.1.0测试人力缺口4人", "source": "301.1.0", "rootCause": "计划12人，实际到位8人", "impact": "测试进度仅37%，无法支撑TR5节点", "suggestion": "建议从208.10.0借调2名测试工程师临时支撑" },
       { "level": "warning", "title": "301.1.0 DI值45分超标", "source": "301.1.0", "rootCause": "静态检查告警680条，代码评审覆盖不足", "impact": "TR5准入门槛未达，可能触发质量门禁拦截", "suggestion": "启动DI专项整改，目标TR5前将DI降至30以下" },
       { "level": "normal", "title": "1.1.0遗留2个低优先级缺陷", "source": "1.1.0", "rootCause": "2个低优先级缺陷计划在下一版本修复", "impact": "暂不影响线上运行和结项评审", "suggestion": "在1.2.0版本规划中安排修复" }
@@ -42,7 +42,7 @@ export const groupData = {
     "aiSummary": "V2项目整体风险可控，208.11.0刚启动暂无明显风险，208.10.0存在安全加固进度滞后和测试人力缺口。",
     "risks": [
       { "level": "warning", "title": "208.10.0安全加固滞后2周", "source": "208.10.0", "rootCause": "安全模块开发人员被抽调至301.1.0应急", "impact": "影响TR4审视节点达成", "suggestion": "建议申请安全专家支援" },
-      { "level": "warning", "title": "208.10.0测试人力缺口2人", "source": "208.10.0", "rootCause": "测试团队被301.1.0借调2人", "impact": "测试进度42%，存在覆盖不足风险", "suggestion": "建议申请2名外包测试人员支撑" }
+      { "level": "warning", "title": "208.10.0测试人力缺口2人", "source": "208.10.0", "rootCause": "测试团队被301.1.0借调2人", "impact": "测试进度42%，存在覆盖不足风险", "suggestion": "建议申请2名合作方测试人员支撑" }
     ],
     "quickQuestions": [
       "V2各版本的进度如何？",

@@ -37,7 +37,6 @@
 </template>
 
 <script setup>
-import { watch } from 'vue'
 import AgentMessageComponent from '@/components/AgentMessageComponent.vue'
 import ToolCallsGroupComponent from '@/components/ToolCallsGroupComponent.vue'
 import { useKanbanChat } from '../composables/useKanbanChat'
@@ -45,19 +44,11 @@ import { useKanbanChat } from '../composables/useKanbanChat'
 const {
   conversations,
   isProcessing,
-  scrollToBottom
+  isInitialized,
+  isInitializing
 } = useKanbanChat()
 
-// 监听对话变化自动滚动
-watch(
-  conversations,
-  () => {
-    if (isProcessing.value) {
-      scrollToBottom()
-    }
-  },
-  { deep: true }
-)
+// 滚动由 AISidepanel 统一管理（RAF 循环 + watch），此处不再重复监听
 
 // ==================== 消息展示工具函数 ====================
 

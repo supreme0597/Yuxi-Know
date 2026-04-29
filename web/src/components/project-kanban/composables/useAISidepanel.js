@@ -571,7 +571,7 @@ const sectionBuilders = {
       }))
 
       return {
-        title: `里程碑 · ${item.category} ${item.project}`,
+        title: `里程碑 · ${item.project}`,
         subtitle: item.group || '部门级',
         currentPhase: item.currentPhase || '',
         progress: [
@@ -667,7 +667,7 @@ const sectionBuilders = {
       const keyPoints = []
       if (cat.roles) {
         Object.entries(cat.roles).forEach(([role, data]) => {
-          keyPoints.push(`${role === 'dev' ? '开发' : role === 'test' ? '测试' : 'PM'}: 自有${data.internal}人、OD${data.od}人、外包${data.outsource}人`)
+          keyPoints.push(`${role === 'dev' ? '开发' : role === 'test' ? '测试' : 'PM'}: 自有${data.internal}人、OD${data.od}人、合作方${data.outsource}人`)
         })
       }
 

@@ -28,7 +28,7 @@
         </div>
 
         <!-- 统一滚动区域：数据概览 + 对话消息 -->
-        <div ref="scrollContainerRef" class="ai-sidepanel__body">
+        <div ref="scrollContainerRef" class="ai-sidepanel__body" @wheel="onSidepanelWheel">
           <!-- 可折叠的 AI 数据概览 -->
           <div class="ai-sidepanel__data-section" :class="{ 'ai-sidepanel__data-section--collapsed': dataCollapsed }">
             <!-- 折叠触发器（有数据时始终显示） -->
@@ -409,6 +409,8 @@ const {
   sendMessage,
   stopGeneration,
   scrollToBottom,
+  resetAutoScroll,
+  setStreamActive,
   handleAttachmentUpload,
   initialize
 } = useKanbanChat()
@@ -542,8 +544,33 @@ const handleFilePanelResizing = (isResizingState, clientX = 0) => {
   }
 }
 
-// ==================== Body 滚动锁定 ====================
+// ==================== Body 滚动锁定 & 滚轮穿透阻止 ====================
 let scrollY = 0
+
+/**
+ * 阻止侧边栏滚轮事件穿透到背景页面
+ * - 侧边栏内容可正常滚动
+ * - 滚到顶部再往上滚 / 滚到底部再往下滚 → 阻止冒泡，不穿透到背景
+ */
+function onSidepanelWheel(e) {
+  const el = e.currentTarget
+  const { scrollTop, scrollHeight, clientHeight } = el
+  const atTop = scrollTop <= 0
+  const atBottom = scrollHeight - scrollTop - clientHeight <= 1
+
+  // 向上滚且已在顶部 → 阻止穿透
+  if (e.deltaY < 0 && atTop) {
+    e.preventDefault()
+    return
+  }
+  // 向下滚且已在底部 → 阻止穿透
+  if (e.deltaY > 0 && atBottom) {
+    e.preventDefault()
+    return
+  }
+  // 中间正常滚动，不阻止
+}
+
 watch(() => props.visible, (vis) => {
   if (vis) {
     scrollY = window.scrollY
@@ -582,7 +609,16 @@ onBeforeUnmount(() => {
 })
 
 // ==================== 滚动容器注册 ====================
+// 注意：滚动容器在 v-if="visible" 内部，每次 visible 变 true 时 DOM 重建，
+// template ref 会更新但 onMounted 不会重跑，所以必须 watch ref 变化
+watch(scrollContainerRef, (el) => {
+  if (el) {
+    setScrollContainer(el)
+  }
+})
+
 onMounted(() => {
+  // 初始可见时也注册一次（watch immediate 不适合 template ref）
   if (scrollContainerRef.value) {
     setScrollContainer(scrollContainerRef.value)
   }
@@ -605,6 +641,29 @@ watch(chatActive, (active) => {
     dataCollapsed.value = true
   }
 })
+
+// ==================== 自动滚动 ====================
+// 滚动触发点：
+//   1. handleSend → resetAutoScroll() + scrollToBottom(true) → 发消息时强制滚底
+//   2. setStreamActive(true) → 启动 RAF 跟滚循环
+// 用户向上滚轮 → wheel 事件立即停止 RAF（比 scroll 事件更早，消除竞态）
+// 用户滚回底部 → onScrollChange 恢复跟滚（仅流式活跃时）
+// 流式结束 → setStreamActive(false) → 停止 RAF，永不自动重启
+
+watch(
+  () => isProcessing.value,
+  (processing) => {
+    if (processing) {
+      nextTick(() => scrollToBottom(true))
+      setStreamActive(true)
+    } else {
+      setStreamActive(false)
+    }
+  }
+)
+
+// 组件卸载时清理 RAF
+onBeforeUnmount(() => setStreamActive(false))
 
 // ==================== 面板数据 ====================
 const panelData = reactive({
@@ -680,7 +739,9 @@ function handleSend(payload) {
   if (!text) return
 
   inputText.value = ''
-  nextTick(() => scrollToBottom(true))
+
+  // 发送前重置滚动状态（恢复自动跟滚）
+  resetAutoScroll()
 
   if (typeof payload === 'object' && payload?.image) {
     console.warn('[KanbanChat] Image upload not yet implemented for kanban')
@@ -688,7 +749,12 @@ function handleSend(payload) {
 
   // 从数据概览生成隐藏上下文，注入到 AI 对话中
   const context = hasPanelData.value ? buildDataContext(panelData) : ''
+
+  // sendMessage 内部会同步添加消息到 threadMessages
   sendMessage(text, { context })
+
+  // 强制滚到底部（用户消息气泡 + 即将开始的流式回复）
+  nextTick(() => scrollToBottom(true))
 }
 
 // ==================== 面板操作 ====================
