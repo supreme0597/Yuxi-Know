@@ -12,57 +12,44 @@
 - Langfuse 增加 self-host 模式支持，补齐私有化部署与配置说明（已支持 cloud，待调试）
 - 检索测试中，添加问答
 - 集成 Memory，基于 deepagents 的文件后端实现，需要考虑定位
-- 添加自定义向量模型和 rerank 模型的配置，在网页上面 `0.7`
 - Yuxi-cli 相关的功能，放在后续版本中实现（不是类似于编程助手，而是管理平台的工，等各个 router 接口优化之后）
-- 完善个人知识库（仅设想，欢迎讨论）
+- 完善测试基准自动生成功能，目前的实现过于简单，无法覆盖实际需求
+- 完善 Skills 的环境变量注入
+- 拓宽检索的知识源，统一多知识源（channel），目前已知知识库/知识图谱/网页，可拓展：个人知识库、数据库、历史对话等
+    - 前置任务，多知识库并行检索（扩展 query_kb）
+    - 新增 query_keywords 工具，专门用于基于关键词命中的排序，也结合词频（和 BM25 的区别？）
+- 评估，基于 Agent 的评估，这里应该是结合 Langfuse 实现
 
 ### Bugs
 - 目前的知识库的图片存在公开访问风险
-- 生成基准测试会把所有的向量都计算一遍不合理
 
 ### BREAKING CHANGE（不兼容变更，0.7 版本再实现）
 - 将自定义provider 的实现逻辑，从文件移动到数据库中，并将相关处理代码，移出 config 文件，放到 provider 模块中
 - 已补充方案文档：`docs/vibe/2026-04-18-custom-provider-db-refactor-plan.md`，明确采用“provider 一行、models 放 JSON、移除 provider 默认模型”的落地方案
 - 优化知识库的 API 接口设计，使用 /{db_id}/xxx 的形式，整合 mindmap / eval 接口
+- 移除 v1 版本的 provider 统一接口，改为 v2 版本的 provider 模块接口
 
 
 
 ## 版本记录
 
-### 0.6.1
+### 0.6.2 开发记录
 
-<!-- 0.6.1 的内容请放在这里 -->
-- AI 侧边栏功能对齐 HTML 原版：部门级 builder 增加「焦点问题」（budget-dept/ahb 动态计算偏差生成）、任务令增加风险等级/延期状态、groups-overview 维度增加 online/downstream/trust 专用 progress、groupRisk 增加焦点风险+子项目逐项 progress；项目级增加 summary-project/project-group 两个新 builder、六个维度 builder 统一增加焦点风险、workflow 增加 riskIndex 精确导航；通用功能增加 StatGrid 指标点击、里程碑子卡片高亮+阶段详情、产业高亮、ECharts 雷达图（进度/质量/成本/风险四维综合评估）。详见 `docs/develop-guides/ai-sidepanel-migration-plan.md`
-- AI 侧边栏深度对齐设计稿：删除头部多余工具栏按钮（复制/刷新）；项目群综合风险 AI 按钮改为从 V3/V2/MCU 三个项目群汇总风险（带项目群名前缀）；项目群风险列表项点击展示单条风险 5W2H 详情（group-risk-detail builder）；里程碑子卡片侧边栏补全所有 phases 逐项展示；任务令 AI 按钮走 task-overview 独立概览视图（按产业分组统计）；一句话总结点击独立于 AI 按钮，携带焦点上下文打开侧边栏
-- AI 侧边栏里程碑子卡片深度对齐：子卡片点击侧边栏改为 OBP 里程碑节点结构化卡片展示（含技术目标objectives子列表、风险标签、风险原因提示框、当前状态currentPhase），替代纯文本keyPoints；节点点击侧边栏快捷问题改为从 offering 级别取（每个项目群不同，与设计稿一致）
-- AI 侧边栏 Z1/Z3 修复：任务令 AI 按钮侧边栏对齐设计稿 `_openTaskOrderAIOverview`（概览统计三格大数字+产业分组卡片带进度条+关键风险项列表+时间分布）；项目群风险列表项点击添加 `.stop` 阻止事件冒泡到 group-card，修复单条风险 5W2H 详情被覆盖的问题
-- 合并知识库导航入口：左侧导航仅保留“知识库”，文档知识库与图知识库在页面 header 中通过同一组轻量切换入口切换，保留原有列表与图谱内容区交互。
-- 抽象页面轻量切换 header：知识库与扩展管理页直接共用 `ViewSwitchHeader`，通过统一切换样式和 actions slot 收敛文档知识库、知识图谱、Tools、MCP、Subagents、Skills 等入口的信息层级；扩展管理各列表的刷新入口下沉到搜索框右侧，并统一搜索框与工具按钮的边框和圆角，同时强化切换项选中态的边框、阴影与字重层级，提升 header 中当前视图的辨识度。
-- 调整任务中心交互：入口移动到 GitHub 按钮下方，并将右侧抽屉展示改为居中弹窗，减少对主页面布局的占用。
-- 调整 backend Python 工作区依赖边界：将 `backend/package/yuxi` 明确为承载核心运行依赖的业务包，根 `backend/pyproject.toml` 仅保留工作区入口与开发/测试配置，减少依赖职责混淆。
-- 将 `yuxi` 从 uv workspace 成员调整为 `backend/package` 下可独立构建的本地 Python 包，backend 通过 path dependency 以已安装包形式发现依赖，移除对 `PYTHONPATH=/app/package` 的运行时耦合。
-- 修复沙盒 `workspace` 隔离粒度：宿主机目录从共享 `saves/threads/shared/workspace` 收敛为用户级 `saves/threads/shared/<user_id>/workspace`，并同步传递 `user_id` 到 sandbox 路径解析、provisioner 挂载与 viewer/chat 测试，保证同用户跨线程共享、不同用户隔离。
-- 调整输入框 `@` 提及中的文件搜索交互：无查询内容时不再直接展示文件列表，改为提示“输入相关内容以搜索文件”，避免未过滤结果干扰选择。
-- 收紧文件系统安全边界：viewer/chat 下载与删除路径统一基于解析后的真实路径做允许目录校验，阻止通过软链接逃逸工作区/线程目录；同时将密码哈希默认实现升级为 Argon2，并移除 skill frontmatter 解析中的正则回溯风险。
-- 调整 Skills 导入能力：`/api/system/skills/import` 现在除 ZIP 外也支持直接上传单个 `SKILL.md`，前端上传入口与后端导入服务同步兼容，便于快速导入单文件技能
-- 扩展 viewer 工作区文件操作：`/home/gem/user-data/workspace` 支持从文件系统面板新建文件夹和上传文件，后端限制写入范围并保持同名冲突直接报错。
-- 优化文件系统面板目录展开反馈：异步加载子文件时在对应文件夹图标位置显示 loading 状态，避免点击后无视觉响应。
-- 新增 Skills 远程安装能力：Skills 管理页支持填写 `owner/repo` 或 GitHub URL，后端通过隔离的临时 `HOME` 调用 `npx skills add` 下载指定 skill，再复用现有导入链路写入 `saves/skills` 和数据库，避免将 `~/.agents/skills` 直接作为系统主存储；前端远程安装弹窗补充多选串行安装与批量进度展示，复用现有单 skill 安装接口逐个提交请求
-- 调整部门删除语义：删除部门时不再要求用户数为 0，而是将部门下用户迁移到默认部门，同时清理部门级配置和部门 API Key，保证测试部门、撤换部门等场景可直接删除，并补充对应集成测试覆盖该链路
-- 重构 MCP 运行时配置加载模型：移除 `MCP_SERVERS` 作为运行正确性前提的设计，改为每次直接从数据库读取最新 MCP 配置，并用 `server_name:config_hash` 作为本地工具缓存 key；同时将内置 MCP 初始化职责收敛为仅同步数据库默认项，前端 MCP 选项改为直接使用实时资源列表，解决 `api`/`worker` 分进程下的配置不一致与缓存失效问题
-- 为知识库检索工具补充 `metadata.filepath` 注入：在 `query_kb` 统一出口基于会话可见知识库构建 `file_id -> /home/gem/kbs/...` 映射并回填 Milvus 检索结果，注入逻辑复用知识库只读后端命名规则；路径注入仅作用于 Milvus chunks 列表，Dify 和 LightRAG 等其他知识库保持原检索结果返回，不再兼容无显式 `file_id` 的推断注入，新增单测覆盖该约束
-- 调整 Milvus 混合检索实现：集合 schema 增加 Milvus 内置 BM25 稀疏向量字段、BM25 函数和中文 analyzer 配置，`keyword` 模式改为 BM25 全文检索，`hybrid` 模式改为 Milvus 原生向量 + BM25 混合检索，并同步更新检索参数说明。
-- 修复 OIDC 原始用户名绑定中的占位用户解析：绑定占位格式仍保持 `oidc:{sub}:{target_user_id}`，但在解析目标用户 ID 时改为从右侧拆分，避免 `sub` 中包含冒号时把已绑定账号误判成冲突账号，并补充对应单元测试覆盖该回归。
-- 修复 DOCX 解析中的图片回插顺序：Docling 导出的多个 `<!-- image -->` 占位符现在按文档图片顺序替换，避免多图文档中的图片链接前后颠倒。
-- 修复前端依赖安全告警：通过 `pnpm.overrides` 将传递依赖 `flatted` 锁定到 `3.4.2`、`lodash-es` 锁定到 `4.18.1`，并同步更新 `pnpm-lock.yaml` 以消除 DriftGuard 报告的高危 CVE
-- 重写界面设计规范：参考 `DESIGN.md` 写法补充视觉气质、颜色 token、组件状态、布局层级、响应式与 Agent Prompt Guide，并基于该规范收敛首页视觉表现，移除装饰性渐变、重阴影、hover 位移和入场动画。
-- 修复对话摘要中间件的工具结果卸载链路：摘要触发时改为将大体积 `ToolMessage` 写入当前 agent 可见的 sandbox outputs 路径，修正 `summary_offload` 路径拼接错误、`messages` 触发条件下不会真正裁剪历史的问题，并避免将 system message 重复纳入摘要与最终消息列表；补充对应单元测试覆盖。
-- 调整智能体对话中的工具调用展示：连续工具调用默认折叠为“调用了 N 个工具”的轻量摘要，展开后改为弱化时间线样式，减少工具结果卡片对正文阅读节奏的干扰。
-- 调整聊天首页的智能体切换入口：在无历史对话时，智能体数量 `<= 3` 且 `chat-main` 宽度不小于 `380px` 时继续使用横向 segmented；当智能体数量 `>= 4` 或内容区宽度小于 `380px` 时自动收敛为“当前智能体 + 下拉按钮”形式。
-- 调整对话配置入口与侧边栏头尾交互：输入区配置按钮改为轻量 dropdown 触发器，默认保持透明、hover 才出现背景；下拉中直接提供配置切换、新建配置，以及查看/编辑当前配置的入口。配置侧边栏则移除头部配置切换和新建入口，改为仅显示当前配置名称、可点击星标和关闭图标，并将删除操作下沉到底部保存按钮右侧。
-- 为历史线程补充前端本地配置变更提示：当已有历史消息的对话中切换 Agent、切换配置或编辑任意配置项时，在聊天消息流中插入一条非持久化的信息提示，提醒继续在当前线程运行可能影响最终效果，建议新建对话；提示仅保留在前端当前线程状态中，不写入后端历史消息。后续补齐了 3 个关键边界：提示插入时主动滚动到底部确保可见、历史消息尚未加载完成时先挂起提示并在加载完成后落地、流式回复过程中切换配置时将提示锚定在当时完整对话流之后，避免把正在生成的回复错误归因到新配置。
-- 调整 Worker run 模式下的消息首屏反馈：前端发送消息时先乐观渲染用户消息，再将前端生成的 `request_id` 透传给 `/api/chat/runs` 与服务端 `init` 对账；“正在生成回复”动画改为仅在收到 `init` 确认后展示，修复 worker 轮询延迟导致的先转圈、后出现用户消息的问题。后续又补齐了线程切换场景：后端持久化 user message 时同步写入 `request_id`，前端在合并历史消息与 ongoing 消息时按 `request_id` 去掉重复的首条 human message，避免切回运行中的线程后出现连续两个 user message。
-- 修复 agents 页对话侧边栏在 `keep-alive` 路由切换后的误关闭问题：`AgentChatComponent` 的宽度监听现在会在页面 deactivated 时断开、activated 时重连，并忽略隐藏态的 `0` 宽度，避免从其他页面切回 `/agent` 时把用户持久化的侧边栏打开状态错误覆盖为关闭。
+<!-- 0.6.2 的内容请放在这里 -->
+- 调整 Agent 知识库默认选择：未显式配置知识库时默认启用当前用户可访问的全部知识库，显式保存空列表仍表示不启用知识库。
+- 优化评估基准自动生成：仅支持 commonrag/Milvus 知识库，默认参考 chunks 数量改为 1；多 chunk 场景复用知识库向量检索选择相似 chunks，不再对全量 chunks 重新计算 embedding，并移除前端 Embedding 模型选择。
+- 修复知识库文档入库状态回退：当已解析文件缺失 `markdown_file` 解析产物时，索引流程会将文件状态恢复为未解析，便于重新解析而不是停留在索引失败。
+- 优化 Agent 输入框文件 mention：用户级 workspace 文件候选改为从独立 workspace API 递归加载，不再依赖 active thread；插入时仍转换为 `/home/gem/user-data/workspace/` 沙盒虚拟路径，并修复附件上传后未立即刷新 mention 候选的问题。
+- 调整知识库思维导图后端结构：将思维导图路由文件重命名为知识库语义更明确的 router，并把文件列表整理、提示词构建、AI JSON 解析等纯逻辑下沉到知识库 utils。
+- 收敛知识库评估后端结构：将评估指标、单题评估、答案生成提示词和自动基准生成算法下沉到 `knowledge/eval`，`EvaluationService` 保留任务、文件和持久化编排职责。
+- 新增个人工作区预览与管理：提供独立于对话 thread 的用户级 workspace API，并增加“工作区”页面，用于浏览个人 workspace 文件、预览 Markdown/文本/代码/图片/PDF；支持新建文件夹、上传文件、下载文件、删除文件/文件夹和多选删除；工作区预览支持 Markdown/TXT 在右侧预览框内切换编辑并保存，其他格式和非工作区预览默认只读；知识库与团队空间入口先展示到占位层级；默认创建 `agents/AGENTS.md`，并在 Agent 执行时将其内容追加到系统提示词。
+- 加固 JWT 鉴权安全：移除历史默认密钥回退，初始化脚本支持生成并持久化 `JWT_SECRET_KEY` 与 `YUXI_INSTANCE_ID`，签发和验证令牌时校验 `iss/aud`，并在鉴权阶段拒绝已删除或登录锁定用户继续使用旧令牌访问系统。
+- 扩展管理界面交互逻辑重构：将 MCP / Subagents / Skills 三个标签页从「左侧边栏 + 右侧详情面板」布局重构为「卡片式网格布局 + 路由跳转二级页面」布局，工具标签页改为卡片网格布局 + 弹窗详情（保持弹窗内容不变）。新增共享组件 `ExtensionCard`、`ExtensionCardGrid`、`ExtensionToolbar`、`ExtensionDetailLayout`，详情页（`McpDetailView`、`SubagentDetailView`、`SkillDetailView`）使用居中宽度限制，路由规划为 `/extensions/mcp/:name`、`/extensions/subagent/:name`、`/extensions/skill/:slug`。
+- 统一卡片样式：`ExtensionCard` 新增 `tags` prop 支持传入 `[{label, color}]` 数组，内部使用 `<a-tag bordered=false size=small>` 渲染，与知识库卡片标签风格统一；知识库列表页 `DataBaseView` 改用 `ExtensionCard` + `ExtensionCardGrid` 替代原有自定义卡片，移除冗余 card 样式。
+- 调整应用主导航：`AppLayout` 从默认窄栏升级为默认展开的侧边栏，保留折叠态图标导航；侧边栏样式收敛为 14px 文本 + 18px 图标的标准紧凑密度，并统一导航项、任务中心、GitHub、用户信息的图标与文字对齐。折叠态改为仅通过显式按钮展开，避免空白区域误触发。
+- 合并智能体对话导航：移除 `AgentChatComponent` 内部聊天侧边栏，将新建对话入口和对话历史移动到 `AppLayout` 主侧边栏，并通过共享线程 store 统一管理历史列表、当前线程、重命名、删除、置顶和分页加载。
+- 新增独立模型配置模块：增加 `model_providers` 表、独立管理接口和”模型配置”页面，支持 provider 基础信息、可配置模型列表端点、远端候选模型、`enabled_models` 的早期配置验证；启动时会补齐内置 provider 模板，`provider_type` 暂统一默认为 `openai`，该模块暂不接入现有运行时模型选择逻辑。远端模型加载默认使用 `/models` 获取 chat/通用模型，provider 声明 `embedding` 能力时使用 `/embeddings/models` 获取 embedding 候选，rerank 模型列表端点按供应商文档显式配置后加载；修复路由请求模型未接收 `embedding_base_url`/`rerank_base_url` 导致前端已填写仍被后端校验拦截的问题。补充手动添加模型能力：`enabled_models[i]` 新增可选 `source: "manual"|"remote"` 字段（默认 `remote`），管理员可通过”+ 手动添加”入口录入远端清单未覆盖的模型（典型：自部署 embedding/rerank），手动模型在前端跳过”远端不存在”的 stale 警告并显示「手动」标签；type 选项受 `provider.capabilities` 约束，后端在 `_normalize_payload` 与 `update_provider_config` 双层一致性校验中拦截越权写入。
+- 统一前端 Markdown 预览渲染：新增共享 `MarkdownPreview` 组件与 `markdown_preview` 渲染工具，替换 Agent 消息、文件预览、知识库 chunk、任务工具结果、聊天导出等场景中的旧 `md-editor-v3/marked` 预览；支持 KaTeX、任务列表、frontmatter 卡片、Shiki 代码高亮、DOMPurify 清洗和浅层渲染缓存，并抽取 HTML 转义与代码语言归一化工具。Skill 详情页复用 `AgentFilePreview`，统一文件预览、编辑、保存和全屏交互。
 
 ---
 

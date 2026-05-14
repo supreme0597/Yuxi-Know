@@ -4,6 +4,7 @@ export function useAgentMentionConfig({
   currentAgentState,
   currentThreadFiles,
   currentThreadAttachments,
+  workspaceMentionFiles,
   configurableItems,
   agentConfig,
   availableKnowledgeBases,
@@ -15,6 +16,9 @@ export function useAgentMentionConfig({
     const files = []
     const seenPaths = new Set()
     const workspaceFiles = Array.isArray(currentThreadFiles?.value) ? currentThreadFiles.value : []
+    const userWorkspaceFiles = Array.isArray(workspaceMentionFiles?.value)
+      ? workspaceMentionFiles.value
+      : []
 
     const pushFile = (entry) => {
       const path = entry?.path || ''
@@ -62,6 +66,17 @@ export function useAgentMentionConfig({
       })
     })
 
+    userWorkspaceFiles.forEach((entry) => {
+      const path = entry?.virtual_path || ''
+      if (!path || entry?.is_dir) return
+      pushFile({
+        path,
+        size: entry.size,
+        modified_at: entry.modified_at,
+        file_name: entry.name
+      })
+    })
+
     workspaceFiles.forEach((entry) => {
       const path = entry?.path || ''
       if (!path.startsWith('/home/gem/user-data/workspace/') || entry?.is_dir) return
@@ -76,6 +91,7 @@ export function useAgentMentionConfig({
 
     const configItems = configurableItems.value || {}
     const currentConfig = agentConfig.value || {}
+    let includeAllKnowledgeBases = false
     const allowedKbNames = new Set()
     const allowedMcpNames = new Set()
     const allowedSkillNames = new Set()
@@ -86,7 +102,9 @@ export function useAgentMentionConfig({
       const kind = item?.template_metadata?.kind
       const val = currentConfig[key]
 
-      if (Array.isArray(val)) {
+      if (kind === 'knowledges' && val === null) {
+        includeAllKnowledgeBases = true
+      } else if (Array.isArray(val)) {
         if (kind === 'knowledges') {
           val.forEach((v) => allowedKbNames.add(v))
         } else if (kind === 'mcps') {
@@ -118,7 +136,9 @@ export function useAgentMentionConfig({
       }
     })
 
-    const knowledgeBases = availableKnowledgeBases.value.filter((kb) => allowedKbNames.has(kb.name))
+    const knowledgeBases = includeAllKnowledgeBases
+      ? availableKnowledgeBases.value
+      : availableKnowledgeBases.value.filter((kb) => allowedKbNames.has(kb.name))
     const mcps = availableMcps.value.filter((mcp) => allowedMcpNames.has(mcp.name))
     const skills = availableSkills.value.filter((skill) => {
       const skillName = skill.name || ''

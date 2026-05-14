@@ -63,7 +63,7 @@ const currentUser = computed(() => {
 // 问候语计算属性
 const greeting = computed(() => {
   const hour = dayjs().tz('Asia/Shanghai').hour()
-  let greetingText = ''
+  let greetingText
 
   if (hour >= 5 && hour < 12) {
     greetingText = '早上好'
@@ -116,12 +116,8 @@ onUnmounted(() => {
 
 <style scoped lang="less">
 .status-bar {
-  // background: var(--gray-0);
-  // backdrop-filter: blur(10px);
-  // height: 60px;
   display: flex;
   align-items: center;
-  // position: sticky;
   top: 0;
   z-index: 100;
 }
@@ -131,8 +127,7 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px;
-  // padding-bottom: 0;
+  padding: 16px var(--page-padding);
 }
 
 .status-left {

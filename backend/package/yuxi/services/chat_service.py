@@ -9,6 +9,7 @@ from typing import Any
 from langchain.messages import AIMessage, AIMessageChunk, HumanMessage
 from langgraph.types import Command
 from yuxi import config as conf
+from yuxi.agents.backends.sandbox.paths import sandbox_workspace_agents_prompt_file
 from yuxi.agents.buildin import agent_manager
 from yuxi.agents.state import AgentStatePayload
 from yuxi.plugins.guard import content_guard
@@ -29,6 +30,43 @@ from yuxi.utils.question_utils import (
 from yuxi.utils.question_utils import (
     normalize_questions as _normalize_interrupt_questions,
 )
+
+WORKSPACE_AGENTS_PROMPT_MAX_BYTES = 64 * 1024
+
+
+def _load_workspace_agents_prompt(thread_id: str, user_id: str) -> str:
+    prompt_file = sandbox_workspace_agents_prompt_file(thread_id, user_id)
+    try:
+        with prompt_file.open("rb") as buffer:
+            content = buffer.read(WORKSPACE_AGENTS_PROMPT_MAX_BYTES + 1)
+    except FileNotFoundError:
+        return ""
+    except IsADirectoryError:
+        logger.warning("读取工作区 AGENTS.md 失败: 路径是目录")
+        return ""
+    except OSError as exc:
+        logger.warning(f"读取工作区 AGENTS.md 失败: {exc}")
+        return ""
+
+    prompt = content[:WORKSPACE_AGENTS_PROMPT_MAX_BYTES].decode("utf-8", errors="replace").strip()
+    if not prompt:
+        return ""
+    if len(content) > WORKSPACE_AGENTS_PROMPT_MAX_BYTES:
+        return f"{prompt}\n\n[AGENTS.md 内容已截断]"
+    return prompt
+
+
+async def _build_agent_input_context(agent_config: dict, *, thread_id: str, user_id: str) -> dict:
+    input_context = dict(agent_config or {})
+    agents_prompt = await asyncio.to_thread(_load_workspace_agents_prompt, thread_id, user_id)
+
+    if agents_prompt:
+        agents_section = f"用户工作区 agents/AGENTS.md 内容：\n{agents_prompt}"
+        base_prompt = str(input_context.get("system_prompt") or "").rstrip()
+        input_context["system_prompt"] = f"{base_prompt}\n\n{agents_section}" if base_prompt else agents_section
+
+    input_context.update({"user_id": user_id, "thread_id": thread_id})
+    return input_context
 
 
 def _build_state_files(attachments: list[dict]) -> dict:
@@ -245,28 +283,23 @@ async def save_messages_from_langgraph_state(
     config_dict: dict,
     trace_info: dict[str, Any] | None = None,
 ) -> None:
-    try:
-        messages = await _get_langgraph_messages(agent_instance, config_dict)
-        if messages is None:
-            return
+    messages = await _get_langgraph_messages(agent_instance, config_dict)
+    if messages is None:
+        return
 
-        existing_ids = await _get_existing_message_ids(conv_repo, thread_id)
+    existing_ids = await _get_existing_message_ids(conv_repo, thread_id)
 
-        for msg in messages:
-            msg_dict = msg.model_dump() if hasattr(msg, "model_dump") else {}
-            msg_type = msg_dict.get("type", "unknown")
+    for msg in messages:
+        msg_dict = msg.model_dump() if hasattr(msg, "model_dump") else {}
+        msg_type = msg_dict.get("type", "unknown")
 
-            if msg_type == "human" or getattr(msg, "id", None) in existing_ids:
-                continue
+        if msg_type == "human" or getattr(msg, "id", None) in existing_ids:
+            continue
 
-            if msg_type == "ai":
-                await _save_ai_message(conv_repo, thread_id, msg_dict, trace_info=trace_info)
-            elif msg_type == "tool":
-                await _save_tool_message(conv_repo, msg_dict)
-
-    except Exception as e:
-        logger.error(f"Error saving messages from LangGraph state: {e}")
-        logger.error(traceback.format_exc())
+        if msg_type == "ai":
+            await _save_ai_message(conv_repo, thread_id, msg_dict, trace_info=trace_info)
+        elif msg_type == "tool":
+            await _save_tool_message(conv_repo, msg_dict)
 
 
 def _extract_interrupt_info(state) -> Any | None:
@@ -565,7 +598,7 @@ async def agent_chat(
         thread_id = str(uuid.uuid4())
         logger.warning(f"No thread_id provided, generated new thread_id: {thread_id}")
 
-    input_context = agent_config | {"user_id": user_id, "thread_id": thread_id}
+    input_context = await _build_agent_input_context(agent_config, thread_id=thread_id, user_id=user_id)
     langfuse_run = _build_langfuse_run_context(
         current_user=current_user,
         thread_id=thread_id,
@@ -648,13 +681,23 @@ async def agent_chat(
         except Exception:
             agent_state = {}
 
-        await save_messages_from_langgraph_state(
-            agent_instance=agent,
-            thread_id=thread_id,
-            conv_repo=conv_repo,
-            config_dict=langgraph_config,
-            trace_info=trace_info,
-        )
+        try:
+            await save_messages_from_langgraph_state(
+                agent_instance=agent,
+                thread_id=thread_id,
+                conv_repo=conv_repo,
+                config_dict=langgraph_config,
+                trace_info=trace_info,
+            )
+        except Exception as e:
+            logger.error(f"Error saving messages from LangGraph state: {e}")
+            logger.error(traceback.format_exc())
+            return {
+                "status": "error",
+                "error_type": "save_message_error",
+                "error_message": f"消息保存失败: {e}",
+                "request_id": meta.get("request_id"),
+            }
 
         return {
             "status": "finished",
@@ -771,7 +814,7 @@ async def stream_agent_chat(
         thread_id = str(uuid.uuid4())
         logger.warning(f"No thread_id provided, generated new thread_id: {thread_id}")
 
-    input_context = agent_config | {"user_id": user_id, "thread_id": thread_id}
+    input_context = await _build_agent_input_context(agent_config, thread_id=thread_id, user_id=user_id)
     langfuse_run = _build_langfuse_run_context(
         current_user=current_user,
         thread_id=thread_id,
@@ -895,13 +938,18 @@ async def stream_agent_chat(
             yield make_chunk(status="agent_state", agent_state=agent_state, meta=meta)
 
         # 先存储数据库，再返回 finished，避免前端查询时数据未落库
-        await save_messages_from_langgraph_state(
-            agent_instance=agent,
-            thread_id=thread_id,
-            conv_repo=conv_repo,
-            config_dict=langgraph_config,
-            trace_info=trace_info,
-        )
+        try:
+            await save_messages_from_langgraph_state(
+                agent_instance=agent,
+                thread_id=thread_id,
+                conv_repo=conv_repo,
+                config_dict=langgraph_config,
+                trace_info=trace_info,
+            )
+        except Exception as e:
+            logger.error(f"Error saving messages from LangGraph state: {e}")
+            logger.error(traceback.format_exc())
+            yield make_chunk(status="warning", message=f"消息保存失败: {e}", meta=meta)
 
         yield make_chunk(status="finished", meta=meta)
 
@@ -1001,8 +1049,7 @@ async def stream_agent_resume(
         return
 
     context = agent.context_schema()
-    context.update(agent_config or {})
-    context.update({"user_id": user_id, "thread_id": thread_id})
+    context.update(await _build_agent_input_context(agent_config or {}, thread_id=thread_id, user_id=user_id))
     graph = await agent.get_graph(context=context)
     langfuse_run = _build_langfuse_run_context(
         current_user=current_user,
@@ -1066,13 +1113,18 @@ async def stream_agent_resume(
 
         # 先存储数据库，再返回 finished，避免前端查询时数据未落库
         conv_repo = ConversationRepository(db)
-        await save_messages_from_langgraph_state(
-            agent_instance=agent,
-            thread_id=thread_id,
-            conv_repo=conv_repo,
-            config_dict=langgraph_config,
-            trace_info=trace_info,
-        )
+        try:
+            await save_messages_from_langgraph_state(
+                agent_instance=agent,
+                thread_id=thread_id,
+                conv_repo=conv_repo,
+                config_dict=langgraph_config,
+                trace_info=trace_info,
+            )
+        except Exception as e:
+            logger.error(f"Error saving messages from LangGraph state: {e}")
+            logger.error(traceback.format_exc())
+            yield make_resume_chunk(status="warning", message=f"消息保存失败: {e}", meta=meta)
 
         yield make_resume_chunk(status="finished", meta=meta)
 

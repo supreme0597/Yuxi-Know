@@ -57,11 +57,7 @@
             />
             <!-- 统一显示所有配置项 -->
             <template v-for="(value, key) in filteredConfigurableItems" :key="key">
-              <a-form-item
-                :label="getConfigLabel(key, value)"
-                :name="key"
-                class="config-item"
-              >
+              <a-form-item :label="getConfigLabel(key, value)" :name="key" class="config-item">
                 <p v-if="value.description" class="config-description">{{ value.description }}</p>
 
                 <!-- <div>{{ value }}</div> -->
@@ -828,6 +824,9 @@ const handleModelChange = (key, spec) => {
 // 多选相关方法
 const ensureArray = (key) => {
   const config = agentConfig.value || {}
+  if (config[key] === null && configurableItems.value[key]?.template_metadata?.kind === 'knowledges') {
+    return getConfigOptions(configurableItems.value[key]).map((option) => getOptionValue(option))
+  }
   if (!config[key] || !Array.isArray(config[key])) {
     return []
   }
@@ -895,8 +894,7 @@ const openSelectionModal = async (key) => {
   if (configurableItems.value[key]?.template_metadata?.kind === 'subagents') {
     await loadSubagentOptions()
   }
-  const currentValues = agentConfig.value[key] || []
-  tempSelectedValues.value = [...currentValues]
+  tempSelectedValues.value = [...ensureArray(key)]
   selectionModalOpen.value = true
 }
 
@@ -1067,7 +1065,7 @@ const confirmDeleteConfig = async () => {
   flex-shrink: 0;
 
   &.open {
-    width: 400px;
+    width: 360px;
   }
 
   .sidebar-header {
@@ -1078,7 +1076,7 @@ const confirmDeleteConfig = async () => {
     border-bottom: 1px solid var(--gray-150);
     background: var(--gray-0);
     flex-shrink: 0;
-    min-width: 400px;
+    min-width: 360px;
     z-index: 10;
 
     .header-top-row {
@@ -1154,7 +1152,7 @@ const confirmDeleteConfig = async () => {
     flex: 1;
     overflow-y: auto;
     padding: 10px 12px 8px;
-    min-width: 400px;
+    min-width: 360px;
 
     .agent-info {
       .agent-basic-info {

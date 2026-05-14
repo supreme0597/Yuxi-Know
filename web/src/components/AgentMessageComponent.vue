@@ -38,17 +38,7 @@
       </div>
 
       <!-- 消息内容 -->
-      <MdPreview
-        v-if="parsedData.content"
-        ref="editorRef"
-        editorId="preview-only"
-        :theme="theme"
-        previewTheme="github"
-        :showCodeRowNumber="false"
-        :modelValue="parsedData.content"
-        :key="message.id"
-        class="message-md"
-      />
+      <MarkdownPreview v-if="parsedData.content" :key="message.id" :content="parsedData.content" class="message-md" />
 
       <div v-else-if="parsedData.reasoning_content" class="empty-block"></div>
 
@@ -107,14 +97,11 @@ import { CaretRightOutlined } from '@ant-design/icons-vue'
 import RefsComponent from '@/components/RefsComponent.vue'
 import { Copy, Check } from 'lucide-vue-next'
 import ToolCallsGroupComponent from '@/components/ToolCallsGroupComponent.vue'
+import MarkdownPreview from '@/components/common/MarkdownPreview.vue'
 import { useAgentStore } from '@/stores/agent'
 import { useInfoStore } from '@/stores/info'
-import { useThemeStore } from '@/stores/theme'
 import { storeToRefs } from 'pinia'
 import { MessageProcessor } from '@/utils/messageProcessor'
-
-import { MdPreview } from 'md-editor-v3'
-import 'md-editor-v3/lib/preview.css'
 
 const props = defineProps({
   // 消息角色：'user'|'assistant'|'sent'|'received'
@@ -152,8 +139,6 @@ const props = defineProps({
     default: false
   }
 })
-
-const editorRef = ref()
 
 const emit = defineEmits(['retry', 'retryStoppedMessage', 'openRefs'])
 
@@ -226,8 +211,6 @@ const getErrorMessage = computed(() => {
 const agentStore = useAgentStore()
 const { availableKnowledgeBases } = storeToRefs(agentStore)
 const infoStore = useInfoStore()
-const themeStore = useThemeStore()
-
 // 提取消息来源
 const messageSources = computed(() => {
   if (props.message.type === 'ai') {
@@ -235,9 +218,6 @@ const messageSources = computed(() => {
   }
   return { knowledgeChunks: [], webSources: [] }
 })
-
-// 主题设置 - 根据系统主题动态切换
-const theme = computed(() => (themeStore.isDark ? 'dark' : 'light'))
 
 // 过滤有效的工具调用
 const validToolCalls = computed(() => {
@@ -285,6 +265,7 @@ const parsedData = computed(() => {
     reasoning_content
   }
 })
+
 </script>
 
 <style lang="less" scoped>
@@ -549,230 +530,8 @@ const parsedData = computed(() => {
     object-fit: contain;
   }
 }
-</style>
 
-<style lang="less" scoped>
-:deep(.message-md) {
-  margin: 8px 0;
-}
-
-:deep(.message-md .md-editor-preview-wrapper) {
-  max-width: 100%;
-  padding: 0;
-  font-family:
-    -apple-system, BlinkMacSystemFont, 'Noto Sans SC', 'PingFang SC', 'Noto Sans SC',
-    'Microsoft YaHei', 'Hiragino Sans GB', 'Source Han Sans CN', 'Courier New', monospace;
-
-  #preview-only-preview {
-    font-size: 1rem;
-    line-height: 1.75;
-    color: var(--gray-1000);
+  .message-md {
+    margin: 8px 0;
   }
-
-  h1,
-  h2 {
-    font-size: 1.2rem;
-  }
-
-  h3,
-  h4 {
-    font-size: 1.1rem;
-  }
-
-  h5,
-  h6 {
-    font-size: 1rem;
-  }
-
-  strong {
-    font-weight: 500;
-  }
-
-  li > p,
-  ol > p,
-  ul > p {
-    margin: 0.25rem 0;
-  }
-
-  ul li::marker,
-  ol li::marker {
-    color: var(--main-bright);
-  }
-
-  ul,
-  ol {
-    padding-left: 1.625rem;
-  }
-
-  cite {
-    font-size: 12px;
-    color: var(--gray-800);
-    font-style: normal;
-    background-color: var(--gray-200);
-    border-radius: 4px;
-    outline: 2px solid var(--gray-200);
-    padding: 0rem 0.25rem;
-    margin-left: 4px;
-    cursor: pointer;
-    user-select: none;
-    position: relative;
-
-    &:hover::after {
-      content: attr(source);
-      position: absolute;
-      bottom: calc(100% + 6px);
-      left: 50%;
-      transform: translateX(-50%);
-      padding: 8px 12px;
-      background-color: #222;
-      color: #fff;
-      font-size: 13px;
-      line-height: 1.5;
-      border-radius: 6px;
-      min-width: 100px;
-      max-width: 400px;
-      width: max-content;
-      white-space: normal;
-      word-break: break-word;
-      z-index: 1000;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-      pointer-events: none;
-      text-align: center;
-    }
-
-    &:hover::before {
-      content: '';
-      position: absolute;
-      bottom: 100%;
-      left: 50%;
-      transform: translateX(-50%);
-      border: 5px solid transparent;
-      border-top-color: var(--gray-900);
-      z-index: 1000;
-    }
-  }
-
-  a {
-    color: var(--main-700);
-  }
-
-  .md-editor-code {
-    border: var(--gray-50);
-    border-radius: 8px;
-
-    .md-editor-code-head {
-      background-color: var(--gray-50);
-      z-index: 1;
-
-      .md-editor-collapse-tips {
-        color: var(--gray-400);
-      }
-    }
-  }
-
-  code {
-    font-size: 13px;
-    font-family:
-      'Menlo', 'Monaco', 'Consolas', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei',
-      'Hiragino Sans GB', 'Source Han Sans CN', 'Courier New', monospace;
-    line-height: 1.5;
-    letter-spacing: 0.025em;
-    tab-size: 4;
-    -moz-tab-size: 4;
-    background-color: var(--gray-25);
-  }
-
-  p:last-child {
-    margin-bottom: 0;
-  }
-
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    margin: 2em 0;
-    font-size: 15px;
-    display: table;
-    outline: 1px solid var(--gray-100);
-    outline-offset: 14px;
-    border-radius: 12px;
-
-    thead tr th {
-      padding-top: 0;
-    }
-
-    thead th,
-    tbody th {
-      border: none;
-      border-bottom: 1px solid var(--gray-200);
-    }
-
-    tbody tr:last-child td {
-      border-bottom: 1px solid var(--gray-200);
-      border: none;
-      padding-bottom: 0;
-    }
-  }
-
-  th,
-  td {
-    padding: 0.5rem 0rem;
-    text-align: left;
-    border: none;
-  }
-
-  td {
-    border-bottom: 1px solid var(--gray-100);
-    color: var(--gray-800);
-  }
-
-  th {
-    font-weight: 600;
-    color: var(--gray-800);
-  }
-
-  tr {
-    background-color: var(--gray-0);
-  }
-
-  // tbody tr:last-child td {
-  //   border-bottom: none;
-  // }
-}
-
-:deep(.chat-box.font-smaller #preview-only-preview) {
-  font-size: 14px;
-
-  h1,
-  h2 {
-    font-size: 1.1rem;
-  }
-
-  h3,
-  h4 {
-    font-size: 1rem;
-  }
-}
-
-:deep(.chat-box.font-larger #preview-only-preview) {
-  font-size: 16px;
-
-  h1,
-  h2 {
-    font-size: 1.3rem;
-  }
-
-  h3,
-  h4 {
-    font-size: 1.2rem;
-  }
-
-  h5,
-  h6 {
-    font-size: 1.1rem;
-  }
-
-  code {
-    font-size: 14px;
-  }
-}
 </style>

@@ -76,6 +76,8 @@ const selectItem = (item) => {
   padding-left: 12px;
   margin-left: 2px;
   border-left: 1px solid var(--gray-200);
+  height: 16px;
+  line-height: 16px;
 }
 
 .switcher-item {
@@ -109,11 +111,10 @@ const selectItem = (item) => {
   }
 
   &.active {
-    color: var(--main-700);
-    font-weight: 600;
-    background-color: var(--main-50);
-    border-color: var(--main-200);
-    box-shadow: 0 1px 2px rgba(1, 21, 31, 0.06);
+    color: var(--main-color);
+    background-color: color-mix(in srgb, var(--main-color) 6%, var(--gray-0));
+    border-color: transparent;
+    position: relative;
   }
 }
 </style>

@@ -32,6 +32,7 @@ from yuxi.utils.datetime_utils import utc_isoformat
 MILVUS_AVAILABLE = True
 CONTENT_SPARSE_FIELD = "content_sparse"
 CONTENT_ANALYZER_PARAMS = {"type": "chinese"}
+VECTOR_METRIC_TYPE = "COSINE"
 
 
 class MilvusKB(KnowledgeBase):
@@ -189,7 +190,7 @@ class MilvusKB(KnowledgeBase):
         collection = Collection(name=collection_name, schema=schema, using=self.connection_alias)
 
         # 创建索引
-        index_params = {"metric_type": "COSINE", "index_type": "IVF_FLAT", "params": {"nlist": 1024}}
+        index_params = {"metric_type": VECTOR_METRIC_TYPE, "index_type": "IVF_FLAT", "params": {"nlist": 1024}}
         collection.create_index("embedding", index_params)
         sparse_index_params = {
             "metric_type": "BM25",
@@ -284,7 +285,9 @@ class MilvusKB(KnowledgeBase):
         """将文本分割成块"""
         return chunk_markdown(text, file_id, filename, params)
 
-    async def index_file(self, db_id: str, file_id: str, operator_id: str | None = None) -> dict:
+    async def index_file(
+        self, db_id: str, file_id: str, operator_id: str | None = None, params: dict | None = None
+    ) -> dict:
         """
         Index parsed file (Status: INDEXING -> INDEXED/ERROR_INDEXING)
 
@@ -292,6 +295,7 @@ class MilvusKB(KnowledgeBase):
             db_id: Database ID
             file_id: File ID
             operator_id: ID of the user performing the operation
+            params: Override processing params to apply during indexing (merged on top of stored params)
 
         Returns:
             Updated file metadata
@@ -330,6 +334,7 @@ class MilvusKB(KnowledgeBase):
 
             # Check markdown file exists
             if not file_meta.get("markdown_file"):
+                await self._mark_file_unparsed(file_id, operator_id)
                 raise ValueError("File has not been parsed yet (no markdown_file)")
 
             # Clear previous error if any
@@ -342,10 +347,11 @@ class MilvusKB(KnowledgeBase):
             if operator_id:
                 self.files_meta[file_id]["updated_by"] = operator_id
 
-            # Read processing params inside lock to ensure we get the latest values
+            # 将传入的 params 作为 request_params，确保用户指定的参数始终覆盖存储的参数
             params = resolve_chunk_processing_params(
                 kb_additional_params=self.databases_meta.get(db_id, {}).get("metadata"),
                 file_processing_params=file_meta.get("processing_params"),
+                request_params=params,
             )
             self.files_meta[file_id]["processing_params"] = params
             await self._save_metadata()
@@ -567,7 +573,7 @@ class MilvusKB(KnowledgeBase):
             final_top_k = int(merged_kwargs.get("final_top_k", 10))
             final_top_k = max(final_top_k, 1)
             similarity_threshold = float(merged_kwargs.get("similarity_threshold", 0.2))
-            metric_type = merged_kwargs.get("metric_type", "COSINE")
+            metric_type = VECTOR_METRIC_TYPE
             include_distances = bool(merged_kwargs.get("include_distances", True))
             search_mode = str(merged_kwargs.get("search_mode", "vector")).lower()
             if search_mode not in {"vector", "keyword", "hybrid"}:
@@ -610,7 +616,7 @@ class MilvusKB(KnowledgeBase):
 
                 if results and len(results) > 0 and len(results[0]) > 0:
                     for hit in results[0]:
-                        similarity = hit.distance if metric_type == "COSINE" else 1 / (1 + hit.distance)
+                        similarity = hit.distance if metric_type == VECTOR_METRIC_TYPE else 1 / (1 + hit.distance)
                         if similarity < similarity_threshold:
                             continue
 
@@ -932,18 +938,6 @@ class MilvusKB(KnowledgeBase):
                 "type": "boolean",
                 "default": True,
                 "description": "在结果中显示相似度分数",
-            },
-            {
-                "key": "metric_type",
-                "label": "距离度量类型",
-                "type": "select",
-                "default": "COSINE",
-                "options": [
-                    {"value": "COSINE", "label": "余弦相似度", "description": "适合文本语义相似度"},
-                    {"value": "L2", "label": "欧几里得距离", "description": "适合数值型数据"},
-                    {"value": "IP", "label": "内积", "description": "适合标准化向量"},
-                ],
-                "description": "向量相似度计算方法",
             },
             {
                 "key": "use_reranker",

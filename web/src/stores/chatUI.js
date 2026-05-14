@@ -3,12 +3,7 @@ import { ref } from 'vue'
 
 export const useChatUIStore = defineStore('chatUI', () => {
   // ==================== 聊天界面 UI 状态 ====================
-  // 对话列表侧边栏状态
-  const isSidebarOpen = ref(localStorage.getItem('chat_sidebar_open') !== 'false')
-
   // 加载状态
-  const creatingNewChat = ref(false)
-  const isLoadingThreads = ref(false)
   const isLoadingMessages = ref(false)
 
   // ==================== AgentView UI 状态 ====================
@@ -18,19 +13,14 @@ export const useChatUIStore = defineStore('chatUI', () => {
   // 配置侧边栏
   const isConfigSidebarOpen = ref(false)
 
+  // 应用侧边栏折叠态
+  const sidebarCollapsed = ref(false)
+
   // 更多菜单
   const moreMenuOpen = ref(false)
   const moreMenuPosition = ref({ x: 0, y: 0 })
 
   // ==================== 方法 ====================
-  /**
-   * 切换对话列表侧边栏
-   */
-  function toggleSidebar() {
-    isSidebarOpen.value = !isSidebarOpen.value
-    localStorage.setItem('chat_sidebar_open', String(isSidebarOpen.value))
-  }
-
   /**
    * 打开更多菜单
    * @param {number} x - X 坐标
@@ -52,8 +42,6 @@ export const useChatUIStore = defineStore('chatUI', () => {
    * 重置所有 UI 状态（不包括持久化状态）
    */
   function reset() {
-    creatingNewChat.value = false
-    isLoadingThreads.value = false
     isLoadingMessages.value = false
     agentModalOpen.value = false
     isConfigSidebarOpen.value = false
@@ -63,19 +51,22 @@ export const useChatUIStore = defineStore('chatUI', () => {
 
   return {
     // 状态
-    isSidebarOpen,
-    creatingNewChat,
-    isLoadingThreads,
     isLoadingMessages,
     agentModalOpen,
     isConfigSidebarOpen,
+    sidebarCollapsed,
     moreMenuOpen,
     moreMenuPosition,
 
     // 方法
-    toggleSidebar,
     openMoreMenu,
     closeMoreMenu,
     reset
+  }
+}, {
+  persist: {
+    key: 'chat-ui-store',
+    storage: localStorage,
+    pick: ['sidebarCollapsed']
   }
 })
