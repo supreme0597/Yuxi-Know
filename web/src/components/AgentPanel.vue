@@ -124,6 +124,9 @@ import {
   getViewerFileContent,
   getViewerFileSystemTree
 } from '@/apis/viewer_filesystem'
+import { useChatUIStore } from '@/stores/chatUI'
+
+const chatUIStore = useChatUIStore()
 
 const props = defineProps({
   agentState: {
@@ -358,14 +361,24 @@ const revokeCurrentPreviewUrl = () => {
   }
 }
 
-const onFileSelect = async (nextSelectedKeys, { node }) => {
-  selectedKeys.value = nextSelectedKeys
-  if (!node?.isLeaf || !props.threadId) return
+const previewFileByPath = async (filePath) => {
+  if (!filePath || !props.threadId) return
+
+  // 自动将当前选中的节点设为对应的文件路径，联动高亮左侧文件树
+  selectedKeys.value = [filePath]
 
   revokeCurrentPreviewUrl()
-  currentFilePath.value = node.key
+  currentFilePath.value = filePath
+
+  const fileName = filePath.split('/').pop() || filePath
+  const fileData = {
+    path: filePath,
+    name: fileName,
+    type: 'file'
+  }
+
   currentFile.value = {
-    ...node.fileData,
+    ...fileData,
     content: 'Loading...',
     supported: true,
     previewType: 'text',
@@ -377,7 +390,7 @@ const onFileSelect = async (nextSelectedKeys, { node }) => {
   try {
     const res = await getViewerFileContent(
       props.threadId,
-      node.key,
+      filePath,
       props.agentId,
       props.agentConfigId
     )
@@ -387,7 +400,7 @@ const onFileSelect = async (nextSelectedKeys, { node }) => {
     if ((previewType === 'image' || previewType === 'pdf') && res?.supported) {
       const response = await downloadViewerFile(
         props.threadId,
-        node.key,
+        filePath,
         props.agentId,
         props.agentConfigId
       )
@@ -396,7 +409,7 @@ const onFileSelect = async (nextSelectedKeys, { node }) => {
     }
 
     currentFile.value = {
-      ...node.fileData,
+      ...fileData,
       content: res?.content ?? '',
       supported: res?.supported !== false,
       previewType,
@@ -405,7 +418,7 @@ const onFileSelect = async (nextSelectedKeys, { node }) => {
     }
   } catch (error) {
     currentFile.value = {
-      ...node.fileData,
+      ...fileData,
       content: `Error loading file: ${error?.message || 'unknown error'}`,
       supported: false,
       previewType: 'unsupported',
@@ -413,6 +426,18 @@ const onFileSelect = async (nextSelectedKeys, { node }) => {
       previewUrl: ''
     }
   }
+}
+
+const onFileSelect = async (nextSelectedKeys, { node }) => {
+  selectedKeys.value = nextSelectedKeys
+  if (!node?.isLeaf || !props.threadId) {
+    if (nextSelectedKeys.length === 0) {
+      closePreview()
+    }
+    return
+  }
+
+  await previewFileByPath(node.key)
 }
 
 const closePreview = () => {
@@ -605,6 +630,16 @@ watch(useInlinePreview, (isInline) => {
 
   modalVisible.value = !isInline
 })
+
+watch(
+  () => chatUIStore.previewFileTriggerTime,
+  (newVal) => {
+    if (newVal && chatUIStore.previewFilePath) {
+      previewFileByPath(chatUIStore.previewFilePath)
+    }
+  },
+  { immediate: true }
+)
 </script>
 
 <style scoped lang="less">

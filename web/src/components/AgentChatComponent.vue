@@ -443,6 +443,16 @@ watch(hasAgentStateContent, (newVal, oldVal) => {
     isAgentPanelOpen.value = true
   }
 })
+
+// 监听全局文件系统预览信号，如果点击了文件药丸但工作台未开启，则自动强制开启工作台
+watch(
+  () => chatUIStore.previewFileTriggerTime,
+  (newVal) => {
+    if (newVal && !isAgentPanelOpen.value) {
+      isAgentPanelOpen.value = true
+    }
+  }
+)
 const { mentionConfig } = useAgentMentionConfig({
   currentAgentState,
   currentThreadAttachments,
