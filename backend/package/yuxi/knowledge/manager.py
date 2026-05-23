@@ -62,6 +62,9 @@ class KnowledgeBaseManager:
 
             # 为每种使用中的知识库类型创建实例并加载元数据
             for kb_type in kb_types_in_use:
+                if not KnowledgeBaseFactory.is_type_supported(kb_type):
+                    logger.warning(f"[InitializeKB] Skip initialization for unsupported knowledge base type: {kb_type}")
+                    continue
                 try:
                     kb_instance = self._get_or_create_kb_instance(kb_type)
                     # 让 KB 实例自行加载元数据
@@ -180,6 +183,9 @@ class KnowledgeBaseManager:
         metadata_reloaded_types: set[str] = set()
         for row in rows:
             kb_type = row.kb_type or "lightrag"
+            if not KnowledgeBaseFactory.is_type_supported(kb_type):
+                logger.warning(f"Skip database {row.db_id} due to unsupported knowledge base type: {kb_type}")
+                continue
             kb_instance = self._get_or_create_kb_instance(kb_type)
             db_info = kb_instance.get_database_info(row.db_id, include_files=False)
             if not db_info and kb_type not in metadata_reloaded_types:
