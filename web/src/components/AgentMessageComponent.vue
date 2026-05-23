@@ -168,6 +168,7 @@ import ToolCallsGroupComponent from '@/components/ToolCallsGroupComponent.vue'
 import MarkdownPreview from '@/components/common/MarkdownPreview.vue'
 import { useAgentStore } from '@/stores/agent'
 import { useInfoStore } from '@/stores/info'
+import { useChatUIStore } from '@/stores/chatUI'
 import { storeToRefs } from 'pinia'
 import { MessageProcessor } from '@/utils/messageProcessor'
 
@@ -266,8 +267,8 @@ const initStickyObserver = () => {
         },
         {
           root: scrollContainer,
-          rootMargin: '-12px 0px 0px 0px',
-          threshold: [0.99, 1.0]
+          rootMargin: '-13px 0px 0px 0px',
+          threshold: [1.0]
         }
       )
       stickyObserver.observe(messageRef.value)
@@ -366,6 +367,22 @@ const getErrorMessage = computed(() => {
 const agentStore = useAgentStore()
 const { availableKnowledgeBases } = storeToRefs(agentStore)
 const infoStore = useInfoStore()
+const chatUIStore = useChatUIStore()
+
+/**
+ * 消息内提及药丸点击事件代理处理器
+ * @param {MouseEvent} e 鼠标点击事件
+ */
+const handleMessageClick = (e) => {
+  const filePill = e.target.closest('.mention-pill.file-pill')
+  if (filePill) {
+    const filePath = filePill.getAttribute('data-value')
+    if (filePath) {
+      chatUIStore.triggerFilePreview(filePath)
+    }
+  }
+}
+
 // 提取消息来源
 const messageSources = computed(() => {
   if (props.message.type === 'ai') {
@@ -447,6 +464,7 @@ const parsedData = computed(() => {
     align-self: flex-end;
     border-radius: 0.5rem;
     padding: 0.5rem 1rem;
+    transition: padding 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), backdrop-filter 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
     // 原地吸顶悬浮
     position: sticky;
@@ -498,14 +516,14 @@ const parsedData = computed(() => {
     }
   }
 
+  // 历史消息气泡提及药丸精致流式样式 (引入共享 Less 模块，开启暗色自适应与只读展示)
+  @import '@/assets/css/mention-pill.less';
+
   .message-copy-btn {
     cursor: pointer;
     color: var(--gray-400);
     transition: all 0.2s ease;
   }
-
-  // 历史消息气泡提及药丸精致流式样式 (引入共享 Less 模块，开启暗色自适应与只读展示)
-  @import '@/assets/css/mention-pill.less';
 
   .human-message-wrapper {
     position: relative;
@@ -517,7 +535,8 @@ const parsedData = computed(() => {
     .message-text {
       flex: 1;
       min-width: 0;
-      transition: max-height 0.3s ease;
+      max-height: 400px; // 显式给定初始最大高度，彻底激活 CSS max-height transition
+      transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     // 绝对定位在气泡外部右下角的动作条 (彻底移出淡蓝色框外)
