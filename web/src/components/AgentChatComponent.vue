@@ -27,15 +27,15 @@
           <div class="chat-box">
             <!-- 动态悬浮提问条（复用用户气泡底色和所有药丸、文字规范，且天然完美居中对齐） -->
             <transition name="fade-slide">
-              <div
-                v-if="stickyUserMessage"
-                class="sticky-user-query-bar"
-              >
+              <div v-if="stickyUserMessage" class="sticky-user-query-bar">
                 <div
                   class="sticky-query-content message-box human"
                   @click="scrollToQuery(stickyUserMessage.id)"
                 >
-                  <span class="query-text" v-html="renderUserMessage(stickyUserMessage.content)"></span>
+                  <span
+                    class="query-text"
+                    v-html="renderUserMessage(stickyUserMessage.content)"
+                  ></span>
                   <div class="query-action-hint">
                     <ChevronUp size="14" />
                     <span>返回提问</span>
@@ -460,7 +460,6 @@ const currentTodos = computed(() => {
   return Array.isArray(todos) ? todos : []
 })
 
-
 const { mentionConfig } = useAgentMentionConfig({
   currentAgentState,
   currentThreadAttachments,
@@ -871,7 +870,9 @@ const handleChatScroll = (e) => {
         for (const conv of conversations.value) {
           // 关键修复：后端消息 id 可能是数字类型，而 getAttribute('data-msg-id') 获取的永远是字符串类型。
           // 必须将两边都统一强转为 String 之后再进行比对，以杜绝类型不一致导致严格比对失败的 Bug！
-          const matched = conv.messages.find(m => String(m.id) === String(msgId) && m.type === 'human')
+          const matched = conv.messages.find(
+            (m) => String(m.id) === String(msgId) && m.type === 'human'
+          )
           if (matched) {
             foundMsg = matched
             break
@@ -1708,10 +1709,10 @@ const hasVisibleAssistantBody = (message) => {
   const { content, reasoningContent } = extractAssistantMessageBody(message)
   return Boolean(
     content ||
-      reasoningContent ||
-      message.error_type ||
-      message.extra_metadata?.error_type ||
-      message.isStoppedByUser
+    reasoningContent ||
+    message.error_type ||
+    message.extra_metadata?.error_type ||
+    message.isStoppedByUser
   )
 }
 
@@ -2478,14 +2479,15 @@ watch(currentChatId, (threadId, oldThreadId) => {
     justify-content: space-between;
     align-items: center;
     cursor: pointer;
-    
+
     // 完美复用系统原生用户气泡底色和文字配色
     background: var(--main-50) !important;
     border: 1px solid var(--main-100) !important;
     border-radius: 12px !important;
     padding: 10px 16px;
-    box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.08),
-                0 1px 3px rgba(0, 0, 0, 0.02) !important;
+    box-shadow:
+      0 10px 30px -10px rgba(0, 0, 0, 0.08),
+      0 1px 3px rgba(0, 0, 0, 0.02) !important;
     color: var(--gray-1000) !important;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
@@ -2503,7 +2505,7 @@ watch(currentChatId, (threadId, oldThreadId) => {
     &:hover {
       transform: translateY(-1px); /* 悬浮时微弱上移，更有质感 */
       box-shadow: 0 12px 36px -8px rgba(0, 0, 0, 0.12) !important;
-      
+
       .dark &,
       [data-theme='dark'] & {
         box-shadow: 0 16px 48px -10px rgba(0, 0, 0, 0.5) !important;
@@ -2537,7 +2539,7 @@ watch(currentChatId, (threadId, oldThreadId) => {
     flex-shrink: 0;
     margin-left: 12px;
     transition: all 0.2s ease;
-    
+
     .dark &,
     [data-theme='dark'] & {
       background: rgba(0, 0, 0, 0.2) !important;
@@ -2548,7 +2550,7 @@ watch(currentChatId, (threadId, oldThreadId) => {
     &:hover {
       background: rgba(255, 255, 255, 0.5) !important;
       color: var(--main-800) !important;
-      
+
       .dark &,
       [data-theme='dark'] & {
         background: rgba(255, 255, 255, 0.1) !important;

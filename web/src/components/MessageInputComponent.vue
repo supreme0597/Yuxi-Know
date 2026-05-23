@@ -197,7 +197,6 @@ import { searchMentionFiles } from '@/apis/mention_api'
 import { getFileIcon, getFileIconColor } from '@/utils/file_utils'
 import { useChatUIStore } from '@/stores/chatUI'
 import {
-  getMentionIconSvg,
   splitTextByQuery,
   formatMentionPath,
   formatMentionToken,
@@ -316,8 +315,8 @@ const checkMentionTrigger = () => {
   // 确保当前光标聚焦在我们的输入框内部
   if (!inputRef.value || !inputRef.value.contains(range.startContainer)) return false
 
-  let textBeforeCursor = ''
-  let cursorGlobalIndex = 0
+  let textBeforeCursor
+  let cursorGlobalIndex
   try {
     const tempRange = range.cloneRange()
     tempRange.setStart(inputRef.value, 0)
@@ -732,12 +731,6 @@ const getIcon = computed(() => {
   return iconComponents[props.sendIcon] || ArrowUpOutlined
 })
 
-// 创建本地引用以进行双向绑定
-const inputValue = computed({
-  get: () => props.modelValue,
-  set: (val) => emit('update:modelValue', val)
-})
-
 // 发送前内容序列化拦截：将富文本 DOM 翻译为后端可以直接消费的带完整绝对路径的纯文本
 const serializeContent = () => {
   if (!inputRef.value) return ''
@@ -840,7 +833,8 @@ const handleKeyUp = (e) => {
   // 1. 如果输入了 @，立刻检测并唤醒提及
   // 2. 如果使用方向键/Home/End 移动了光标，为了与鼠标点击切换光标保持行为一致，也自适应检测
   // 注意：当提及弹窗显示时，ArrowUp 和 ArrowDown 用于列表项的键盘导航，此时输入框光标并未在文本中实质位移，无需重复检测
-  const isCursorMovement = ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key) ||
+  const isCursorMovement =
+    ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key) ||
     (['ArrowUp', 'ArrowDown'].includes(e.key) && !mentionPopupVisible.value)
 
   if (e.key === '@' || isCursorMovement) {
@@ -851,7 +845,7 @@ const handleKeyUp = (e) => {
 }
 
 // 处理输入事件
-const handleInput = (e) => {
+const handleInput = () => {
   // 防呆：如果输入框全空（仅有空白字符且无提及药丸），物理重置 innerHTML 保证 CSS :empty 能够精准唤醒
   if (inputRef.value) {
     const text = inputRef.value.textContent || ''
@@ -881,10 +875,10 @@ const insertTextAtCursor = (text) => {
 
   const range = selection.getRangeAt(0)
   range.deleteContents()
-  
+
   const textNode = document.createTextNode(text)
   range.insertNode(textNode)
-  
+
   // 将光标移到新插入文本的尾部
   range.setStartAfter(textNode)
   range.setEndAfter(textNode)
@@ -905,12 +899,12 @@ const insertFragmentAtCursor = (fragment) => {
 
   const range = selection.getRangeAt(0)
   range.deleteContents()
-  
+
   // 保持对最后一个子节点的引用，以便将光标移到其后面
   const lastChild = fragment.lastChild
-  
+
   range.insertNode(fragment)
-  
+
   if (lastChild) {
     range.setStartAfter(lastChild)
     range.setEndAfter(lastChild)
@@ -925,7 +919,7 @@ const insertFragmentAtCursor = (fragment) => {
 // 处理粘贴事件，智能拦截解析提及文本并转换为药丸 DOM 节点
 const handlePaste = (e) => {
   e.preventDefault()
-  
+
   const clipboardData = e.clipboardData || window.clipboardData
   if (!clipboardData) return
 
@@ -933,7 +927,11 @@ const handlePaste = (e) => {
   const pastedText = clipboardData.getData('text/plain') || ''
 
   // 1. 优先检测 HTML 中是否包含已渲染的提及药丸 DOM (比如从历史消息或输入框复制的内容)
-  const hasPillInHtml = pastedHtml && (pastedHtml.includes('mention-pill') || pastedHtml.includes('data-type=') || pastedHtml.includes('data-value='))
+  const hasPillInHtml =
+    pastedHtml &&
+    (pastedHtml.includes('mention-pill') ||
+      pastedHtml.includes('data-type=') ||
+      pastedHtml.includes('data-value='))
 
   if (hasPillInHtml) {
     try {
@@ -941,14 +939,17 @@ const handlePaste = (e) => {
       insertFragmentAtCursor(fragment)
       return
     } catch (err) {
-      console.warn('Failed to parse pasted HTML containing pills, falling back to text regex parser:', err)
+      console.warn(
+        'Failed to parse pasted HTML containing pills, falling back to text regex parser:',
+        err
+      )
     }
   }
 
   // 2. 兜底纯文本正则提及解析 (如用户从别的文本渠道、AI 的纯文本回复中直接复制的消息)
   if (!pastedText) return
   const mentionRegex = /@(file|knowledge|mcp|skill|subagent):([^\s\n\u00A0]+)/g
-  
+
   // 如果没有任何提及格式，使用纯文本插入，防止富文本格式污染
   if (!pastedText.match(mentionRegex)) {
     insertTextAtCursor(pastedText)
@@ -1002,7 +1003,7 @@ const handleCut = (e) => {
 
     // 物理切除选中的 Range 内容
     range.deleteContents()
-    
+
     // 强制触发输入框重置和 Pinia 全局状态同步
     handleInput()
   } catch (err) {

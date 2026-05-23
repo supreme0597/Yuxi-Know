@@ -6,7 +6,6 @@ import {
   FileWordFilled,
   FileExcelFilled,
   FileImageFilled,
-  FileUnknownFilled,
   FilePptFilled,
   LinkOutlined,
   CodeFilled,
@@ -197,7 +196,7 @@ export const formatFileSize = (bytes) => {
 
 /**
  * 解析 HTTP 响应头 Content-Disposition 中的文件名
- * @param {string} contentDisposition 
+ * @param {string} contentDisposition
  * @returns {string} 文件名
  */
 export const parseDownloadFilename = (contentDisposition) => {
@@ -213,4 +212,3 @@ export const parseDownloadFilename = (contentDisposition) => {
   const asciiMatch = contentDisposition.match(/filename="?([^";]+)"?/i)
   return asciiMatch?.[1] || ''
 }
-
