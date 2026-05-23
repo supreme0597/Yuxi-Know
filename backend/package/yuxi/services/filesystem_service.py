@@ -55,7 +55,25 @@ async def _resolve_filesystem_state(
     agent_config_id: int | None,
 ):
     conv_repo = ConversationRepository(db)
-    conversation = await require_user_conversation(conv_repo, thread_id, str(user.id))
+    try:
+        conversation = await require_user_conversation(conv_repo, thread_id, str(user.id))
+    except HTTPException as exc:
+        if exc.status_code == 404:
+            # 允许对格式合法且未入库的临时 thread_id 放行（新会话未发送首条消息阶段）
+            from yuxi.agents.backends.sandbox.paths import validate_thread_id
+
+            try:
+                validate_thread_id(thread_id)
+            except ValueError as val_err:
+                raise HTTPException(status_code=400, detail="非法的 thread_id 格式") from val_err
+
+            from yuxi.storage.postgres.models_business import Conversation
+
+            conversation = Conversation(
+                thread_id=thread_id, user_id=str(user.id), agent_id=agent_id or "", title="新的对话"
+            )
+        else:
+            raise
 
     runtime_context = await _resolve_filesystem_context(
         db=db,
@@ -85,7 +103,7 @@ async def list_filesystem_entries_view(
 
     normalized_path = (path or "/").strip() or "/"
 
-    _conversation, runtime_context = await _resolve_filesystem_state(
+    _conversation, runtime_context, _ = await _resolve_filesystem_state(
         thread_id=thread_id,
         user=current_user,
         db=db,
@@ -121,7 +139,7 @@ async def read_file_content_view(
 
     normalized_path = path.strip()
 
-    _conversation, runtime_context = await _resolve_filesystem_state(
+    _conversation, runtime_context, _ = await _resolve_filesystem_state(
         thread_id=thread_id,
         user=current_user,
         db=db,

@@ -153,7 +153,7 @@
                 :disabled="!currentAgent"
                 :send-button-disabled="isSendButtonDisabled"
                 :mention="mentionConfig"
-                :thread-id="currentChatId"
+                :thread-id="previewThreadId"
                 :supports-file-upload="supportsFileUpload"
                 :has-active-thread="!!currentChatId"
                 :todos="currentTodos"
@@ -217,7 +217,7 @@
 
         <!-- 全局独立的文件系统预览 Modal -->
         <AgentFilePreviewModal
-          :thread-id="currentChatId"
+          :thread-id="previewThreadId"
           :agent-id="currentThread?.agent_id || currentAgentId"
           :agent-config-id="selectedAgentConfigId"
         />
@@ -392,6 +392,26 @@ const currentAgent = computed(() => {
 })
 const startAgents = computed(() => agents.value || [])
 const currentChatId = computed(() => currentThreadId.value)
+
+const tempThreadId = ref('')
+const generateTempUUID = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `temp-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+tempThreadId.value = generateTempUUID()
+
+watch(currentChatId, (newVal) => {
+  if (!newVal) {
+    tempThreadId.value = generateTempUUID()
+  }
+})
+
+const previewThreadId = computed(() => {
+  return currentChatId.value || tempThreadId.value
+})
 
 const currentThreadAgentName = computed(() => {
   const threadAgentId = currentThread.value?.agent_id
@@ -1624,10 +1644,10 @@ const hasVisibleAssistantBody = (message) => {
   const { content, reasoningContent } = extractAssistantMessageBody(message)
   return Boolean(
     content ||
-      reasoningContent ||
-      message.error_type ||
-      message.extra_metadata?.error_type ||
-      message.isStoppedByUser
+    reasoningContent ||
+    message.error_type ||
+    message.extra_metadata?.error_type ||
+    message.isStoppedByUser
   )
 }
 

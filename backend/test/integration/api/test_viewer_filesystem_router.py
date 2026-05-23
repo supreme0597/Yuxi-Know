@@ -661,3 +661,41 @@ async def test_viewer_rejects_kbs_namespace(test_client, standard_user):
         headers=headers,
     )
     assert download_response.status_code == 400, download_response.text
+
+
+async def test_viewer_file_with_temp_thread_id_success(test_client, standard_user):
+    headers = standard_user["headers"]
+    user_id = str(standard_user["user"]["id"])
+    # 模拟一个没有入库的合法临时 thread_id
+    temp_thread_id = f"temp-test-thread-{uuid.uuid4().hex[:8]}"
+
+    ensure_thread_dirs(temp_thread_id, user_id)
+    actual_path = sandbox_workspace_dir(temp_thread_id, user_id) / "temp_preview_demo.txt"
+    actual_path.write_text("hello temp thread preview", encoding="utf-8")
+    file_path = virtual_path_for_thread_file(temp_thread_id, actual_path, user_id=user_id)
+
+    response = await test_client.get(
+        "/api/viewer/filesystem/file",
+        params={"thread_id": temp_thread_id, "path": file_path},
+        headers=headers,
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["content"] == "hello temp thread preview"
+    assert payload["preview_type"] == "text"
+    assert payload["supported"] is True
+
+
+async def test_viewer_file_with_invalid_temp_thread_id_fails(test_client, standard_user):
+    headers = standard_user["headers"]
+    # 包含特殊字符的非法 thread_id
+    invalid_thread_id = "temp-thread-id-invalid!@#$"
+
+    response = await test_client.get(
+        "/api/viewer/filesystem/file",
+        params={"thread_id": invalid_thread_id, "path": "/home/gem/user-data/workspace/demo.txt"},
+        headers=headers,
+    )
+    assert response.status_code == 400
+    assert "非法的 thread_id 格式" in response.json()["detail"]
+
