@@ -35,7 +35,6 @@
                   <AgentMessageComponent
                     v-if="displayItem.type === 'message'"
                     :message="displayItem.message"
-                    :data-msg-id="displayItem.message.id"
                     :is-processing="isDisplayMessageProcessing(row.conv, displayItem)"
                     :show-refs="showMsgRefs(displayItem.message)"
                     :hide-tool-calls="true"
