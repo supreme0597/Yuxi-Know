@@ -38,6 +38,8 @@
                     :show-refs="showMsgRefs(displayItem.message)"
                     :hide-tool-calls="true"
                     @retry="retryMessage(displayItem.message)"
+                    @undo="handleUndo"
+                    @fork="handleFork"
                   >
                   </AgentMessageComponent>
                   <ToolCallsGroupComponent
@@ -232,6 +234,7 @@ import {
   onDeactivated,
   h
 } from 'vue'
+import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import AgentInputArea from '@/components/AgentInputArea.vue'
 import AgentMessageComponent from '@/components/AgentMessageComponent.vue'
@@ -272,6 +275,7 @@ const agentStore = useAgentStore()
 const chatThreadsStore = useChatThreadsStore()
 const chatUIStore = useChatUIStore()
 const configStore = useConfigStore()
+const router = useRouter()
 const {
   agents,
   selectedAgentId,
@@ -1906,6 +1910,47 @@ watch(currentChatId, (threadId, oldThreadId) => {
   if (threadId === oldThreadId) return
   emit('thread-change', threadId || '')
 })
+
+// ==================== Undo / Fork 时间旅行 ====================
+
+const handleUndo = async (message) => {
+  const threadId = currentChatId.value
+  if (!threadId || !message?.id) return
+
+  try {
+    const result = await threadApi.undoThread(threadId, message.id)
+    message.success('已撤销')
+
+    // 重新加载当前线程的消息历史
+    if (currentAgentId.value) {
+      await fetchThreadMessages({
+        agentId: currentAgentId.value,
+        threadId,
+      })
+      scrollController.scrollToBottom()
+    }
+  } catch (error) {
+    handleChatError(error, 'undo')
+  }
+}
+
+const handleFork = async (message) => {
+  const threadId = currentChatId.value
+  if (!threadId || !message?.id) return
+
+  try {
+    const result = await threadApi.forkThread(threadId, message.id)
+    message.success('已分叉到新会话')
+
+    // 跳转到新会话
+    const newThreadId = result.new_thread_id
+    if (newThreadId) {
+      router.push({ name: 'AgentCompWithThreadId', params: { thread_id: newThreadId } })
+    }
+  } catch (error) {
+    handleChatError(error, 'fork')
+  }
+}
 </script>
 
 <style lang="less" scoped>
