@@ -158,33 +158,36 @@ async def undo_thread(
             .values(thread_id=thread_id_archived)
         )
 
-    # ---- 10. 标记 agent_runs 为 cancelled ----
-    # AgentRun 没有 extra_metadata 列，用 error_message 记录取消原因
-    await db.execute(
-        sa_update(AgentRun)
-        .where(
-            AgentRun.thread_id == thread_id,
-            AgentRun.request_id.in_(
-                select(Message.extra_metadata["request_id"].astext).where(
-                    Message.conversation_id == conv_id,
-                    Message.id >= message_id,
-                )
-            ),
-        )
-        .values(status="cancelled", error_message="cancelled_by_user_undo", updated_at=utc_now_naive())
-    )
-
-    # ---- 11. Python 侧标记消息为逻辑删除 ----
+    # ---- 10. Python 侧标记消息为逻辑删除 ----
     msgs_result = await db.execute(
         select(Message).where(Message.conversation_id == conv_id, Message.id >= message_id)
     )
     msgs_to_delete = msgs_result.scalars().all()
     deleted_message_count = len(msgs_to_delete)
 
+    # 提取要删除消息的 request_id 列表，用于取消 agent_runs
+    request_ids_to_cancel = list({
+        (m.extra_metadata or {}).get("request_id")
+        for m in msgs_to_delete
+        if (m.extra_metadata or {}).get("request_id")
+    })
+
     for msg in msgs_to_delete:
         meta = dict(msg.extra_metadata or {})
         meta["is_deleted"] = "true"
         msg.extra_metadata = meta
+
+    # ---- 11. 标记 agent_runs 为 cancelled ----
+    # AgentRun 没有 extra_metadata 列，用 error_message 记录取消原因
+    if request_ids_to_cancel:
+        await db.execute(
+            sa_update(AgentRun)
+            .where(
+                AgentRun.thread_id == thread_id,
+                AgentRun.request_id.in_(request_ids_to_cancel),
+            )
+            .values(status="cancelled", error_message="cancelled_by_user_undo", updated_at=utc_now_naive())
+        )
 
     # ---- 12. 重新计算会话统计（Python 侧过滤） ----
     all_msgs_result = await db.execute(
