@@ -1917,9 +1917,17 @@ const handleUndo = async (msg) => {
   const threadId = currentChatId.value
   if (!threadId || !msg?.id) return
 
+  // 提取被撤销的用户消息文本，用于回填输入框
+  const undoneContent = msg.content || ''
+
   try {
     const result = await threadApi.undoThread(threadId, msg.id)
     message.success('已撤销')
+
+    // 将被撤销的提示词回填到输入框，方便用户修改后重发
+    if (undoneContent) {
+      userInput.value = undoneContent
+    }
 
     // 重新加载当前线程的消息历史
     if (currentAgentId.value) {
