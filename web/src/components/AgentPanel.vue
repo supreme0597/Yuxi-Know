@@ -130,10 +130,6 @@ const props = defineProps({
     type: Object,
     default: () => ({})
   },
-  threadFiles: {
-    type: Array,
-    default: () => []
-  },
   threadId: {
     type: String,
     default: null
@@ -154,7 +150,7 @@ const props = defineProps({
 
 const emit = defineEmits(['refresh', 'resize', 'resizing'])
 const INLINE_PREVIEW_MIN_WIDTH = 920
-const DEFAULT_EXPANDED_ROOT_DIRECTORY_NAME = 'user-data'
+const DISPLAY_ROOT_DIRECTORY_NAME = 'user-data'
 
 const panelRef = ref(null)
 const modalVisible = ref(false)
@@ -303,12 +299,6 @@ const loadDirectoryChildren = async (directoryPath) => {
   return sortEntries(res?.entries || []).map((entry) => createTreeNode(entry))
 }
 
-const findDefaultExpandedRootNode = (nodes) => {
-  return nodes.find(
-    (node) => !node.isLeaf && buildDisplayName(node.key) === DEFAULT_EXPANDED_ROOT_DIRECTORY_NAME
-  )
-}
-
 const refreshFileSystem = async () => {
   if (!props.threadId) {
     dynamicTreeData.value = []
@@ -327,21 +317,15 @@ const refreshFileSystem = async () => {
       props.agentConfigId
     )
     if (res?.entries) {
-      const rootNodes = sortEntries(res.entries).map((entry) => createTreeNode(entry))
-      const defaultExpandedNode = findDefaultExpandedRootNode(rootNodes)
+      const displayRootEntry = res.entries.find(
+        (entry) => entry?.is_dir && entry.name === DISPLAY_ROOT_DIRECTORY_NAME
+      )
 
-      dynamicTreeData.value = rootNodes
-      expandedKeys.value = defaultExpandedNode ? [defaultExpandedNode.key] : []
+      dynamicTreeData.value = displayRootEntry
+        ? await loadDirectoryChildren(displayRootEntry.path)
+        : []
+      expandedKeys.value = []
       selectedKeys.value = []
-
-      if (defaultExpandedNode) {
-        try {
-          const children = await loadDirectoryChildren(defaultExpandedNode.key)
-          dynamicTreeData.value = updateTreeChildren(rootNodes, defaultExpandedNode.key, children)
-        } catch (error) {
-          console.error('Failed to load default expanded directory', error)
-        }
-      }
     } else {
       dynamicTreeData.value = []
     }
@@ -736,7 +720,6 @@ watch(useInlinePreview, (isInline) => {
   order: 3;
   flex-shrink: 0;
 }
-
 
 .tab-content {
   flex: 1;

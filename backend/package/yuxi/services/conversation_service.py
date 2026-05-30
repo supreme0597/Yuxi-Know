@@ -12,6 +12,7 @@ from yuxi.agents.buildin import agent_manager
 from yuxi.config import config as app_config
 from yuxi.plugins.parser import Parser
 from yuxi.repositories.conversation_repository import ConversationRepository
+from yuxi.services.mention_search_service import invalidate_mention_cache
 from yuxi.services.upload_utils import write_upload_to_path
 from yuxi.utils.datetime_utils import utc_isoformat
 from yuxi.utils.logging_config import logger
@@ -410,6 +411,8 @@ async def upload_thread_attachment_view(
         attachments=all_attachments,
     )
 
+    await invalidate_mention_cache(thread_id)
+
     return serialize_attachment(attachment_record)
 
 
@@ -473,6 +476,8 @@ async def delete_thread_attachment_view(
         agent_id=conversation.agent_id,
         attachments=all_attachments,
     )
+
+    await invalidate_mention_cache(thread_id)
 
     return {"message": "附件已删除"}
 

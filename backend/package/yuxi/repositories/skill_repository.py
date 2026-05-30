@@ -15,8 +15,11 @@ class SkillRepository:
         result = await self.db.execute(select(Skill).order_by(Skill.updated_at.desc(), Skill.id.desc()))
         return list(result.scalars().all())
 
-    async def get_by_slug(self, slug: str) -> Skill | None:
-        result = await self.db.execute(select(Skill).where(Skill.slug == slug))
+    async def get_by_slug(self, slug: str, *, for_update: bool = False) -> Skill | None:
+        stmt = select(Skill).where(Skill.slug == slug)
+        if for_update:
+            stmt = stmt.with_for_update()
+        result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
     async def exists_slug(self, slug: str) -> bool:

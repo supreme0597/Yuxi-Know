@@ -132,7 +132,9 @@ export async function apiRequest(url, options = {}, requiresAuth = true, respons
       return response
     }
   } catch (error) {
-    console.error('API请求错误:', error)
+    if (error.name !== 'AbortError') {
+      console.error('API请求错误:', error)
+    }
     throw error
   }
 }

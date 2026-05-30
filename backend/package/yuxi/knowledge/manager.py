@@ -62,6 +62,9 @@ class KnowledgeBaseManager:
 
             # 为每种使用中的知识库类型创建实例并加载元数据
             for kb_type in kb_types_in_use:
+                if not KnowledgeBaseFactory.is_type_supported(kb_type):
+                    logger.warning(f"[InitializeKB] Skip initialization for unsupported knowledge base type: {kb_type}")
+                    continue
                 try:
                     kb_instance = self._get_or_create_kb_instance(kb_type)
                     # 让 KB 实例自行加载元数据
@@ -180,6 +183,9 @@ class KnowledgeBaseManager:
         metadata_reloaded_types: set[str] = set()
         for row in rows:
             kb_type = row.kb_type or "lightrag"
+            if not KnowledgeBaseFactory.is_type_supported(kb_type):
+                logger.warning(f"Skip database {row.db_id} due to unsupported knowledge base type: {kb_type}")
+                continue
             kb_instance = self._get_or_create_kb_instance(kb_type)
             db_info = kb_instance.get_database_info(row.db_id, include_files=False)
             if not db_info and kb_type not in metadata_reloaded_types:
@@ -498,6 +504,11 @@ class KnowledgeBaseManager:
         """获取文件内容信息（chunks和lines）"""
         kb_instance = await self._get_kb_for_database(db_id)
         return await kb_instance.get_file_content(db_id, file_id)
+
+    async def open_file_content(self, db_id: str, file_id: str, offset: int = 0, limit: int = 800) -> dict:
+        """按行窗口打开文件解析后的 Markdown 内容"""
+        kb_instance = await self._get_kb_for_database(db_id)
+        return await kb_instance.open_file_content(db_id, file_id, offset, limit)
 
     async def get_file_info(self, db_id: str, file_id: str) -> dict:
         """获取文件完整信息（基本信息+内容信息）- 保持向后兼容"""

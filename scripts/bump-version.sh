@@ -45,7 +45,7 @@ if [ ! -f "$PYPROJECT_FILE" ]; then
     exit 1
 fi
 
-CURRENT_VERSION=$(grep -E '^version\s*=\s*"' "$PYPROJECT_FILE" | head -1 | sed -E 's/^version\s*=\s*"([^"]+)".*/\1/')
+CURRENT_VERSION=$(grep -E '^version[[:space:]]*=[[:space:]]*"' "$PYPROJECT_FILE" | head -1 | sed -E 's/^version[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/')
 
 if [ -z "$CURRENT_VERSION" ]; then
     echo "错误: 无法从 ${PYPROJECT_FILE} 读取当前版本号"
@@ -67,6 +67,7 @@ echo "  - docker-compose.prod.yml"
 echo "  - backend/uv.lock"
 if [ "$DEV_MODE" = false ]; then
     echo "  - README.md"
+    echo "  - README.en.md"
     echo "  - docs/intro/quick-start.md"
 fi
 echo ""
@@ -80,32 +81,32 @@ fi
 # 1. 更新 Python 包版本 (backend/package/pyproject.toml)
 # -----------------------------------------------------------------------------
 echo "→ 更新 backend/package/pyproject.toml"
-sed -i -E "s/^version = \"[^\"]+\"/version = \"${NEW_VERSION}\"/" \
+perl -pi -e "s/^version = \"[^\"]+\"/version = \"${NEW_VERSION}\"/" \
     "${PROJECT_ROOT}/backend/package/pyproject.toml"
 
 # -----------------------------------------------------------------------------
 # 2. 更新后端工作区版本 (backend/pyproject.toml)
 # -----------------------------------------------------------------------------
 echo "→ 更新 backend/pyproject.toml"
-sed -i -E "s/^version = \"[^\"]+\"/version = \"${NEW_VERSION}\"/" \
+perl -pi -e "s/^version = \"[^\"]+\"/version = \"${NEW_VERSION}\"/" \
     "${PROJECT_ROOT}/backend/pyproject.toml"
 
 # -----------------------------------------------------------------------------
 # 3. 更新前端版本 (web/package.json)
 # -----------------------------------------------------------------------------
 echo "→ 更新 web/package.json"
-sed -i -E "s/\"version\": \"[^\"]+\"/\"version\": \"${NEW_VERSION}\"/" \
+perl -pi -e "s/\"version\": \"[^\"]+\"/\"version\": \"${NEW_VERSION}\"/" \
     "${PROJECT_ROOT}/web/package.json"
 
 # -----------------------------------------------------------------------------
 # 4. 更新 Docker Compose 镜像标签默认值
 # -----------------------------------------------------------------------------
 echo "→ 更新 docker-compose.yml"
-sed -i -E "s/\\\$\{YUXI_VERSION:-[^}]+\}/\${YUXI_VERSION:-${NEW_VERSION}}/g" \
+perl -pi -e "s/\\\$\\{YUXI_VERSION:-[^}]+\\}/\\\${YUXI_VERSION:-${NEW_VERSION}}/g" \
     "${PROJECT_ROOT}/docker-compose.yml"
 
 echo "→ 更新 docker-compose.prod.yml"
-sed -i -E "s/\\\$\{YUXI_VERSION:-[^}]+\}/\${YUXI_VERSION:-${NEW_VERSION}}/g" \
+perl -pi -e "s/\\\$\\{YUXI_VERSION:-[^}]+\\}/\\\${YUXI_VERSION:-${NEW_VERSION}}/g" \
     "${PROJECT_ROOT}/docker-compose.prod.yml"
 
 # -----------------------------------------------------------------------------
@@ -113,10 +114,10 @@ sed -i -E "s/\\\$\{YUXI_VERSION:-[^}]+\}/\${YUXI_VERSION:-${NEW_VERSION}}/g" \
 # -----------------------------------------------------------------------------
 echo "→ 更新 backend/uv.lock"
 # yuxi 包版本
-sed -i -E "/^name = \"yuxi\"$/{n;s/^version = \"[^\"]+\"/version = \"${NEW_VERSION}\"/;}" \
+perl -0pi -e "s/(^name = \"yuxi\"\nversion = \")[^\"]+/\${1}${NEW_VERSION}/m" \
     "${PROJECT_ROOT}/backend/uv.lock"
 # yuxi-workspace 版本
-sed -i -E "/^name = \"yuxi-workspace\"$/{n;s/^version = \"[^\"]+\"/version = \"${NEW_VERSION}\"/;}" \
+perl -0pi -e "s/(^name = \"yuxi-workspace\"\nversion = \")[^\"]+/\${1}${NEW_VERSION}/m" \
     "${PROJECT_ROOT}/backend/uv.lock"
 
 # -----------------------------------------------------------------------------
@@ -126,14 +127,18 @@ sed -i -E "/^name = \"yuxi-workspace\"$/{n;s/^version = \"[^\"]+\"/version = \"$
 # 发布历史记录（如 [2026/04/01] v0.6.1 版本发布）不修改，保持为历史版本记录
 if [ "$DEV_MODE" = false ]; then
     echo "→ 更新 README.md"
-    sed -i -E "s/(git clone --branch v)[0-9]+\.[0-9]+\.[0-9]+/\1${NEW_VERSION}/g" \
+    perl -pi -e "s/(git clone --branch v)[0-9]+\\.[0-9]+\\.[0-9]+/\${1}${NEW_VERSION}/g" \
         "${PROJECT_ROOT}/README.md"
 
+    echo "→ 更新 README.en.md"
+    perl -pi -e "s/(git clone --branch v)[0-9]+\\.[0-9]+\\.[0-9]+/\${1}${NEW_VERSION}/g" \
+        "${PROJECT_ROOT}/README.en.md"
+
     echo "→ 更新 docs/intro/quick-start.md"
-    sed -i -E "s/(git clone --branch v)[0-9]+\.[0-9]+\.[0-9]+/\1${NEW_VERSION}/g" \
+    perl -pi -e "s/(git clone --branch v)[0-9]+\\.[0-9]+\\.[0-9]+/\${1}${NEW_VERSION}/g" \
         "${PROJECT_ROOT}/docs/intro/quick-start.md"
 else
-    echo "→ dev 模式，跳过 README.md 和 docs/intro/quick-start.md 的分支版本更新"
+    echo "→ dev 模式，跳过 README.md、README.en.md 和 docs/intro/quick-start.md 的分支版本更新"
 fi
 
 # -----------------------------------------------------------------------------

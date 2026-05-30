@@ -10,6 +10,20 @@ from yuxi.utils.datetime_utils import utc_now_naive
 DEFAULT_CONFIG_NAME = "初始配置"
 
 
+def _merge_skill_slugs(current_slugs: object, new_slugs: list[str]) -> list[str]:
+    merged: list[str] = []
+    seen: set[str] = set()
+    for value in [*(current_slugs if isinstance(current_slugs, list) else []), *new_slugs]:
+        if not isinstance(value, str):
+            continue
+        slug = value.strip()
+        if not slug or slug in seen:
+            continue
+        seen.add(slug)
+        merged.append(slug)
+    return merged
+
+
 class AgentConfigRepository:
     def __init__(self, db_session: AsyncSession):
         self.db = db_session
@@ -24,6 +38,10 @@ class AgentConfigRepository:
 
     async def get_by_id(self, config_id: int) -> AgentConfig | None:
         result = await self.db.execute(select(AgentConfig).where(AgentConfig.id == config_id))
+        return result.scalar_one_or_none()
+
+    async def _get_by_id_for_update(self, config_id: int) -> AgentConfig | None:
+        result = await self.db.execute(select(AgentConfig).where(AgentConfig.id == config_id).with_for_update())
         return result.scalar_one_or_none()
 
     async def set_default(self, *, config: AgentConfig, updated_by: str | None = None) -> AgentConfig:
@@ -227,3 +245,28 @@ class AgentConfigRepository:
 
         if was_default:
             await self.set_default(config=remaining[0], updated_by=updated_by)
+
+    async def add_skills_to_config_json(self, *, agent_config_id: int, new_slugs: list[str]) -> bool:
+        """在 config_json.context.skills 中追加 skills，并保持顺序去重。
+
+        Args:
+            agent_config_id: AgentConfig 的 ID
+            new_slugs: 要追加的技能 slug 列表，会自动去重
+
+        Returns:
+            是否找到并更新了配置
+        """
+        config = await self._get_by_id_for_update(agent_config_id)
+        if not config:
+            return False
+
+        config_json = dict(config.config_json or {})
+        context = dict(config_json.get("context") or {})
+        context["skills"] = _merge_skill_slugs(context.get("skills"), new_slugs)
+        config_json["context"] = context
+
+        config.config_json = config_json
+        config.updated_at = utc_now_naive()
+        await self.db.commit()
+        await self.db.refresh(config)
+        return True

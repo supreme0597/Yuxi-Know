@@ -8,13 +8,15 @@ import {
   FileImageFilled,
   FileUnknownFilled,
   FilePptFilled,
-  LinkOutlined
+  LinkOutlined,
+  CodeFilled,
+  FileFilled
 } from '@ant-design/icons-vue'
 import { formatRelative, parseToShanghai } from '@/utils/time'
 
 // 根据文件扩展名获取文件图标
 export const getFileIcon = (filename) => {
-  if (!filename) return FileUnknownFilled
+  if (!filename) return FileFilled
 
   // Check if it's a URL
   if (filename.startsWith('http://') || filename.startsWith('https://')) {
@@ -24,30 +26,22 @@ export const getFileIcon = (filename) => {
   const extension = filename.toLowerCase().split('.').pop()
 
   const iconMap = {
-    // 文本文件
+    // 文本文件与常规文档
     txt: FileTextFilled,
     text: FileTextFilled,
     log: FileTextFilled,
+    pdf: FilePdfFilled,
+    doc: FileWordFilled,
+    docx: FileWordFilled,
+    xls: FileExcelFilled,
+    xlsx: FileExcelFilled,
+    csv: FileExcelFilled,
+    ppt: FilePptFilled,
+    pptx: FilePptFilled,
 
     // Markdown文件
     md: FileMarkdownFilled,
     markdown: FileMarkdownFilled,
-
-    // PDF文件
-    pdf: FilePdfFilled,
-
-    // Word文档
-    doc: FileWordFilled,
-    docx: FileWordFilled,
-
-    // Excel文档
-    xls: FileExcelFilled,
-    xlsx: FileExcelFilled,
-    csv: FileExcelFilled,
-
-    // PPT文档
-    ppt: FilePptFilled,
-    pptx: FilePptFilled,
 
     // 图片文件
     jpg: FileImageFilled,
@@ -58,12 +52,35 @@ export const getFileIcon = (filename) => {
     svg: FileImageFilled,
     webp: FileImageFilled,
 
-    // HTML文件
-    html: FileTextFilled,
-    htm: FileTextFilled
+    // 代码文件
+    py: CodeFilled,
+    js: CodeFilled,
+    ts: CodeFilled,
+    vue: CodeFilled,
+    sh: CodeFilled,
+    go: CodeFilled,
+    cpp: CodeFilled,
+    c: CodeFilled,
+    h: CodeFilled,
+    java: CodeFilled,
+    html: CodeFilled,
+    htm: CodeFilled,
+    css: CodeFilled,
+    less: CodeFilled,
+    scss: CodeFilled,
+    sql: CodeFilled,
+
+    // 配置文件与数据结构
+    json: FileTextFilled,
+    yaml: FileTextFilled,
+    yml: FileTextFilled,
+    toml: FileTextFilled,
+    ini: FileTextFilled,
+    conf: FileTextFilled,
+    env: FileTextFilled
   }
 
-  return iconMap[extension] || FileUnknownFilled
+  return iconMap[extension] || FileFilled
 }
 
 // 根据文件扩展名获取文件图标颜色
@@ -112,9 +129,36 @@ export const getFileIconColor = (filename) => {
     svg: '#722ed1',
     webp: '#722ed1',
 
-    // HTML文件 - 橙色
+    // 前端与样式文件 - 橙黄色
+    js: '#fa8c16',
+    ts: '#fa8c16',
+    vue: '#fa8c16',
     html: '#fa8c16',
-    htm: '#fa8c16'
+    htm: '#fa8c16',
+    css: '#fa8c16',
+    less: '#fa8c16',
+    scss: '#fa8c16',
+
+    // 后端核心代码文件 - 亮天蓝
+    py: '#1890ff',
+    go: '#1890ff',
+    java: '#1890ff',
+    cpp: '#1890ff',
+    c: '#1890ff',
+    h: '#1890ff',
+
+    // 配置文件 - 青色
+    json: '#13c2c2',
+    yaml: '#13c2c2',
+    yml: '#13c2c2',
+    toml: '#13c2c2',
+    ini: '#13c2c2',
+    conf: '#13c2c2',
+    env: '#13c2c2',
+
+    // 脚本文件 - 中灰
+    sh: '#595959',
+    sql: '#595959'
   }
 
   return colorMap[extension] || '#8c8c8c'

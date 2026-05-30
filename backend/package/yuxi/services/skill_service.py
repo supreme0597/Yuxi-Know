@@ -459,12 +459,12 @@ async def _import_skill_dir_impl(
 
         temp_target = skills_root / f".{final_slug}.tmp-{uuid.uuid4().hex[:8]}"
         if temp_target.exists():
-            shutil.rmtree(temp_target)
+            await asyncio.to_thread(shutil.rmtree, temp_target)
         shutil.move(str(stage_dir), str(temp_target))
 
         final_dir = skills_root / final_slug
         if final_dir.exists():
-            shutil.rmtree(temp_target, ignore_errors=True)
+            await asyncio.to_thread(shutil.rmtree, temp_target, ignore_errors=True)
             raise ValueError(f"技能目录冲突，请重试: {final_slug}")
         temp_target.rename(final_dir)
 
@@ -480,7 +480,7 @@ async def _import_skill_dir_impl(
                 created_by=created_by,
             )
         except Exception:
-            shutil.rmtree(final_dir, ignore_errors=True)
+            await asyncio.to_thread(shutil.rmtree, final_dir, ignore_errors=True)
             raise
 
     return item
@@ -728,7 +728,7 @@ async def delete_skill_node(db: AsyncSession, *, slug: str, relative_path: str) 
         raise ValueError("不允许删除根目录 SKILL.md")
 
     if target.is_dir():
-        shutil.rmtree(target)
+        await asyncio.to_thread(shutil.rmtree, target)
     else:
         target.unlink()
 
@@ -755,7 +755,7 @@ async def export_skill_zip(db: AsyncSession, slug: str) -> tuple[str, str]:
 
 async def delete_skill(db: AsyncSession, *, slug: str) -> None:
     repo = SkillRepository(db)
-    item = await repo.get_by_slug(slug)
+    item = await repo.get_by_slug(slug, for_update=True)
     if not item:
         raise ValueError(f"技能 '{slug}' 不存在")
 
@@ -774,7 +774,23 @@ async def delete_skill(db: AsyncSession, *, slug: str) -> None:
         raise
 
     if trash_dir and trash_dir.exists():
-        shutil.rmtree(trash_dir, ignore_errors=True)
+        await asyncio.to_thread(shutil.rmtree, trash_dir, ignore_errors=True)
+
+
+async def delete_skills_batch(db: AsyncSession, *, slugs: list[str]) -> list[dict]:
+    """批量删除多个 skills（单技能独立的子事务与回滚）。"""
+    if len(slugs) > 50:
+        raise ValueError("批量删除的技能数量不能超过 50 个")
+    results = []
+    for slug in slugs:
+        try:
+            await delete_skill(db, slug=slug)
+            results.append({"slug": slug, "success": True})
+        except Exception as e:
+            if hasattr(db, "rollback"):
+                await db.rollback()
+            results.append({"slug": slug, "success": False, "error": str(e)})
+    return results
 
 
 async def init_builtin_skills(db: AsyncSession, *, created_by: str = "system") -> None:
@@ -883,7 +899,7 @@ async def install_builtin_skill(db: AsyncSession, slug: str, *, installed_by: st
             created_by=installed_by or BUILTIN_SKILL_OPERATOR,
         )
     except Exception:
-        shutil.rmtree(target_dir, ignore_errors=True)
+        await asyncio.to_thread(shutil.rmtree, target_dir, ignore_errors=True)
         raise
 
 

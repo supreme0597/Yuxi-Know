@@ -33,17 +33,13 @@
       @keyup="handleKeyUp"
       @input="handleInput"
       @focus="focusInput"
+      @click="handleTextareaClick"
       :placeholder="placeholder"
       :disabled="disabled"
     />
 
     <!-- @ 提及选择弹窗 -->
-    <div
-      v-if="mentionPopupVisible"
-      ref="mentionDropdownRef"
-      class="mention-dropdown-wrapper"
-      :style="mentionDropdownStyle"
-    >
+    <div v-if="mentionPopupVisible" ref="mentionDropdownRef" class="mention-dropdown-wrapper">
       <div class="mention-popup">
         <!-- 文件列表 -->
         <div v-if="mentionItems.files.length > 0 || showFileSearchPrompt" class="mention-group">
@@ -55,10 +51,39 @@
             <div
               v-for="(item, index) in mentionItems.files"
               :key="'file-' + item.value"
-              :class="['mention-item', { active: isItemSelected('file', index) }]"
+              :class="['mention-item', 'file-item', { active: isItemSelected('file', index) }]"
               @click="insertMention(item)"
             >
-              {{ item.label }}
+              <div class="file-info-left">
+                <component
+                  :is="item.is_dir ? FolderFilled : getFileIcon(item.label)"
+                  :style="{ color: item.is_dir ? '#ffa940' : getFileIconColor(item.label) }"
+                  class="file-type-icon"
+                />
+                <span class="file-name" :title="item.label">
+                  <span
+                    v-for="(part, pIdx) in splitTextByQuery(item.label, mentionQuery)"
+                    :key="pIdx"
+                    :class="{ 'query-match': part.isMatch }"
+                    >{{ part.text }}</span
+                  >
+                </span>
+              </div>
+              <span
+                v-if="formatMentionPath(item.description)"
+                class="file-parent-dir"
+                :title="formatMentionPath(item.description)"
+              >
+                <span
+                  v-for="(part, pIdx) in splitTextByQuery(
+                    formatMentionPath(item.description),
+                    mentionQuery
+                  )"
+                  :key="pIdx"
+                  :class="{ 'query-match': part.isMatch }"
+                  >{{ part.text }}</span
+                >
+              </span>
             </div>
           </template>
         </div>
@@ -72,7 +97,12 @@
             :class="['mention-item', { active: isItemSelected('knowledge', index) }]"
             @click="insertMention(item)"
           >
-            {{ item.label }}
+            <span
+              v-for="(part, pIdx) in splitTextByQuery(item.label, mentionQuery)"
+              :key="pIdx"
+              :class="{ 'query-match': part.isMatch }"
+              >{{ part.text }}</span
+            >
           </div>
         </div>
 
@@ -85,7 +115,12 @@
             :class="['mention-item', { active: isItemSelected('mcp', index) }]"
             @click="insertMention(item)"
           >
-            {{ item.label }}
+            <span
+              v-for="(part, pIdx) in splitTextByQuery(item.label, mentionQuery)"
+              :key="pIdx"
+              :class="{ 'query-match': part.isMatch }"
+              >{{ part.text }}</span
+            >
           </div>
         </div>
 
@@ -98,7 +133,12 @@
             :class="['mention-item', { active: isItemSelected('skill', index) }]"
             @click="insertMention(item)"
           >
-            {{ item.label }}
+            <span
+              v-for="(part, pIdx) in splitTextByQuery(item.label, mentionQuery)"
+              :key="pIdx"
+              :class="{ 'query-match': part.isMatch }"
+              >{{ part.text }}</span
+            >
           </div>
         </div>
 
@@ -111,7 +151,12 @@
             :class="['mention-item', { active: isItemSelected('subagent', index) }]"
             @click="insertMention(item)"
           >
-            {{ item.label }}
+            <span
+              v-for="(part, pIdx) in splitTextByQuery(item.label, mentionQuery)"
+              :key="pIdx"
+              :class="{ 'query-match': part.isMatch }"
+              >{{ part.text }}</span
+            >
           </div>
         </div>
 
@@ -144,8 +189,10 @@
 
 <script setup>
 import { ref, computed, onMounted, nextTick, watch, onBeforeUnmount, useSlots } from 'vue'
-import { SendOutlined, ArrowUpOutlined, PauseOutlined } from '@ant-design/icons-vue'
+import { SendOutlined, ArrowUpOutlined, PauseOutlined, FolderFilled } from '@ant-design/icons-vue'
 import { Paperclip } from 'lucide-vue-next'
+import { searchMentionFiles } from '@/apis/mention_api'
+import { getFileIcon, getFileIconColor } from '@/utils/file_utils'
 
 // 点击外部关闭下拉框
 const mentionDropdownRef = ref(null)
@@ -196,6 +243,10 @@ const props = defineProps({
   mention: {
     type: Object,
     default: () => null
+  },
+  threadId: {
+    type: String,
+    default: ''
   }
 })
 
@@ -204,15 +255,7 @@ const slots = useSlots()
 
 // @ 提及功能是否启用
 const mentionEnabled = computed(() => {
-  if (!props.mention) return false
-  const { files, knowledgeBases, mcps, skills, subagents } = props.mention
-  return (
-    (Array.isArray(files) && files.length > 0) ||
-    (Array.isArray(knowledgeBases) && knowledgeBases.length > 0) ||
-    (Array.isArray(mcps) && mcps.length > 0) ||
-    (Array.isArray(skills) && skills.length > 0) ||
-    (Array.isArray(subagents) && subagents.length > 0)
-  )
+  return !!props.mention
 })
 
 const mentionTypePrefixMap = {
@@ -226,6 +269,38 @@ const mentionTypePrefixMap = {
 const formatMentionToken = (type, value) => {
   const prefix = mentionTypePrefixMap[type] || type
   return `@${prefix}:${value}`
+}
+
+const formatMentionPath = (path) => {
+  if (!path) return ''
+  let cleanPath = path.replace(/^\/?home\/gem\/user-data\/?/, '')
+  if (cleanPath.startsWith('/')) {
+    cleanPath = cleanPath.substring(1)
+  }
+  // 如果以 / 结尾，说明它是一个目录，我们先去掉末尾的 / 之后再算父目录
+  let isDir = cleanPath.endsWith('/')
+  let pathForParent = isDir ? cleanPath.substring(0, cleanPath.length - 1) : cleanPath
+
+  const lastSlashIndex = pathForParent.lastIndexOf('/')
+  if (lastSlashIndex === -1) {
+    return ''
+  }
+  return pathForParent.substring(0, lastSlashIndex + 1)
+}
+
+// 高性能且安全的关键字切片高亮解析函数 (100% 防御 XSS，避开危险的 v-html)
+const splitTextByQuery = (text, query) => {
+  if (!text) return []
+  if (!query) return [{ text, isMatch: false }]
+
+  const escapedQuery = query.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')
+  const regex = new RegExp(`(${escapedQuery})`, 'gi')
+  const parts = text.split(regex)
+
+  return parts.map((part) => ({
+    text: part,
+    isMatch: part.toLowerCase() === query.toLowerCase()
+  }))
 }
 
 // 检测是否在 @ 触发位置
@@ -276,14 +351,8 @@ const updateMentionItems = (query = '') => {
       )
     })
 
-  const filterFileItems = (list) => {
-    if (!query) {
-      return []
-    }
-    return filterItems(list)
-  }
-
-  const fileItems = files.map((f) => {
+  // 本地临时文件/附件候选项过滤
+  const localFileItems = files.map((f) => {
     const path = f.path || ''
     const fileName = path.split('/').pop() || path
     return {
@@ -295,6 +364,8 @@ const updateMentionItems = (query = '') => {
       description: path
     }
   })
+
+  const filteredLocalFiles = query ? filterItems(localFileItems) : []
 
   const knowledgeItems = knowledgeBases.map((kb) => {
     const kbName = kb.name || ''
@@ -345,12 +416,76 @@ const updateMentionItems = (query = '') => {
     }
   })
 
+  // 初始化设置 mentionItems 状态（使用前端已有的本地过滤结果，瞬间更新，达到零卡顿）
   mentionItems.value = {
-    files: filterFileItems(fileItems),
+    files: filteredLocalFiles,
     knowledgeBases: filterItems(knowledgeItems),
     mcps: filterItems(mcpItems),
     skills: filterItems(skillItems),
     subagents: filterItems(subagentItems)
+  }
+
+  // NOTE: 如果是尚未开始对话的全新会话，此时 threadId 为空，允许使用临时占位 ID 检索用户全局的工作区文件
+  if (query) {
+    const activeThreadId = props.threadId || 'new_thread_placeholder'
+    clearTimeout(mentionSearchTimer)
+    mentionSearchTimer = setTimeout(async () => {
+      // 物理中断之前的未完成 HTTP 请求
+      if (activeAbortController) {
+        activeAbortController.abort()
+      }
+      activeAbortController = new AbortController()
+
+      searchRequestId.value++
+      const currentId = searchRequestId.value
+
+      try {
+        const responseData = await searchMentionFiles(
+          activeThreadId,
+          query,
+          activeAbortController.signal
+        )
+
+        // 竞态校验锁，确保是当前最新响应
+        if (currentId === searchRequestId.value && Array.isArray(responseData)) {
+          const remoteFileItems = responseData.map((f) => {
+            const path = f.path || ''
+            const fileName = f.name || path.split('/').pop() || path
+            return {
+              value: path,
+              label: fileName,
+              type: 'file',
+              insertValue: path || fileName,
+              tokenLabel: formatMentionToken('file', fileName),
+              description: path,
+              is_dir: f.is_dir
+            }
+          })
+
+          // 合并本地临时文件与后端高匹配度文件（使用 Set 进行去重，防止重复展示）
+          const seenValues = new Set(filteredLocalFiles.map((x) => x.value))
+          const mergedFiles = [...filteredLocalFiles]
+
+          remoteFileItems.forEach((item) => {
+            if (!seenValues.has(item.value)) {
+              seenValues.add(item.value)
+              mergedFiles.push(item)
+            }
+          })
+
+          mentionItems.value.files = mergedFiles
+        }
+      } catch (error) {
+        // 主动取消的请求我们不作为错误抛出
+        if (error.name !== 'AbortError') {
+          console.error('Mention search error:', error)
+        }
+      } finally {
+        if (currentId === searchRequestId.value) {
+          activeAbortController = null
+        }
+      }
+    }, 250) // 250ms 经典防抖时间
   }
 }
 
@@ -393,21 +528,6 @@ const hasAnyItems = computed(() => {
   )
 })
 
-// 获取弹出框位置
-const mentionDropdownStyle = computed(() => {
-  if (!inputRef.value) return {}
-
-  const textarea = inputRef.value
-  const rect = textarea.getBoundingClientRect()
-  const parentRect = textarea.parentElement.getBoundingClientRect()
-
-  return {
-    position: 'absolute',
-    bottom: `${parentRect.bottom - rect.top + 4}px`,
-    left: `${rect.left - parentRect.left}px`,
-    zIndex: 1000
-  }
-})
 const insertMention = (item) => {
   if (!inputRef.value) return
 
@@ -550,17 +670,8 @@ const handleInput = (e) => {
   const value = e.target.value
   emit('update:modelValue', value)
 
-  // 检测 @ 触发（每次输入后检查）
-  if (mentionEnabled.value && !mentionPopupVisible.value) {
-    const cursorPos = e.target.selectionStart
-    const textBeforeCursor = value.slice(0, cursorPos)
-    if (textBeforeCursor.endsWith('@')) {
-      checkMentionTrigger(e.target)
-    }
-  }
-
-  // 如果弹出框打开，更新查询结果
-  if (mentionPopupVisible.value) {
+  // 只要开启了提及功能，在任何输入事件时都使用正则表达式动态检测是否唤醒或更新弹出框
+  if (mentionEnabled.value) {
     nextTick(() => {
       checkMentionTrigger(e.target)
     })
@@ -577,6 +688,9 @@ const mentionPopupVisible = ref(false)
 const mentionQuery = ref('')
 const mentionItems = ref({ files: [], knowledgeBases: [], mcps: [], skills: [], subagents: [] })
 const mentionSelectedIndex = ref(0)
+const searchRequestId = ref(0)
+let activeAbortController = null
+let mentionSearchTimer = null
 
 const adjustTextareaHeight = () => {
   if (!inputRef.value) {
@@ -592,6 +706,21 @@ const adjustTextareaHeight = () => {
 const focusInput = () => {
   if (inputRef.value && !props.disabled) {
     inputRef.value.focus()
+    // 聚焦回来时，如果开启了提及，自动检测当前光标位置是否处于 @提及 范围，是则重新升起弹框
+    if (mentionEnabled.value) {
+      nextTick(() => {
+        checkMentionTrigger(inputRef.value)
+      })
+    }
+  }
+}
+
+// 处理输入框点击事件，自适应检测光标是否落入 @提及 范围内以唤醒或更新弹窗
+const handleTextareaClick = (e) => {
+  if (mentionEnabled.value) {
+    nextTick(() => {
+      checkMentionTrigger(e.target)
+    })
   }
 }
 
@@ -621,6 +750,12 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (debounceTimer.value) {
     clearTimeout(debounceTimer.value)
+  }
+  if (mentionSearchTimer) {
+    clearTimeout(mentionSearchTimer)
+  }
+  if (activeAbortController) {
+    activeAbortController.abort()
   }
   document.removeEventListener('click', closeMentionPopup)
 })
@@ -840,16 +975,22 @@ defineExpose({
 // @ 提及弹窗样式
 .mention-dropdown-wrapper {
   position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  margin-bottom: 8px;
   z-index: 1000;
 }
 
 .mention-popup {
-  min-width: 240px;
+  width: 100%;
   max-height: 280px;
   overflow-y: auto;
   background: var(--gray-0);
   border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  box-shadow:
+    0 -4px 16px rgba(0, 0, 0, 0.08),
+    0 4px 16px rgba(0, 0, 0, 0.12);
   border: 1px solid var(--gray-200);
 
   .mention-group {
@@ -880,11 +1021,69 @@ defineExpose({
     margin: 1px 4px;
     border-radius: 4px;
 
+    &.file-item {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 0;
+      padding: 6px 10px;
+
+      .file-info-left {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-shrink: 1;
+        min-width: 0;
+
+        .file-type-icon {
+          font-size: 15px;
+          flex-shrink: 0;
+          display: flex;
+          align-items: center;
+        }
+
+        .file-name {
+          font-weight: 500;
+          color: var(--gray-800);
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          font-size: 13px;
+        }
+      }
+
+      .file-parent-dir {
+        font-size: 11px;
+        color: var(--gray-400);
+        margin-left: 8px;
+        flex-shrink: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        transition: color 0.15s ease;
+      }
+    }
+
     &:hover,
     &.active {
       background-color: var(--main-10);
       color: var(--main-600);
+
+      &.file-item {
+        .file-info-left .file-name {
+          color: var(--main-600);
+        }
+        .file-parent-dir {
+          color: var(--main-400);
+        }
+      }
     }
+  }
+
+  .query-match {
+    color: #fa8c16; /* 明亮温润的金橘色 */
+    font-weight: 700;
   }
 
   .mention-empty {

@@ -8,6 +8,7 @@
     :send-button-disabled="sendButtonDisabled"
     :placeholder="placeholder"
     :mention="mention"
+    :thread-id="threadId"
     @send="handleSend"
     @keydown="handleKeyDown"
   >
@@ -113,6 +114,7 @@ const props = defineProps({
   disabled: { type: Boolean, default: false },
   sendButtonDisabled: { type: Boolean, default: false },
   mention: { type: Object, default: () => null },
+  threadId: { type: String, default: '' },
   supportsFileUpload: { type: Boolean, default: false },
   hasActiveThread: { type: Boolean, default: true },
   todos: {

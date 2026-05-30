@@ -6,6 +6,7 @@ import { createHighlighter } from 'shiki'
 import yaml from 'js-yaml'
 import { escapeHtml } from '@/utils/html'
 import { normalizeCodeLanguage } from '@/utils/file_preview'
+import { renderSvgBlocks } from './svgRenderer'
 
 const markdownKatexPlugin = markdownItKatex.default || markdownItKatex
 const FRONTMATTER_MARKER = '---'
@@ -198,19 +199,20 @@ const setCachedHtml = (cacheKey, html) => {
 export const renderMarkdown = async (content, { theme = 'github-light' } = {}) => {
   try {
     const normalizedContent = normalizeHtmlTagQuotes(content)
+    const svgContent = renderSvgBlocks(normalizedContent)
     const themeName = normalizeTheme(theme)
-    const needsHighlight = hasCodeFence(normalizedContent)
-    const cacheKey = `${needsHighlight ? themeName : 'plain'}\u0000${normalizedContent}`
+    const needsHighlight = hasCodeFence(svgContent)
+    const cacheKey = `${needsHighlight ? themeName : 'plain'}\u0000${svgContent}`
     const cachedHtml = getCachedHtml(cacheKey)
     if (cachedHtml !== undefined) return cachedHtml
 
     if (needsHighlight) {
       const highlighter = await getHighlighter()
-      await ensureLanguages(highlighter, collectCodeFenceLanguages(normalizedContent))
+      await ensureLanguages(highlighter, collectCodeFenceLanguages(svgContent))
     }
 
     const md = await getRenderer(themeName, needsHighlight)
-    const html = DOMPurify.sanitize(md.render(normalizedContent), {
+    const html = DOMPurify.sanitize(md.render(svgContent), {
       ADD_TAGS: ['input'],
       ADD_ATTR: [
         'class',

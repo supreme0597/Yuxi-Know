@@ -2,9 +2,7 @@ import { computed } from 'vue'
 
 export function useAgentMentionConfig({
   currentAgentState,
-  currentThreadFiles,
   currentThreadAttachments,
-  workspaceMentionFiles,
   configurableItems,
   agentConfig,
   availableKnowledgeBases,
@@ -15,10 +13,6 @@ export function useAgentMentionConfig({
     const rawFiles = currentAgentState.value?.files || {}
     const files = []
     const seenPaths = new Set()
-    const workspaceFiles = Array.isArray(currentThreadFiles?.value) ? currentThreadFiles.value : []
-    const userWorkspaceFiles = Array.isArray(workspaceMentionFiles?.value)
-      ? workspaceMentionFiles.value
-      : []
 
     const pushFile = (entry) => {
       const path = entry?.path || ''
@@ -63,29 +57,6 @@ export function useAgentMentionConfig({
         artifact_url: attachment.artifact_url,
         file_name: attachment.file_name,
         status: attachment.status
-      })
-    })
-
-    userWorkspaceFiles.forEach((entry) => {
-      const path = entry?.virtual_path || ''
-      if (!path || entry?.is_dir) return
-      pushFile({
-        path,
-        size: entry.size,
-        modified_at: entry.modified_at,
-        file_name: entry.name
-      })
-    })
-
-    workspaceFiles.forEach((entry) => {
-      const path = entry?.path || ''
-      if (!path.startsWith('/home/gem/user-data/workspace/') || entry?.is_dir) return
-      pushFile({
-        path,
-        size: entry.size,
-        modified_at: entry.modified_at,
-        artifact_url: entry.artifact_url,
-        file_name: entry.name
       })
     })
 
@@ -155,15 +126,6 @@ export function useAgentMentionConfig({
             description: ''
           }
       )
-
-    if (
-      !files.length &&
-      !knowledgeBases.length &&
-      !mcps.length &&
-      !skills.length &&
-      !subagents.length
-    )
-      return null
 
     return {
       files,

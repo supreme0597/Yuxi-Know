@@ -1,9 +1,9 @@
-import { apiAdminGet, apiAdminPost, apiAdminPut, apiAdminDelete } from './base'
+import { apiGet, apiAdminGet, apiAdminPost, apiAdminPut, apiAdminDelete } from './base'
 
 const BASE_URL = '/api/system/skills'
 
 export const listSkills = async () => {
-  return apiAdminGet(BASE_URL)
+  return apiGet(BASE_URL)
 }
 
 export const importSkillZip = async (file) => {
@@ -18,6 +18,14 @@ export const listRemoteSkills = async (source) => {
 
 export const installRemoteSkill = async (payload) => {
   return apiAdminPost(`${BASE_URL}/remote/install`, payload)
+}
+
+export const installRemoteSkillsBatch = async (payload) => {
+  return apiAdminPost(`${BASE_URL}/remote/install-batch`, payload)
+}
+
+export const searchRemoteSkills = async (query) => {
+  return apiAdminPost(`${BASE_URL}/remote/search`, { query })
 }
 
 export const getSkillDependencyOptions = async () => {
@@ -72,11 +80,17 @@ export const deleteSkill = async (slug) => {
   return apiAdminDelete(`${BASE_URL}/${encodeURIComponent(slug)}`)
 }
 
+export const deleteSkillsBatch = async (slugs) => {
+  return apiAdminPost(`${BASE_URL}/delete-batch`, { slugs })
+}
+
 export const skillApi = {
   listSkills,
   importSkillZip,
   listRemoteSkills,
   installRemoteSkill,
+  installRemoteSkillsBatch,
+  searchRemoteSkills,
   getSkillDependencyOptions,
   listBuiltinSkills,
   installBuiltinSkill,
@@ -88,7 +102,8 @@ export const skillApi = {
   updateSkillDependencies,
   deleteSkillFile,
   exportSkill,
-  deleteSkill
+  deleteSkill,
+  deleteSkillsBatch
 }
 
 export default skillApi

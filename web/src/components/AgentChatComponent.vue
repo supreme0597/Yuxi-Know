@@ -153,6 +153,7 @@
                 :disabled="!currentAgent"
                 :send-button-disabled="isSendButtonDisabled"
                 :mention="mentionConfig"
+                :thread-id="currentChatId"
                 :supports-file-upload="supportsFileUpload"
                 :has-active-thread="!!currentChatId"
                 :todos="currentTodos"
@@ -204,7 +205,6 @@
           <AgentPanel
             v-if="isAgentPanelOpen"
             :agent-state="currentAgentState"
-            :thread-files="currentThreadFiles"
             :thread-id="currentChatId"
             :agent-id="currentThread?.agent_id || currentAgentId"
             :agent-config-id="selectedAgentConfigId"
@@ -248,7 +248,6 @@ import { useConfigStore } from '@/stores/config'
 import { storeToRefs } from 'pinia'
 import { MessageProcessor } from '@/utils/messageProcessor'
 import { agentApi, threadApi } from '@/apis'
-import { getWorkspaceTree } from '@/apis/workspace_api'
 import HumanApprovalModal from '@/components/HumanApprovalModal.vue'
 import { useApproval } from '@/composables/useApproval'
 import { useAgentThreadState } from '@/composables/useAgentThreadState'
@@ -256,7 +255,6 @@ import { useAgentRunStream } from '@/composables/useAgentRunStream'
 import { useAgentStreamHandler } from '@/composables/useAgentStreamHandler'
 import { useStreamSmoother } from '@/composables/useStreamSmoother'
 import { useAgentMentionConfig } from '@/composables/useAgentMentionConfig'
-import { shouldAutoOpenAgentPanel } from '@/utils/agentPanelAutoOpen'
 import AgentArtifactsCard from '@/components/AgentArtifactsCard.vue'
 import AgentPanel from '@/components/AgentPanel.vue'
 
@@ -344,7 +342,6 @@ const { getThreadState, resetOnGoingConv, stopThreadStream } = useAgentThreadSta
 const threadMessages = ref({})
 const threadFilesMap = ref({})
 const threadAttachmentsMap = ref({})
-const workspaceMentionFiles = ref([])
 const threadConfigNoticeMap = ref({})
 const threadPendingConfigNoticeMap = ref({})
 const threadConfigSnapshotMap = ref({})
@@ -434,22 +431,9 @@ const currentTodos = computed(() => {
   return Array.isArray(todos) ? todos : []
 })
 
-const hasAgentStateContent = computed(() => {
-  return shouldAutoOpenAgentPanel(currentThreadFiles.value)
-})
-
-// 监听 hasAgentStateContent 从 false → true 时，自动展开面板
-watch(hasAgentStateContent, (newVal, oldVal) => {
-  if (newVal && !oldVal) {
-    // 从无状态变为有状态时，自动展开面板
-    isAgentPanelOpen.value = true
-  }
-})
 const { mentionConfig } = useAgentMentionConfig({
   currentAgentState,
-  currentThreadFiles,
   currentThreadAttachments,
-  workspaceMentionFiles,
   configurableItems,
   agentConfig,
   availableKnowledgeBases,
@@ -890,13 +874,7 @@ onMounted(() => {
   })
 })
 
-let skipNextWorkspaceMentionActivation = true
 onActivated(() => {
-  if (skipNextWorkspaceMentionActivation) {
-    skipNextWorkspaceMentionActivation = false
-  } else {
-    void fetchWorkspaceMentionFiles()
-  }
   nextTick(() => {
     startChatMainResizeObserver()
   })
@@ -994,7 +972,7 @@ const fetchThreadMessages = async ({ agentId, threadId, delay = 0 }) => {
 const fetchThreadFiles = async (threadId) => {
   if (!threadId) return
   try {
-    const response = await threadApi.listThreadFiles(threadId, '/home/gem/user-data', true)
+    const response = await threadApi.listThreadFiles(threadId, '/home/gem/user-data', false)
     const entries = Array.isArray(response?.files) ? response.files : []
     threadFilesMap.value[threadId] = entries
   } catch (error) {
@@ -1021,27 +999,10 @@ const refreshThreadFilesAndAttachments = async (threadId) => {
   await Promise.all([fetchThreadFiles(threadId), fetchThreadAttachments(threadId)])
 }
 
-let workspaceMentionFilesRequest = null
-const fetchWorkspaceMentionFiles = async () => {
-  if (workspaceMentionFilesRequest) return workspaceMentionFilesRequest
-  workspaceMentionFilesRequest = (async () => {
-    try {
-      const response = await getWorkspaceTree('/', true, true)
-      workspaceMentionFiles.value = Array.isArray(response?.entries) ? response.entries : []
-    } catch (error) {
-      console.warn('Failed to fetch workspace mention files:', error)
-      workspaceMentionFiles.value = []
-    } finally {
-      workspaceMentionFilesRequest = null
-    }
-  })()
-  return workspaceMentionFilesRequest
-}
-
 const handleArtifactSaved = async () => {
-  await fetchWorkspaceMentionFiles()
   if (!currentChatId.value) return
   await refreshThreadFilesAndAttachments(currentChatId.value)
+  isAgentPanelOpen.value = true
 }
 
 const fetchAgentState = async (agentId, threadId) => {
@@ -1112,6 +1073,7 @@ const handleAttachmentUpload = async (files) => {
       fetchAgentState(currentAgentId.value, threadId),
       refreshThreadFilesAndAttachments(threadId)
     ])
+    isAgentPanelOpen.value = true
   } catch (error) {
     message.destroy('upload-attachment')
     handleChatError(error, 'upload')
@@ -1821,7 +1783,7 @@ const initAll = async () => {
 }
 
 onMounted(async () => {
-  await Promise.all([initAll(), fetchWorkspaceMentionFiles()])
+  await initAll()
   scrollController.enableAutoScroll()
 })
 
@@ -2006,7 +1968,6 @@ watch(currentChatId, (threadId, oldThreadId) => {
   min-width: 0;
   will-change: flex-basis;
 }
-
 
 /* Workbench transition animations */
 .agent-panel-wrapper {

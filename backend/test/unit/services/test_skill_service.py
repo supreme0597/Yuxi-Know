@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import io
 import zipfile
 from pathlib import Path
@@ -1010,3 +1011,102 @@ async def test_builtin_skill_file_edit_blocked(tmp_path: Path, monkeypatch: pyte
             content="new content",
             updated_by="root",
         )
+
+
+@pytest.mark.asyncio
+async def test_delete_skills_batch_ok(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(svc.sys_config, "save_dir", str(tmp_path))
+
+    # 模拟两个已安装的技能
+    (tmp_path / "skills" / "skill-a").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "skills" / "skill-b").mkdir(parents=True, exist_ok=True)
+
+    item_a = Skill(slug="skill-a", name="skill-a", description="a", dir_path="skills/skill-a")
+    item_b = Skill(slug="skill-b", name="skill-b", description="b", dir_path="skills/skill-b")
+
+    db_items = {"skill-a": item_a, "skill-b": item_b}
+    deleted_slugs = []
+
+    class FakeRepo:
+        def __init__(self, _db):
+            pass
+
+        async def get_by_slug(self, slug: str, *, for_update: bool = False):
+            return db_items.get(slug)
+
+        async def delete(self, item: Skill):
+            deleted_slugs.append(item.slug)
+            db_items.pop(item.slug, None)
+
+    monkeypatch.setattr(svc, "SkillRepository", FakeRepo)
+
+    # 执行批量删除，skill-a, skill-b, skill-c (不存在)
+    results = await svc.delete_skills_batch(None, slugs=["skill-a", "skill-b", "skill-c"])
+
+    assert results == [
+        {"slug": "skill-a", "success": True},
+        {"slug": "skill-b", "success": True},
+        {"slug": "skill-c", "success": False, "error": "技能 'skill-c' 不存在"},
+    ]
+    assert deleted_slugs == ["skill-a", "skill-b"]
+    assert not (tmp_path / "skills" / "skill-a").exists()
+    assert not (tmp_path / "skills" / "skill-b").exists()
+
+
+@pytest.mark.asyncio
+async def test_delete_skills_batch_limit_exceeded():
+    slugs = [f"skill-{i}" for i in range(51)]
+    with pytest.raises(ValueError, match="批量删除的技能数量不能超过 50 个"):
+        await svc.delete_skills_batch(None, slugs=slugs)
+
+
+@pytest.mark.asyncio
+async def test_delete_skill_concurrent_lock(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(svc.sys_config, "save_dir", str(tmp_path))
+    (tmp_path / "skills" / "concurrent-skill").mkdir(parents=True, exist_ok=True)
+
+    item = Skill(slug="concurrent-skill", name="concurrent-skill", description="desc", dir_path="skills/concurrent-skill")
+
+    db_items = {"concurrent-skill": item}
+    lock_active = asyncio.Lock()
+
+    class FakeRepo:
+        def __init__(self, _db):
+            pass
+
+        async def get_by_slug(self, slug: str, *, for_update: bool = False):
+            # 用 asyncio.Lock 模拟 with_for_update() 的排他锁
+            if for_update:
+                await lock_active.acquire()
+                try:
+                    return db_items.get(slug)
+                finally:
+                    pass
+            else:
+                return db_items.get(slug)
+
+        async def delete(self, item: Skill):
+            db_items.pop(item.slug, None)
+            if lock_active.locked():
+                lock_active.release()
+
+    monkeypatch.setattr(svc, "SkillRepository", FakeRepo)
+
+    # 同时发起两个 delete_skill 调用
+    task1 = asyncio.create_task(svc.delete_skill(None, slug="concurrent-skill"))
+    task2 = asyncio.create_task(svc.delete_skill(None, slug="concurrent-skill"))
+
+    results = await asyncio.gather(task1, task2, return_exceptions=True)
+
+    success_count = 0
+    error_count = 0
+    for r in results:
+        if r is None:
+            success_count += 1
+        elif isinstance(r, ValueError) and "不存在" in str(r):
+            error_count += 1
+
+    assert success_count == 1
+    assert error_count == 1
+    assert not (tmp_path / "skills" / "concurrent-skill").exists()
+

@@ -30,7 +30,7 @@
 Clone the repository and initialize the project:
 
 ```bash
-git clone --branch v0.6.1 --depth 1 https://github.com/xerrors/Yuxi.git
+git clone --branch v0.6.2 --depth 1 https://github.com/xerrors/Yuxi.git
 cd Yuxi
 
 # Linux/macOS
