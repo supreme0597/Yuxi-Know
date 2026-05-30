@@ -2,7 +2,7 @@
 
 > **范围**：看板 AI 侧边栏（`AISidepanel.vue`）内嵌对话 vs 主项目对话框（`AgentChatComponent.vue`）
 > **日期**：2026-04-28（更新）
-> **状态**：@提及(Mention)功能已修复 ✅ | Agent/Config 选择逻辑已修复 ✅ | 其余差异待确认优先级
+> **状态**：@提及(Mention)功能已修复 ✅ | Agent/Config 选择逻辑已修复 ✅ | Run 模式 SSE 已通过 feature gate 接入 ✅ | 其余差异待确认优先级
 
 ---
 
@@ -53,7 +53,7 @@ App.vue                              ProjectKanbanView.vue
 | F1 | **对话历史侧边栏** | ChatSidebarComponent（新建/选择/删除/重命名/置顶/分页加载） | ❌ 无 | 用户无法查看历史对话、切换线程 | P1：空间有限，可考虑简化版（仅最近N条列表） |
 | F2 | **Agent 选择器** | 可切换不同 Agent | ❌ 固定 defaultAgent，不可切换 | 功能限制（设计如此，非 Bug） | 无需修复——设计意图就是固定 Agent |
 | F3 | **人工审批流程** | processApprovalInStream 允许人工介入确认操作 | ❌ `processApprovalInStream: () => false` 显式禁用 | Agent 无法请求用户确认 | P2：看板场景可能不需要审批 |
-| F4 | **Run 模式 SSE** | 支持 Run Mode 流式 API | ❌ 仅 Legacy Stream 模式 | 部分高级功能不可用 | P2：需后端支持 |
+| F4 | **Run 模式 SSE** | 支持 Run Mode 流式 API | ✅ 已接入 Run/Legacy 双路径 | `VITE_USE_RUNS_API === 'true'` 且 `localStorage.force_legacy_stream !== 'true'` 时走 Run，否则回退 Legacy | 保持 feature gate，审批 UI 仍未启用 |
 | F5 | **AgentPanel / Artifacts 卡片** | 文件系统浮动面板 + 产物展示卡片 | ❌ 已移除（侧边栏空间有限） | 无法浏览工作区文件/查看生成产物 | P3：已有独立浮动面板入口 |
 | F6 | **模型选择器** | 可切换 LLM 模型 | ❌ 使用 defaultAgent 默认模型 | 灵活性受限 | 同 F2，设计如此 |
 | F7 | **多轮对话上下文窗口** | 完整对话历史滚动 | ⚠️ 仅显示最近消息，无独立侧边栏 | 历史消息不易回溯 | P2：与 F1 相关 |
@@ -69,7 +69,7 @@ App.vue                              ProjectKanbanView.vue
 | S1 | **@提及资源范围** | 通过 configurableItems 过滤，只展示 agent 已选中的 KB/MCP/Skills | ✅ **已修复**：展示 store 全量可用资源（绕过过滤） | 原因：defaultAgent 的 knowledges/mcps/skills 为空数组 → 过滤后全为 null | — |
 | S2 | **文件提及(@files)** | 展示工作区文件 + 附件 | ❌ files 始终为空数组（看板暂无文件上传上下文） | useKanbanChat 中 currentThreadFiles/currentThreadAttachments 取值有限 | P2：集成文件面板后可补充 |
 | S3 | **子智能体提及(@subagents)** | 从 configurableItems 的 subagents kind 推导 | ❌ subagents 始终为空数组 | 同 S1，defaultAgent 未配置 subagents | 低优先级 |
-| S4 | **SSE 流式处理** | Legacy + Run 双模式 | 仅 Legacy 模式 | useKanbanChat 注释标注"仅使用 legacy stream" | P2：需后端配合 |
+| S4 | **SSE 流式处理** | Legacy + Run 双模式 | ✅ Run + Legacy 双模式 | Run 分支使用 `createAgentRun` + `startRunStream` + 共享 `useAgentRunStream`，Legacy 分支保留原有 stream | 已补充 focused unit tests |
 | S5 | **错误重试机制** | 完整的重试 UI 和逻辑 | ⚠️ 有基础实现但未完全对齐 | 需验证错误提示和重试按钮是否生效 | P2 |
 | S6 | **消息工具调用展示** | ToolCallsGroupComponent 完整展示 | ✅ 复用同一组件，`:hide-tool-calls="true"` 隐藏 | 故意隐藏以节省空间 | 设计合理 |
 | S7 | **消息引用栏(RefsComponent)** | copy/sources/点赞/点踩/重新生成/模型名 | ⚠️ 仅对最后一条完成消息显示 `['copy', 'sources']` | 精简了可用操作 | 设计合理 |
@@ -262,7 +262,7 @@ L7 DOM/CSS     → 元素是否存在、定位/z-index/overflow 是否正确
 | P1 | **useAgentMentionConfig 增加 skipFilter 选项** | 让下游消费者不必各自绕过（见 FEAT-20260428-001） |
 | P2 | **补充文件提及上下文** | 集成文件面板后，将 workspace 文件注入 mentionConfig.files |
 | P2 | **对话历史侧边栏（简化版）** | 至少提供最近 N 条对话列表供切换 |
-| P3 | **Run 模式 SSE 支持** | 需后端 API 对齐 |
+| 已完成 | **Run 模式 SSE 支持** | 通过 feature gate 接入，关闭 gate 或设置 `localStorage.force_legacy_stream === 'true'` 时仍走 Legacy |
 | P3 | **审批流程** | 看板场景可能需要简化的审批交互 |
 
 ---
@@ -343,13 +343,83 @@ function resolveKanbanConfigId(agentStore) {
 
 ---
 
+## 四¾、Run 模式 SSE 接入修复（2026-05-30）
+
+### 4¾.1 问题背景
+
+看板 AI 侧边栏原先只走 Legacy stream。主项目对话框已经支持 Run Mode 流式 API，看板侧边栏因此缺少新 runs 链路下的生命周期管理、恢复能力和统一 SSE 处理路径。
+
+### 4¾.2 修复范围
+
+**修改文件**：`src/components/project-kanban/composables/useKanbanChat.js`
+
+`useKanbanChat.js` 现在使用 Run/Legacy 双路径，默认保持 Legacy 兼容，满足下面两个条件时才启用 Run 分支：
+
+```js
+import.meta.env.VITE_USE_RUNS_API === 'true'
+localStorage.force_legacy_stream !== 'true'
+```
+
+这意味着生产环境可以通过环境变量逐步放量；排查问题时，也可以用 `localStorage.force_legacy_stream = 'true'` 强制回退旧链路。
+
+### 4¾.3 Run 发送链路
+
+Run 分支复用主项目的 runs API 与共享流处理 composable：
+
+```text
+sendMessage
+  → createAgentRun(threadId, payload)
+  → startRunStream(threadId, runId, 0)
+  → useAgentRunStream 统一处理 SSE chunk
+```
+
+看板侧不新增自定义 SSE parser，流式 chunk 仍交给共享 `useAgentRunStream` 和既有消息处理逻辑，避免看板维护一套分叉协议。
+
+### 4¾.4 停止与关闭语义
+
+| 操作 | Run 行为 | 说明 |
+|------|----------|------|
+| 显式点击停止生成 | 取消当前 active Run | 用户明确要求中断，本轮生成停止 |
+| 关闭 AI 侧边栏 | 不取消 Run | 关闭面板只是隐藏 UI，后续可继续或恢复 active Run |
+
+该语义遵循看板交互决策：关闭侧边栏不等于停止任务，只有显式 Stop 才取消后端 Run。
+
+### 4¾.5 隐藏上下文与 UI 展示
+
+看板仍通过隐藏 `<context>` 块把数据概览注入给后端。Run 分支保留这条 backend-only 输入路径，但历史消息展示会清理隐藏上下文，用户可见 UI 不显示 `<context>` 内容。
+
+### 4¾.6 测试覆盖
+
+**新增测试文件**：`src/components/project-kanban/composables/__tests__/useKanbanChat.spec.js`
+
+覆盖点：
+
+| 场景 | 期望 |
+|------|------|
+| Run gate 开启 | 调用 `createAgentRun` 后交给 `startRunStream(threadId, runId, 0)` |
+| Legacy 回退 | gate 关闭或 `force_legacy_stream` 为 `true` 时继续走旧 stream |
+| 隐藏 context | 后端 payload 保留 `<context>`，可见历史不显示该块 |
+| 显式 Stop | 取消 active Run |
+| 关闭或恢复 | 不取消 active Run，可继续 resume |
+| 缺少 run_id | 进入错误处理，不静默成功 |
+| 项目管理配置 | 仍优先选择「项目管理」Config |
+
+### 4¾.7 仍未纳入本次修复的范围
+
+- 人工审批 UI 仍保持禁用，`processApprovalInStream: () => false` 的限制未改。
+- 对话历史侧边栏、模型选择器、Artifacts 卡片仍是看板侧边栏的待办或设计外能力。
+- AgentPanel、文件系统浮动面板和产物展示仍不在本次 Run SSE 修复范围内。
+
+---
+
 ## 五、相关文件索引
 
 ### 5.1 看板 AI 对话相关（本次涉及）
 
 | 文件 | 改动类型 | 说明 |
 |------|----------|------|
-| `src/components/project-kanban/composables/useKanbanChat.js` | **核心修复** | ① mentionConfig 重写（三重包装→单层直读）② Agent/Config 选择逻辑独立化（新增 resolveKanbanConfigId/kanbanConfigId） |
+| `src/components/project-kanban/composables/useKanbanChat.js` | **核心修复** | ① mentionConfig 重写（三重包装→单层直读）② Agent/Config 选择逻辑独立化（新增 resolveKanbanConfigId/kanbanConfigId）③ Run/Legacy 双路径流式发送 |
+| `src/components/project-kanban/composables/__tests__/useKanbanChat.spec.js` | 单元测试 | 覆盖 Run/Legacy gate、隐藏上下文、取消、恢复、缺少 run_id 和项目管理配置 |
 | `src/components/project-kanban/common/AISidepanel.vue` | prop 传递 | `:mention="mentionConfig"` 传参 |
 | `src/stores/agent.js` | 数据源 | fetchMentionResources() 提供 KB/MCP/Skills 全量列表 |
 | `src/composables/useAgentMentionConfig.js` | 参考基准 | 主项目 Mention 配置推导（看板已绕过） |
@@ -370,5 +440,6 @@ function resolveKanbanConfigId(agentStore) {
 | 文件 | 说明 |
 |------|------|
 | `src/composables/useAgentStreamHandler.js` | SSE 流处理器（看板复用） |
+| `src/composables/useAgentRunStream.js` | Run 模式 SSE 处理器（看板 Run 分支复用） |
 | `src/composables/useStreamSmoother.js` | 流式平滑（看板复用） |
 | `src/utils/messageProcessor.js` | 消息解析/格式化（看板复用） |

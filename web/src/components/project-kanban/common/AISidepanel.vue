@@ -806,12 +806,6 @@ function riskLevel(level) {
   return 'normal'
 }
 
-function riskLevelText(level) {
-  const n = riskLevel(level)
-  const map = { danger: '高风险', warning: '中风险', normal: '低风险' }
-  return map[n] || '风险'
-}
-
 function formatReasoning(text) {
   if (!text) return ''
   return text
