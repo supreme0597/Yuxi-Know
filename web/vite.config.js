@@ -24,6 +24,10 @@ export default defineConfig(({ mode }) => {
         ignored: ['**/node_modules/**', '**/dist/**'],
       },
       host: '0.0.0.0',
+    },
+    test: {
+      environment: 'happy-dom',
+      globals: true,
     }
   }
 })
