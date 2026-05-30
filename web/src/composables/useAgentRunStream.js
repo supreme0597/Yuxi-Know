@@ -244,7 +244,9 @@ export function useAgentRunStream({
             clearActiveRunSnapshot(threadId)
             fetchThreadMessages({ agentId: unref(currentAgentId), threadId, delay: 200 }).finally(
               () => {
+                resetOnGoingConv(threadId)
                 fetchAgentState(unref(currentAgentId), threadId)
+                onScrollToBottom()
               }
             )
           } else if (ts.activeRunId === runId) {
