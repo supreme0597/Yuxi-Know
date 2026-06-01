@@ -302,6 +302,17 @@ function stripContextFromHistory(history) {
   })
 }
 
+/** 剥离展示态消息中的隐藏上下文，覆盖流式 init 回显完整 query 的临时状态 */
+function stripContextFromDisplayMessages(messages) {
+  if (!Array.isArray(messages)) return messages
+  return messages.map((msg) => {
+    if (msg.type === 'human' && typeof msg.content === 'string') {
+      return { ...msg, content: stripContextFromContent(msg.content) }
+    }
+    return msg
+  })
+}
+
 async function fetchThreadMessages(threadId) {
   if (!threadId) return
   try {
@@ -517,7 +528,9 @@ const onGoingConvMessages = computed(() => {
     MessageProcessor.mergeMessageChunk
   )
   return msgs.length > 0
-    ? MessageProcessor.convertToolResultToMessages(msgs).filter((msg) => msg.type !== 'tool')
+    ? stripContextFromDisplayMessages(
+      MessageProcessor.convertToolResultToMessages(msgs).filter((msg) => msg.type !== 'tool')
+    )
     : []
 })
 

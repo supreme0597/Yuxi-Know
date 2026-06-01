@@ -164,6 +164,36 @@ describe('useKanbanChat', () => {
     expect(visibleHumanMessage.content).not.toContain(HIDDEN_CONTEXT)
   })
 
+  it('strips hidden context from ongoing stream-init human messages', async () => {
+    const chat = await importKanbanChat({ runsApi: true })
+
+    await chat.sendMessage(USER_MESSAGE, { context: HIDDEN_CONTEXT })
+
+    const requestId = mocks.agentApi.createAgentRun.mock.calls[0][0].meta.request_id
+    chat.getThreadState(THREAD_ID).onGoingConv.msgChunks[requestId] = [
+      {
+        id: requestId,
+        role: 'user',
+        type: 'human',
+        content: `<context>{"cardId":"card-1","title":"测试卡片"}</context>\n\n请总结这个卡片`,
+        extra_metadata: {
+          request_id: requestId
+        }
+      }
+    ]
+
+    const visibleHumanMessage = chat.conversations.value.at(-1)?.messages?.[0]
+
+    expect(visibleHumanMessage).toMatchObject({
+      type: 'human',
+      content: '请总结这个卡片'
+    })
+    expect(visibleHumanMessage.content).not.toContain('<context>')
+    expect(visibleHumanMessage.content).not.toContain('</context>')
+    expect(visibleHumanMessage.content).not.toContain('card-1')
+    expect(visibleHumanMessage.content).not.toContain('测试卡片')
+  })
+
   it('uses the legacy stream when localStorage forces legacy mode', async () => {
     const chat = await importKanbanChat({ runsApi: true, forceLegacy: true })
 
