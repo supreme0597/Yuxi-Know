@@ -929,6 +929,22 @@ import {
 import { mcpApi } from '@/apis/mcp_api'
 import { formatFullDateTime } from '@/utils/time'
 import { extractSecretFieldNames } from '@/utils/mcpAuthConfigBuilder'
+import {
+  MCP_CONNECTION_SCOPE_LABELS,
+  MCP_CONNECTION_STATUS_LABELS,
+  canRunMcpConnectionAction,
+  canToggleMcpConnectionStatus,
+  buildMcpCredentialFromForm,
+  formatMcpConnectionLastInfo,
+  getMcpConnectionActionTooltip,
+  getMcpConnectionStatusSwitchLabel,
+  getMcpConnectionStatusToggleTooltip,
+  getMcpConnectionIssue,
+  getMcpSecretFieldLabel,
+  isMcpConnectionCredentialMissing,
+  parseMcpJsonText,
+  validateMcpCredentialFields
+} from '@/utils/mcpConnectionUtils'
 import McpAuthConfigBuilder from '@/components/extensions/McpAuthConfigBuilder.vue'
 import McpEnvEditor from '@/components/McpEnvEditor.vue'
 import { departmentApi } from '@/apis/department_api'
@@ -1024,19 +1040,8 @@ const connectionScopeOptions = [
   }
 ]
 
-const scopeLabelMap = {
-  inline: '内联',
-  system: '全局共享',
-  department: '部门共享',
-  user: '个人专用'
-}
-
-const statusLabelMap = {
-  active: '启用',
-  disabled: '停用',
-  reauth_required: '需要重连',
-  invalid: '无效'
-}
+const scopeLabelMap = MCP_CONNECTION_SCOPE_LABELS
+const statusLabelMap = MCP_CONNECTION_STATUS_LABELS
 
 const providerLabelMap = {
   none: '不启用',
@@ -1162,21 +1167,6 @@ const getTransportColor = (transport) => {
 const createEmptySecretValues = () =>
   Object.fromEntries(credentialSecretFields.value.map((fieldName) => [fieldName, '']))
 
-const setNestedSecretValue = (target, path, value) => {
-  const segments = String(path || '')
-    .split('.')
-    .filter(Boolean)
-  let current = target
-  segments.forEach((segment, index) => {
-    if (index === segments.length - 1) {
-      current[segment] = value
-      return
-    }
-    current[segment] = current[segment] || {}
-    current = current[segment]
-  })
-}
-
 const getConnectionTitle = (connection) =>
   connection.display_name ||
   `${getConnectionScopeLabel(connection.scope_type)} ${getConnectionScopeTargetLabel(connection)}`
@@ -1190,7 +1180,7 @@ const isConnectionScopeMatched = (connection) =>
   connection?.scope_type === effectiveConnectionScopeType.value
 
 const isConnectionCredentialMissing = (connection) =>
-  connectionCredentialsRequired.value && !connection?.has_credentials
+  isMcpConnectionCredentialMissing(connection, connectionCredentialsRequired.value)
 
 const getConnectionScopeTargetLabel = (connection) => {
   const scopeId = String(connection?.scope_id || '')
@@ -1211,111 +1201,53 @@ const getConnectionScopeTargetLabel = (connection) => {
   return scopeId || '未指定'
 }
 
-const canToggleConnectionStatus = (connection) => {
-  if (!['active', 'disabled'].includes(connection?.status)) return false
-  if (connection.status === 'disabled') {
-    return isConnectionScopeMatched(connection) && !isConnectionCredentialMissing(connection)
-  }
-  return true
-}
+const connectionActionOptions = computed(() => ({
+  isScopeMatched: isConnectionScopeMatched,
+  isCredentialMissing: isConnectionCredentialMissing,
+  authBindingScopeLabel: authBindingScopeLabel.value
+}))
 
-const getConnectionStatusSwitchLabel = (connection) => {
-  if (connection?.status === 'active') return '已启用'
-  return getConnectionStatusLabel(connection?.status)
-}
+const canToggleConnectionStatus = (connection) =>
+  canToggleMcpConnectionStatus(connection, connectionActionOptions.value)
 
-const getConnectionStatusToggleTooltip = (connection) => {
-  if (connection?.status === 'active') return '停用连接'
-  if (connection?.status === 'disabled') {
-    if (!isConnectionScopeMatched(connection)) {
-      return `该连接未生效，不能启用；当前 MCP 使用${authBindingScopeLabel.value}`
-    }
-    if (isConnectionCredentialMissing(connection)) {
-      return '请先补充凭据'
-    }
-    return '启用连接'
-  }
-  return '请先重连或编辑凭据'
-}
+const getConnectionStatusSwitchLabel = (connection) =>
+  getMcpConnectionStatusSwitchLabel(connection, getConnectionStatusLabel)
+
+const getConnectionStatusToggleTooltip = (connection) =>
+  getMcpConnectionStatusToggleTooltip(connection, connectionActionOptions.value)
 
 const canTestConnection = (connection) =>
-  isConnectionScopeMatched(connection) && !isConnectionCredentialMissing(connection)
+  canRunMcpConnectionAction(connection, connectionActionOptions.value)
 
-const getConnectionTestTooltip = (connection) => {
-  if (canTestConnection(connection)) return '测试连接'
-  if (isConnectionCredentialMissing(connection)) return '请先补充凭据'
-  return `该连接未生效，当前 MCP 使用${authBindingScopeLabel.value}`
-}
+const getConnectionTestTooltip = (connection) =>
+  getMcpConnectionActionTooltip(
+    connection,
+    '测试连接',
+    `该连接未生效，当前 MCP 使用${authBindingScopeLabel.value}`,
+    connectionActionOptions.value
+  )
 
 const canReauthorizeConnection = (connection) =>
-  isConnectionScopeMatched(connection) && !isConnectionCredentialMissing(connection)
+  canRunMcpConnectionAction(connection, connectionActionOptions.value)
 
-const getConnectionReauthorizeTooltip = (connection) => {
-  if (canReauthorizeConnection(connection)) return '重置授权并重新激活'
-  if (isConnectionCredentialMissing(connection)) return '请先补充凭据'
-  return `该连接未生效，不能重连；当前 MCP 使用${authBindingScopeLabel.value}`
-}
+const getConnectionReauthorizeTooltip = (connection) =>
+  getMcpConnectionActionTooltip(
+    connection,
+    '重置授权并重新激活',
+    `该连接未生效，不能重连；当前 MCP 使用${authBindingScopeLabel.value}`,
+    connectionActionOptions.value
+  )
 
-const getConnectionIssue = (connection) => {
-  if (!isConnectionScopeMatched(connection)) {
-    return {
-      key: 'scope_mismatch',
-      label: '范围不匹配',
-      description: `当前 MCP 使用${authBindingScopeLabel.value}，这组连接不会在运行时生效。`,
-      actionLabel: '新建匹配连接',
-      tone: 'warning'
-    }
-  }
-  if (isConnectionCredentialMissing(connection)) {
-    return {
-      key: 'missing_credentials',
-      label: '缺少凭据',
-      description: '缺少长期凭据，运行时无法换取或注入 token。',
-      actionLabel: '补充凭据',
-      tone: 'error'
-    }
-  }
-  if (connection?.status === 'reauth_required') {
-    return {
-      key: 'reauth_required',
-      label: '授权失效',
-      description: '缓存 token 已失效，需要重新授权后才能继续使用。',
-      actionLabel: '重连',
-      tone: 'warning'
-    }
-  }
-  if (connection?.status === 'invalid' || connection?.meta_json?.last_error?.message) {
-    return {
-      key: 'test_failed',
-      label: '测试失败',
-      description: connection?.meta_json?.last_error?.message || '最近一次连接检测失败。',
-      actionLabel: '编辑凭据',
-      tone: 'error'
-    }
-  }
-  return null
-}
+const getConnectionIssue = (connection) =>
+  getMcpConnectionIssue(connection, {
+    isScopeMatched: isConnectionScopeMatched,
+    isCredentialMissing: isConnectionCredentialMissing,
+    authBindingScopeLabel: authBindingScopeLabel.value
+  })
 
-const getConnectionLastInfo = (connection) => {
-  if (connection.meta_json?.last_success_at) {
-    return `最近成功 ${formatTime(connection.meta_json.last_success_at)}`
-  }
-  if (connection.updated_at) {
-    return `更新于 ${formatTime(connection.updated_at)}`
-  }
-  return '暂无记录'
-}
+const getConnectionLastInfo = (connection) => formatMcpConnectionLastInfo(connection, formatTime)
 
-const getSecretFieldLabel = (fieldName) => {
-  const labelMap = {
-    client_id: 'Client ID',
-    client_secret: 'Client Secret',
-    access_token: 'Access Token',
-    refresh_token: 'Refresh Token',
-    issuer_url: 'Issuer URL'
-  }
-  return labelMap[fieldName] || fieldName
-}
+const getSecretFieldLabel = getMcpSecretFieldLabel
 
 const resetEditForm = (data) => {
   Object.assign(editForm, {
@@ -1369,19 +1301,8 @@ const parseJsonToForm = () => {
   }
 }
 
-const parseJsonText = (text, label, { allowRawString = false } = {}) => {
-  const trimmed = String(text || '').trim()
-  if (!trimmed) return null
-  try {
-    return JSON.parse(trimmed)
-  } catch {
-    if (allowRawString) {
-      return trimmed
-    }
-    message.error(`${label} JSON 格式错误`)
-    return undefined
-  }
-}
+const parseJsonText = (text, label, options = {}) =>
+  parseMcpJsonText(text, label, { ...options, onError: message.error })
 
 const buildEditPayload = () => {
   if (formMode.value === 'json') {
@@ -1650,42 +1571,24 @@ const handleTestServer = async () => {
   }
 }
 
-const buildConnectionCredential = () => {
-  const rawCredential = parseJsonText(connectionForm.credentialText, '长期凭据', {
-    allowRawString: true
-  })
-  if (rawCredential === undefined) return undefined
-  if (rawCredential !== null) return rawCredential
-
-  const secrets = {}
-  Object.entries(connectionForm.secretValues).forEach(([key, value]) => {
-    const trimmedValue = String(value || '').trim()
-    if (trimmedValue) {
-      setNestedSecretValue(secrets, key, trimmedValue)
-    }
+const buildConnectionCredential = () =>
+  buildMcpCredentialFromForm({
+    credentialText: connectionForm.credentialText,
+    secretValues: connectionForm.secretValues,
+    isEditing: false,
+    emptyCreateValue: null,
+    rawLabel: '长期凭据',
+    onError: message.error
   })
 
-  if (Object.keys(secrets).length === 0) {
-    return null
-  }
-  return { secrets }
-}
-
-const validateConnectionCredential = () => {
-  if (isEditingConnection.value || credentialSecretFields.value.length === 0) {
-    return true
-  }
-
-  const missingFields = credentialSecretFields.value.filter(
-    (fieldName) => !String(connectionForm.secretValues[fieldName] || '').trim()
-  )
-  if (missingFields.length === 0 || connectionForm.credentialText.trim()) {
-    return true
-  }
-
-  message.error(`请填写凭据字段：${missingFields.join('、')}`)
-  return false
-}
+const validateConnectionCredential = () =>
+  validateMcpCredentialFields({
+    isEditing: isEditingConnection.value,
+    secretFields: credentialSecretFields.value,
+    secretValues: connectionForm.secretValues,
+    credentialText: connectionForm.credentialText,
+    onError: message.error
+  })
 
 const handleSubmitConnection = async () => {
   if (!server.value) return

@@ -355,6 +355,7 @@ import {
   extractSecretFieldNames,
   isAuthConfigSupportedByBuilder
 } from '@/utils/mcpAuthConfigBuilder'
+import { getMcpSecretFieldLabel } from '@/utils/mcpConnectionUtils'
 
 const props = defineProps({
   readonly: { type: Boolean, default: false },
@@ -633,16 +634,7 @@ const importJsonToForm = () => {
   }
 }
 
-const getSecretFieldLabel = (fieldName) => {
-  const labelMap = {
-    api_key: 'API Key',
-    client_id: 'Client ID',
-    client_secret: 'Client Secret',
-    access_token: 'Access Token',
-    refresh_token: 'Refresh Token'
-  }
-  return labelMap[fieldName] || fieldName
-}
+const getSecretFieldLabel = getMcpSecretFieldLabel
 
 watch(
   () => props.modelValue,
