@@ -70,197 +70,60 @@
             />
 
             <template v-else>
-              <div v-if="selectedConnection && !showForm" class="connection-panel">
-                <div class="card-header">
-                  <div class="key-info">
-                    <KeyRound size="18" class="key-icon" />
-                    <div class="key-info-content">
-                      <h4 class="key-name">
-                        {{ selectedConnection.display_name || selectedServer.name }}
-                      </h4>
-                    </div>
-                  </div>
-                </div>
+              <McpConnectionCard
+                v-if="selectedConnection && !isOpen"
+                :connection="selectedConnection"
+                :title="getConnectionTitle(selectedConnection)"
+                :subtitle="selectedConnection.external_subject || ''"
+                :show-scope-badge="false"
+                :issue="getConnectionIssue(selectedConnection)"
+                :last-info="getConnectionLastInfo(selectedConnection)"
+                :status-switch-label="getConnectionStatusSwitchLabel(selectedConnection)"
+                :status-toggle-tooltip="getConnectionStatusToggleTooltip(selectedConnection)"
+                :test-tooltip="getConnectionTestTooltip(selectedConnection)"
+                :reauthorize-tooltip="getConnectionReauthorizeTooltip(selectedConnection)"
+                :can-toggle-status="canToggleConnectionStatus(selectedConnection)"
+                :can-test="canTestConnection(selectedConnection)"
+                :can-reauthorize="canReauthorizeConnection(selectedConnection)"
+                :status-loading="isActionLoading(selectedConnection, 'status')"
+                :test-loading="isActionLoading(selectedConnection, 'test')"
+                :reauthorize-loading="isActionLoading(selectedConnection, 'reauth')"
+                :issue-loading="isIssueActionLoading(selectedConnection)"
+                variant="panel"
+                @edit="startEditForm"
+                @test="handleTestConnection"
+                @reauthorize="handleReauthorizeConnection"
+                @delete="deleteConnection"
+                @toggle-status="handleToggleConnectionStatus"
+                @issue-action="handleConnectionIssueAction"
+              />
 
-                <div class="card-content">
-                  <div
-                    v-if="getConnectionIssue(selectedConnection)"
-                    class="connection-issue"
-                    :class="`issue-${getConnectionIssue(selectedConnection).tone}`"
-                  >
-                    <div class="issue-copy">
-                      <span>问题：{{ getConnectionIssue(selectedConnection).label }}</span>
-                      <small>{{ getConnectionIssue(selectedConnection).description }}</small>
-                    </div>
-                    <a-button
-                      type="link"
-                      size="small"
-                      class="issue-action"
-                      :loading="
-                        actionLoading ===
-                        (getConnectionIssue(selectedConnection).key === 'reauth_required'
-                          ? 'reauth'
-                          : 'issue')
-                      "
-                      @click="handleConnectionIssueAction"
-                    >
-                      {{ getConnectionIssue(selectedConnection).actionLabel }}
-                    </a-button>
-                  </div>
-                  <div class="info-item">
-                    <span class="info-label">最近记录:</span>
-                    <span class="info-value">
-                      {{ getConnectionLastInfo(selectedConnection) }}
-                    </span>
-                  </div>
-                </div>
-
-                <div class="card-footer">
-                  <div class="footer-left">
-                    <span class="switch-label">
-                      {{ isConnectionActive ? '已启用' : getStatusLabel(connectionStatus) }}
-                    </span>
-                    <a-tooltip :title="statusToggleTooltip">
-                      <span class="status-switch-wrap">
-                        <a-switch
-                          size="small"
-                          :checked="isConnectionActive"
-                          :disabled="!canToggleConnectionStatus"
-                          :loading="actionLoading === 'status'"
-                          @change="updateConnectionEnabled"
-                        />
-                      </span>
-                    </a-tooltip>
-                  </div>
-                  <div class="footer-actions">
-                    <a-button
-                      type="text"
-                      size="small"
-                      class="action-btn lucide-icon-btn"
-                      @click="startEditConnection"
-                    >
-                      <Pencil :size="14" />
-                      <span>编辑</span>
-                    </a-button>
-                    <a-button
-                      type="text"
-                      size="small"
-                      class="action-btn lucide-icon-btn"
-                      :loading="actionLoading === 'test'"
-                      :disabled="!canTestConnection"
-                      @click="testConnection"
-                    >
-                      <Zap :size="14" />
-                      <span>测试</span>
-                    </a-button>
-                    <a-button
-                      type="text"
-                      size="small"
-                      class="action-btn lucide-icon-btn"
-                      :loading="actionLoading === 'reauth'"
-                      :disabled="!canReauthorizeConnection"
-                      @click="reauthorizeConnection"
-                    >
-                      <RotateCw :size="14" />
-                      <span>重连</span>
-                    </a-button>
-                    <a-button
-                      type="text"
-                      size="small"
-                      danger
-                      class="action-btn danger-action-btn lucide-icon-btn"
-                      @click="deleteConnection"
-                    >
-                      <Trash2 :size="14" />
-                      <span>删除</span>
-                    </a-button>
-                  </div>
-                </div>
-              </div>
-
-              <div v-else-if="!showForm" class="connection-empty">
+              <div v-else-if="!isOpen" class="connection-empty">
                 <a-empty description="暂无个人连接" />
-                <a-button type="primary" class="lucide-icon-btn" @click="startCreateConnection">
+                <a-button type="primary" class="lucide-icon-btn" @click="openCreateForm">
                   <Plus :size="14" />
                   新建连接
                 </a-button>
               </div>
 
-              <div v-if="showForm" class="connection-form-panel">
-                <div class="form-panel-header">
-                  <h4>{{ isEditing ? '编辑连接' : '新建连接' }}</h4>
-                  <a-button type="text" class="lucide-icon-btn" @click="cancelForm">
-                    <X :size="14" />
-                  </a-button>
-                </div>
-
-                <a-form layout="vertical" class="connection-form">
-                  <div class="form-grid">
-                    <a-form-item label="连接名称" class="full-width">
-                      <a-input v-model:value="form.displayName" placeholder="例如：我的工作账号" />
-                    </a-form-item>
-                  </div>
-
-                  <div v-if="secretFields.length > 0" class="secret-grid">
-                    <a-form-item
-                      v-for="fieldName in secretFields"
-                      :key="fieldName"
-                      :label="getSecretFieldLabel(fieldName)"
-                    >
-                      <a-input-password
-                        v-model:value="form.secretValues[fieldName]"
-                        :placeholder="isEditing ? '留空表示保持现有值' : `请输入 ${fieldName}`"
-                      />
-                    </a-form-item>
-                  </div>
-
-                  <a-form-item v-else label="长期凭据">
-                    <a-textarea
-                      v-model:value="form.credentialText"
-                      :rows="4"
-                      placeholder="粘贴长期 token"
-                    />
-                  </a-form-item>
-
-                  <a-collapse ghost class="advanced-collapse">
-                    <a-collapse-panel key="advanced" header="高级设置">
-                      <a-form-item label="外部主体标识">
-                        <a-input
-                          v-model:value="form.externalSubject"
-                          placeholder="可选，例如外部用户名"
-                        />
-                      </a-form-item>
-                      <a-form-item v-if="secretFields.length > 0" label="原始凭据 JSON">
-                        <a-textarea
-                          v-model:value="form.credentialText"
-                          :rows="4"
-                          placeholder='可选，例如 {"secrets":{"access_token":"xxx"}}'
-                        />
-                      </a-form-item>
-                      <a-form-item label="元数据 JSON">
-                        <a-textarea
-                          v-model:value="form.metaText"
-                          :rows="3"
-                          placeholder='可选，例如 {"tenant":"default"}'
-                        />
-                      </a-form-item>
-                    </a-collapse-panel>
-                  </a-collapse>
-
-                  <div class="form-actions">
-                    <a-button @click="cancelForm">取消</a-button>
-                    <a-button
-                      type="primary"
-                      class="lucide-icon-btn"
-                      :loading="submitting"
-                      @click="submitConnection"
-                    >
-                      <Save :size="14" />
-                      保存
-                    </a-button>
-                  </div>
-                </a-form>
-              </div>
+              <McpConnectionForm
+                v-if="isOpen"
+                v-model="form"
+                :title="isEditing ? '编辑连接' : '新建连接'"
+                variant="panel"
+                :is-editing="isEditing"
+                :submitting="submitting"
+                :secret-fields="secretFields"
+                :credential-hint="credentialHint"
+                display-name-placeholder="例如：我的工作账号"
+                external-subject-placeholder="可选，例如外部用户名"
+                raw-credential-placeholder="粘贴长期 token"
+                :advanced-credential-rows="4"
+                :meta-rows="3"
+                submit-text="保存"
+                @submit="handleSubmitConnection"
+                @cancel="closeForm"
+              />
             </template>
           </template>
         </a-spin>
@@ -270,112 +133,53 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
-import { message, Modal } from 'ant-design-vue'
-import {
-  Building2,
-  Globe2,
-  KeyRound,
-  Pencil,
-  Plus,
-  RefreshCw,
-  RotateCw,
-  Save,
-  Trash2,
-  UserRound,
-  X,
-  Zap
-} from 'lucide-vue-next'
+import { computed, onMounted, shallowRef } from 'vue'
+import { message } from 'ant-design-vue'
+import { Building2, Globe2, Plus, RefreshCw, UserRound } from 'lucide-vue-next'
 import { mcpApi } from '@/apis/mcp_api'
-import { formatFullDateTime } from '@/utils/time'
+import { useMcpConnectionActions } from '@/composables/useMcpConnectionActions'
+import { useMcpConnectionForm } from '@/composables/useMcpConnectionForm'
+import McpConnectionCard from '@/components/mcp/McpConnectionCard.vue'
+import McpConnectionForm from '@/components/mcp/McpConnectionForm.vue'
 import { extractSecretFieldNames } from '@/utils/mcpAuthConfigBuilder'
 import {
   MCP_CONNECTION_SCOPE_LABELS,
   MCP_CONNECTION_STATUS_LABELS,
   canRunMcpConnectionAction,
   canToggleMcpConnectionStatus,
-  buildMcpCredentialFromForm,
   formatMcpConnectionLastInfo,
-  getMcpConnectionStatusToggleTooltip,
+  getMcpConnectionActionTooltip,
   getMcpConnectionIssue,
-  getMcpSecretFieldLabel,
-  isMcpConnectionCredentialMissing,
-  parseMcpJsonText,
-  validateMcpCredentialFields
+  getMcpConnectionStatusSwitchLabel,
+  getMcpConnectionStatusToggleTooltip,
+  isMcpConnectionCredentialMissing
 } from '@/utils/mcpConnectionUtils'
+import { formatFullDateTime } from '@/utils/time'
 
-const loading = ref(false)
-const detailLoading = ref(false)
-const connectionsLoading = ref(false)
-const submitting = ref(false)
-const actionLoading = ref(null)
+const loading = shallowRef(false)
+const detailLoading = shallowRef(false)
+const connectionsLoading = shallowRef(false)
 
-const servers = ref([])
-const selectedName = ref('')
-const selectedServer = ref(null)
-const connections = ref([])
-const showForm = ref(false)
-const editingConnectionId = ref(null)
+const servers = shallowRef([])
+const selectedName = shallowRef('')
+const selectedServer = shallowRef(null)
+const connections = shallowRef([])
 
-const form = reactive({
-  displayName: '',
-  externalSubject: '',
-  credentialText: '',
-  secretValues: {},
-  metaText: ''
-})
-
-const statusLabelMap = MCP_CONNECTION_STATUS_LABELS
 const scopeLabelMap = MCP_CONNECTION_SCOPE_LABELS
+const statusLabelMap = MCP_CONNECTION_STATUS_LABELS
 
 const selectedConnection = computed(() => connections.value[0] || null)
-const isEditing = computed(() => editingConnectionId.value !== null)
-const connectionStatus = computed(() => selectedConnection.value?.status || '')
-const isConnectionActive = computed(() => connectionStatus.value === 'active')
-
 const authConfig = computed(() => selectedServer.value?.auth_config || {})
 const bindingScope = computed(() => authConfig.value.binding_scope || '')
 const bindingScopeLabel = computed(() => scopeLabelMap[bindingScope.value] || '')
 const canManagePersonalConnection = computed(() => bindingScope.value === 'user')
-
 const secretFields = computed(() => {
   if (Array.isArray(authConfig.value.secret_fields)) {
     return authConfig.value.secret_fields
   }
   return extractSecretFieldNames(authConfig.value)
 })
-
 const connectionCredentialsRequired = computed(() => secretFields.value.length > 0)
-
-const isConnectionCredentialMissing = (connection) =>
-  isMcpConnectionCredentialMissing(connection, connectionCredentialsRequired.value)
-
-const canToggleConnectionStatus = computed(() =>
-  canToggleMcpConnectionStatus(selectedConnection.value, {
-    isCredentialMissing: isConnectionCredentialMissing
-  })
-)
-
-const statusToggleTooltip = computed(() =>
-  getMcpConnectionStatusToggleTooltip(selectedConnection.value, {
-    isCredentialMissing: isConnectionCredentialMissing
-  })
-)
-
-const canTestConnection = computed(
-  () => Boolean(selectedConnection.value) &&
-    canRunMcpConnectionAction(selectedConnection.value, {
-      isCredentialMissing: isConnectionCredentialMissing
-    })
-)
-
-const canReauthorizeConnection = computed(
-  () => Boolean(selectedConnection.value) &&
-    canRunMcpConnectionAction(selectedConnection.value, {
-      isCredentialMissing: isConnectionCredentialMissing
-    })
-)
-
 const personalUnavailableMessage = computed(() => {
   if (!authConfig.value.provider) {
     return '当前 MCP 未启用动态鉴权，无需配置个人连接。'
@@ -383,10 +187,59 @@ const personalUnavailableMessage = computed(() => {
   return '当前 MCP 使用共享连接，由管理员维护。'
 })
 
-const getSecretFieldLabel = getMcpSecretFieldLabel
+const {
+  isOpen,
+  submitting,
+  editingConnectionId,
+  form,
+  isEditing,
+  openCreateForm,
+  startEditForm,
+  closeForm,
+  validateCredential,
+  buildCredential,
+  buildBasePayload
+} = useMcpConnectionForm({
+  secretFields,
+  defaultScopeType: 'user',
+  onError: message.error
+})
 
+const credentialHint = computed(() => {
+  if (isEditing.value) {
+    return '为安全起见不回显已有凭据；留空表示保持原值。'
+  }
+  if (secretFields.value.length > 0) {
+    return '系统已根据认证配置推导出需要录入的密钥字段。'
+  }
+  return '当前认证配置没有声明密钥字段，可直接粘贴长期 token。'
+})
+
+const isConnectionCredentialMissing = (connection) =>
+  isMcpConnectionCredentialMissing(connection, connectionCredentialsRequired.value)
 const getStatusLabel = (status) => statusLabelMap[status] || status || '未知状态'
-
+const getConnectionTitle = (connection) =>
+  connection?.display_name || selectedServer.value?.name || '个人连接'
+const canToggleConnectionStatus = (connection) =>
+  canToggleMcpConnectionStatus(connection, { isCredentialMissing: isConnectionCredentialMissing })
+const getConnectionStatusSwitchLabel = (connection) =>
+  getMcpConnectionStatusSwitchLabel(connection, getStatusLabel)
+const getConnectionStatusToggleTooltip = (connection) =>
+  getMcpConnectionStatusToggleTooltip(connection, {
+    isCredentialMissing: isConnectionCredentialMissing
+  })
+const canTestConnection = (connection) =>
+  canRunMcpConnectionAction(connection, { isCredentialMissing: isConnectionCredentialMissing })
+const getConnectionTestTooltip = (connection) =>
+  getMcpConnectionActionTooltip(connection, '测试连接', '当前连接不可测试', {
+    isCredentialMissing: isConnectionCredentialMissing
+  })
+const canReauthorizeConnection = (connection) =>
+  canRunMcpConnectionAction(connection, { isCredentialMissing: isConnectionCredentialMissing })
+const getConnectionReauthorizeTooltip = (connection) =>
+  getMcpConnectionActionTooltip(connection, '重置授权并重新激活', '当前连接不可重连', {
+    isCredentialMissing: isConnectionCredentialMissing
+  })
 const getConnectionIssue = (connection) =>
   getMcpConnectionIssue(connection, {
     includeScopeMismatch: false,
@@ -394,44 +247,25 @@ const getConnectionIssue = (connection) =>
     missingCredentialsDescription: '缺少长期凭据，当前账号无法使用该 MCP。',
     reauthRequiredDescription: '授权缓存已失效，需要重新连接后继续使用。'
   })
-
 const getConnectionLastInfo = (connection) =>
   formatMcpConnectionLastInfo(connection, formatFullDateTime)
 
-const resetForm = () => {
-  editingConnectionId.value = null
-  Object.assign(form, {
-    displayName: '',
-    externalSubject: '',
-    credentialText: '',
-    secretValues: Object.fromEntries(secretFields.value.map((fieldName) => [fieldName, ''])),
-    metaText: ''
-  })
-}
+const {
+  isActionLoading,
+  updateConnectionStatus,
+  testConnection,
+  reauthorizeConnection,
+  deleteConnection
+} = useMcpConnectionActions({
+  serverName: () => selectedServer.value?.name,
+  reload: loadConnections,
+  getConnectionTitle,
+  onDeleted: async () => {
+    closeForm()
+  }
+})
 
-const parseJsonText = (text, label, options = {}) =>
-  parseMcpJsonText(text, label, { ...options, onError: message.error })
-
-const buildCredential = () =>
-  buildMcpCredentialFromForm({
-    credentialText: form.credentialText,
-    secretValues: form.secretValues,
-    isEditing: isEditing.value,
-    emptyCreateValue: null,
-    rawLabel: '原始凭据',
-    onError: message.error
-  })
-
-const validateCredential = () =>
-  validateMcpCredentialFields({
-    isEditing: isEditing.value,
-    secretFields: secretFields.value,
-    secretValues: form.secretValues,
-    credentialText: form.credentialText,
-    onError: message.error
-  })
-
-const loadServers = async () => {
+async function loadServers() {
   try {
     loading.value = true
     const result = await mcpApi.getMcpServers()
@@ -461,14 +295,13 @@ const loadServers = async () => {
   }
 }
 
-const loadSelectedServer = async () => {
+async function loadSelectedServer() {
   if (!selectedName.value) return
   try {
     detailLoading.value = true
     const result = await mcpApi.getMcpServer(selectedName.value)
     selectedServer.value = result.data || null
-    resetForm()
-    showForm.value = false
+    closeForm()
     if (canManagePersonalConnection.value) {
       await loadConnections()
     } else {
@@ -483,7 +316,7 @@ const loadSelectedServer = async () => {
   }
 }
 
-const loadConnections = async () => {
+async function loadConnections() {
   if (!selectedName.value) return
   try {
     connectionsLoading.value = true
@@ -497,55 +330,48 @@ const loadConnections = async () => {
   }
 }
 
-const selectServer = async (serverName) => {
+async function selectServer(serverName) {
   if (!serverName || selectedName.value === serverName) return
   selectedName.value = serverName
   await loadSelectedServer()
 }
 
-const startCreateConnection = () => {
-  resetForm()
-  showForm.value = true
+const handleToggleConnectionStatus = (connection, checked) =>
+  updateConnectionStatus(connection, checked, { canToggle: canToggleConnectionStatus })
+const handleTestConnection = (connection) =>
+  testConnection(connection, { canTest: canTestConnection })
+const handleReauthorizeConnection = (connection) =>
+  reauthorizeConnection(connection, { canReauthorize: canReauthorizeConnection })
+
+const isIssueActionLoading = (connection) => {
+  const issue = getConnectionIssue(connection)
+  return issue?.key === 'reauth_required' && isActionLoading(connection, 'reauth')
 }
 
-const startEditConnection = () => {
-  if (!selectedConnection.value) return
-  editingConnectionId.value = selectedConnection.value.id
-  Object.assign(form, {
-    displayName: selectedConnection.value.display_name || '',
-    externalSubject: selectedConnection.value.external_subject || '',
-    credentialText: '',
-    secretValues: Object.fromEntries(secretFields.value.map((fieldName) => [fieldName, ''])),
-    metaText: selectedConnection.value.meta_json
-      ? JSON.stringify(selectedConnection.value.meta_json, null, 2)
-      : ''
-  })
-  showForm.value = true
+const handleConnectionIssueAction = (connection) => {
+  const issue = getConnectionIssue(connection)
+  if (!issue) return
+  if (issue.key === 'missing_credentials' || issue.key === 'test_failed') {
+    startEditForm(connection)
+    return
+  }
+  if (issue.key === 'reauth_required') {
+    handleReauthorizeConnection(connection)
+  }
 }
 
-const cancelForm = () => {
-  showForm.value = false
-  resetForm()
-}
-
-const submitConnection = async () => {
+async function handleSubmitConnection() {
   if (!selectedServer.value || !validateCredential()) return
-  const metaJson = parseJsonText(form.metaText, '元数据')
-  if (metaJson === undefined) return
-  const credential = buildCredential()
+  const payload = buildBasePayload('元数据')
+  if (payload === undefined) return
+  const credential = buildCredential({ emptyCreateValue: null, rawLabel: '原始凭据' })
   if (credential === undefined && !isEditing.value) return
+  if (credential !== undefined && credential !== null) {
+    payload.credential = credential
+  }
 
   try {
     submitting.value = true
-    const payload = {
-      display_name: form.displayName || null,
-      external_subject: form.externalSubject || null,
-      meta_json: metaJson
-    }
-    if (credential !== undefined && credential !== null) {
-      payload.credential = credential
-    }
-
     const result = isEditing.value
       ? await mcpApi.updateMcpServerConnection(
           selectedServer.value.name,
@@ -559,8 +385,7 @@ const submitConnection = async () => {
 
     if (result.success) {
       message.success(isEditing.value ? '连接已更新' : '连接已创建')
-      showForm.value = false
-      resetForm()
+      closeForm()
       await loadConnections()
     } else {
       message.error(result.message || '保存失败')
@@ -570,98 +395,6 @@ const submitConnection = async () => {
   } finally {
     submitting.value = false
   }
-}
-
-const updateConnectionEnabled = async (checked) => {
-  if (!selectedConnection.value || !selectedServer.value || !canToggleConnectionStatus.value) return
-  const nextStatus = checked ? 'active' : 'disabled'
-  if (selectedConnection.value.status === nextStatus) return
-  try {
-    actionLoading.value = 'status'
-    const result = await mcpApi.updateMcpConnectionStatus(
-      selectedServer.value.name,
-      selectedConnection.value.id,
-      nextStatus
-    )
-    message.success(result.message || (checked ? '连接已启用' : '连接已停用'))
-    await loadConnections()
-  } catch (err) {
-    message.error(err.message || '状态更新失败')
-    await loadConnections()
-  } finally {
-    actionLoading.value = null
-  }
-}
-
-const handleConnectionIssueAction = () => {
-  const issue = getConnectionIssue(selectedConnection.value)
-  if (!issue) return
-  if (issue.key === 'missing_credentials' || issue.key === 'test_failed') {
-    startEditConnection()
-    return
-  }
-  if (issue.key === 'reauth_required') {
-    reauthorizeConnection()
-  }
-}
-
-const testConnection = async () => {
-  if (!selectedConnection.value || !selectedServer.value || !canTestConnection.value) return
-  try {
-    actionLoading.value = 'test'
-    const result = await mcpApi.testMcpConnection(
-      selectedServer.value.name,
-      selectedConnection.value.id
-    )
-    message.success(result.message || '连接测试成功')
-    await loadConnections()
-  } catch (err) {
-    message.error(err.message || '连接测试失败')
-  } finally {
-    actionLoading.value = null
-  }
-}
-
-const reauthorizeConnection = async () => {
-  if (!selectedConnection.value || !selectedServer.value || !canReauthorizeConnection.value) return
-  try {
-    actionLoading.value = 'reauth'
-    const result = await mcpApi.reauthorizeMcpConnection(
-      selectedServer.value.name,
-      selectedConnection.value.id
-    )
-    message.success(result.message || '连接已重置')
-    await loadConnections()
-  } catch (err) {
-    message.error(err.message || '连接重置失败')
-  } finally {
-    actionLoading.value = null
-  }
-}
-
-const deleteConnection = () => {
-  if (!selectedConnection.value || !selectedServer.value) return
-  Modal.confirm({
-    title: '确认删除连接',
-    content: `确定要删除 "${selectedConnection.value.display_name || selectedServer.value.name}" 吗？`,
-    okText: '删除',
-    okType: 'danger',
-    cancelText: '取消',
-    async onOk() {
-      try {
-        await mcpApi.deleteMcpServerConnection(
-          selectedServer.value.name,
-          selectedConnection.value.id
-        )
-        message.success('连接已删除')
-        showForm.value = false
-        resetForm()
-        await loadConnections()
-      } catch (err) {
-        message.error(err.message || '连接删除失败')
-      }
-    }
-  })
 }
 
 onMounted(() => {
@@ -834,248 +567,6 @@ onMounted(() => {
     }
   }
 
-  .connection-panel,
-  .connection-form-panel {
-    border: 1px solid var(--gray-150);
-    border-radius: 8px;
-    background: var(--gray-0);
-  }
-
-  .connection-panel {
-    padding: 12px;
-    transition:
-      border-color 0.2s,
-      box-shadow 0.2s;
-
-    &:hover {
-      border-color: var(--gray-300);
-    }
-  }
-
-  .card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 10px;
-  }
-
-  .key-info {
-    min-width: 0;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .key-icon {
-    color: var(--main-600);
-    flex-shrink: 0;
-  }
-
-  .key-info-content {
-    min-width: 0;
-  }
-
-  .key-name {
-    margin: 0;
-    color: var(--gray-900);
-    font-size: 14px;
-    font-weight: 600;
-    line-height: 1.4;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .card-content {
-    margin-bottom: 10px;
-  }
-
-  .connection-issue {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    margin-bottom: 10px;
-    padding: 9px 10px;
-    border: 1px solid var(--gray-150);
-    border-radius: 8px;
-    background: var(--gray-25);
-
-    &.issue-warning {
-      border-color: var(--color-warning-100);
-      background: var(--color-warning-10);
-
-      .issue-copy span {
-        color: var(--color-warning-900);
-      }
-    }
-
-    &.issue-error {
-      border-color: var(--color-error-100);
-      background: var(--color-error-10);
-
-      .issue-copy span {
-        color: var(--color-error-700);
-      }
-    }
-  }
-
-  .issue-copy {
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-
-    span {
-      font-size: 13px;
-      font-weight: 600;
-      line-height: 1.4;
-    }
-
-    small {
-      overflow: hidden;
-      color: var(--gray-600);
-      font-size: 12px;
-      line-height: 1.4;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-  }
-
-  .issue-action {
-    flex-shrink: 0;
-    padding: 0;
-    font-size: 12px;
-    font-weight: 500;
-  }
-
-  .info-item {
-    display: flex;
-    align-items: flex-start;
-    gap: 6px;
-    margin-bottom: 6px;
-    color: var(--gray-900);
-    font-size: 13px;
-
-    &:last-child {
-      margin-bottom: 0;
-    }
-  }
-
-  .info-label {
-    color: var(--gray-600);
-    flex-shrink: 0;
-  }
-
-  .info-value {
-    min-width: 0;
-    color: var(--gray-900);
-    word-break: break-all;
-  }
-
-  .card-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 10px;
-    padding-top: 8px;
-    border-top: 1px solid var(--gray-100);
-  }
-
-  .footer-left {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-shrink: 0;
-  }
-
-  .switch-label {
-    color: var(--gray-600);
-    font-size: 12px;
-  }
-
-  .status-switch-wrap {
-    display: inline-flex;
-    align-items: center;
-  }
-
-  .footer-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 4px;
-    flex-wrap: wrap;
-  }
-
-  .action-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    color: var(--gray-700);
-    font-size: 12px;
-
-    &:hover {
-      color: var(--main-600);
-    }
-  }
-
-  .danger-action-btn {
-    color: var(--color-error-700);
-
-    &:hover {
-      background: var(--color-error-50);
-      color: var(--color-error-900);
-    }
-  }
-
-  .connection-form-panel {
-    overflow: hidden;
-  }
-
-  .form-panel-header {
-    height: 48px;
-    padding: 0 14px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    border-bottom: 1px solid var(--gray-150);
-
-    h4 {
-      margin: 0;
-      color: var(--gray-900);
-      font-size: 15px;
-      font-weight: 600;
-    }
-  }
-
-  .connection-form {
-    padding: 14px;
-  }
-
-  .form-grid,
-  .secret-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-  }
-
-  .form-grid {
-    .full-width {
-      grid-column: 1 / -1;
-    }
-  }
-
-  .advanced-collapse {
-    margin-top: 2px;
-  }
-
-  .form-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-    padding-top: 8px;
-  }
-
   @media (max-width: 900px) {
     .mcp-personal-layout {
       grid-template-columns: 1fr;
@@ -1088,17 +579,6 @@ onMounted(() => {
       border-right: none;
       border-bottom: 1px solid var(--gray-150);
       padding: 0 0 10px;
-    }
-
-    .form-grid,
-    .secret-grid {
-      grid-template-columns: 1fr;
-      gap: 0;
-    }
-
-    .connection-issue {
-      align-items: flex-start;
-      flex-direction: column;
     }
   }
 }
