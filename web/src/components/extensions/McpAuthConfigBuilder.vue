@@ -18,20 +18,12 @@
     </div>
 
     <template v-if="configMode === 'form'">
-      <div class="auth-provider-grid">
-        <button
-          v-for="option in providerOptions"
-          :key="option.value"
-          type="button"
-          class="auth-provider-card" :disabled="readonly"
-          :class="{ active: form.provider === option.value }"
-          @click="switchProvider(option.value)"
-        >
-          <component :is="option.icon" :size="18" />
-          <span>{{ option.label }}</span>
-          <small>{{ option.description }}</small>
-        </button>
-      </div>
+      <McpAuthOptionGrid
+        :model-value="form.provider"
+        :options="providerOptions"
+        :readonly="readonly"
+        @select="switchProvider"
+      />
 
       <a-alert
         v-if="form.provider === 'none'"
@@ -47,246 +39,43 @@
             <span>绑定范围</span>
             <small>决定连接页维护的凭据按什么范围生效。</small>
           </div>
-          <div class="binding-scope-grid">
-            <button
-              v-for="scope in bindingScopeOptions"
-              :key="scope.value"
-              type="button"
-              class="binding-scope-card" :disabled="readonly"
-              :class="{ active: form.bindingScope === scope.value }"
-              @click="form.bindingScope = scope.value"
-            >
-              <component :is="scope.icon" :size="16" />
-              <span>{{ scope.label }}</span>
-              <small>{{ scope.description }}</small>
-            </button>
-          </div>
+          <McpAuthOptionGrid
+            v-model="form.bindingScope"
+            :options="bindingScopeOptions"
+            :readonly="readonly"
+            variant="compact"
+            :icon-size="16"
+          />
         </section>
 
-        <section class="auth-config-section">
-          <div class="section-heading">
-            <span>注入到 MCP</span>
-            <small>运行时会把 token、密钥或上下文写入请求头或环境变量。</small>
-          </div>
-          <div class="auth-field-row compact">
-            <label>注入目标</label>
-            <a-segmented
-              v-model:value="form.injectTarget" :disabled="readonly"
-              :options="injectTargetOptions"
-              size="small"
-            />
-          </div>
-          <div class="quick-template-bar" v-if="!readonly">
-            <button
-              v-for="entry in quickInjectEntries"
-              :key="`${entry.name}:${entry.value_template}`"
-              type="button"
-              @click="addQuickInjectEntry(entry)"
-            >
-              {{ entry.label }}
-            </button>
-          </div>
-          <div class="row-editor">
-            <div
-              v-for="(entry, index) in form.injectEntries"
-              :key="index"
-              class="row-editor-line"
-            >
-              <a-input v-model:value="entry.name" :readonly="readonly" placeholder="名称，如 Authorization" />
-              <a-input
-                v-model:value="entry.value_template"
-                :readonly="readonly"
-                placeholder="模板，如 Bearer ${access_token}"
-              />
-              <a-button
-                type="text"
-                size="small"
-                danger
-                :disabled="form.injectEntries.length === 1"
-                @click="removeInjectEntry(index)" v-if="!readonly"
-              >
-                <Trash2 :size="14" />
-              </a-button>
-            </div>
-            <a-button size="small" class="lucide-icon-btn" @click="addInjectEntry" v-if="!readonly">
-              <Plus :size="13" />
-              <span>添加注入项</span>
-            </a-button>
-          </div>
-        </section>
+        <McpAuthInjectionSection
+          v-model:target="form.injectTarget"
+          v-model:entries="form.injectEntries"
+          :readonly="readonly"
+          :target-options="injectTargetOptions"
+          :quick-entries="quickInjectEntries"
+        />
 
-        <section v-if="isTokenProvider" class="auth-config-section">
-          <div class="section-heading">
-            <span>Token 获取接口</span>
-            <small>适配公司 API 网关、IAM 或其他内部换 token 服务。</small>
-          </div>
-          <div class="auth-form-grid">
-            <div class="auth-field-row span-2">
-              <label>Token 接口 URL</label>
-              <a-input
-                v-model:value="form.tokenUrl" :readonly="readonly"
-                placeholder="例如：http://gateway.internal/api/token"
-              />
-            </div>
-            <div class="auth-field-row">
-              <label>请求方法</label>
-              <a-select v-model:value="form.tokenMethod" :disabled="readonly">
-                <a-select-option value="POST">POST</a-select-option>
-                <a-select-option value="GET">GET</a-select-option>
-                <a-select-option value="PUT">PUT</a-select-option>
-              </a-select>
-            </div>
-            <div class="auth-field-row">
-              <label>Body 类型</label>
-              <a-select v-model:value="form.tokenBodyType" :disabled="readonly">
-                <a-select-option value="json">JSON</a-select-option>
-                <a-select-option value="form">Form</a-select-option>
-              </a-select>
-            </div>
-          </div>
+        <McpAuthTokenRequestSection
+          v-if="isTokenProvider"
+          v-model:url="form.tokenUrl"
+          v-model:method="form.tokenMethod"
+          v-model:body-type="form.tokenBodyType"
+          v-model:headers="form.tokenHeaders"
+          v-model:body-template="form.tokenBodyTemplate"
+          v-model:response-map="form.tokenResponseMap"
+          :readonly="readonly"
+        />
 
-          <a-collapse ghost class="auth-inner-collapse">
-            <a-collapse-panel key="request" header="请求参数">
-              <div class="kv-section">
-                <div class="kv-title">请求头</div>
-                <div class="row-editor">
-                  <div
-                    v-for="(row, index) in form.tokenHeaders"
-                    :key="`header-${index}`"
-                    class="row-editor-line"
-                  >
-                    <a-input v-model:value="row.key" :readonly="readonly" placeholder="Header 名称" />
-                    <a-input v-model:value="row.value" :readonly="readonly" placeholder="Header 值" />
-                    <a-button
-                      type="text"
-                      size="small"
-                      danger
-                      :disabled="form.tokenHeaders.length === 1"
-                      @click="removeKeyValueRow(form.tokenHeaders, index)" v-if="!readonly"
-                    >
-                      <Trash2 :size="14" />
-                    </a-button>
-                  </div>
-                  <a-button size="small" class="lucide-icon-btn" v-if="!readonly" @click="addKeyValueRow(form.tokenHeaders)">
-                    <Plus :size="13" />
-                    <span>添加一行</span>
-                  </a-button>
-                </div>
-              </div>
-              <div class="kv-section">
-                <div class="kv-title">Body 模板</div>
-                <div class="row-editor">
-                  <div
-                    v-for="(row, index) in form.tokenBodyTemplate"
-                    :key="`body-${index}`"
-                    class="row-editor-line"
-                  >
-                    <a-input v-model:value="row.key" :readonly="readonly" placeholder="字段名" />
-                    <a-input v-model:value="row.value" :readonly="readonly" placeholder="模板值，如 ${secret.client_id}" />
-                    <a-button
-                      type="text"
-                      size="small"
-                      danger
-                      :disabled="form.tokenBodyTemplate.length === 1"
-                      @click="removeKeyValueRow(form.tokenBodyTemplate, index)" v-if="!readonly"
-                    >
-                      <Trash2 :size="14" />
-                    </a-button>
-                  </div>
-                  <a-button
-                    size="small"
-                    class="lucide-icon-btn"
-                    v-if="!readonly" @click="addKeyValueRow(form.tokenBodyTemplate)"
-                  >
-                    <Plus :size="13" />
-                    <span>添加一行</span>
-                  </a-button>
-                </div>
-              </div>
-            </a-collapse-panel>
-            <a-collapse-panel key="response" header="响应映射">
-              <div class="kv-section">
-                <div class="kv-title">把网关响应映射为标准 token 字段</div>
-                <div class="row-editor">
-                  <div
-                    v-for="(row, index) in form.tokenResponseMap"
-                    :key="`response-${index}`"
-                    class="row-editor-line"
-                  >
-                    <a-input v-model:value="row.key" :readonly="readonly" placeholder="标准字段，如 access_token" />
-                    <a-input v-model:value="row.value" :readonly="readonly" placeholder="响应路径，如 data.access_token" />
-                    <a-button
-                      type="text"
-                      size="small"
-                      danger
-                      :disabled="form.tokenResponseMap.length === 1"
-                      @click="removeKeyValueRow(form.tokenResponseMap, index)" v-if="!readonly"
-                    >
-                      <Trash2 :size="14" />
-                    </a-button>
-                  </div>
-                  <a-button
-                    size="small"
-                    class="lucide-icon-btn"
-                    v-if="!readonly" @click="addKeyValueRow(form.tokenResponseMap)"
-                  >
-                    <Plus :size="13" />
-                    <span>添加一行</span>
-                  </a-button>
-                </div>
-              </div>
-            </a-collapse-panel>
-          </a-collapse>
-        </section>
-
-        <a-collapse ghost class="auth-advanced-collapse">
-          <a-collapse-panel key="advanced" header="高级设置">
-            <div class="auth-form-grid">
-              <div class="auth-field-row">
-                <label>MCP 清单隔离</label>
-                <a-select v-model:value="form.manifestScope" :disabled="readonly">
-                  <a-select-option value="binding">按连接隔离</a-select-option>
-                  <a-select-option value="server">服务级共享</a-select-option>
-                </a-select>
-              </div>
-              <div class="auth-field-row">
-                <label>提前刷新秒数</label>
-                <a-input-number
-                  v-model:value="form.preRefreshSeconds" :disabled="readonly"
-                  :min="0"
-                  :max="86400"
-                  style="width: 100%"
-                />
-              </div>
-              <div class="auth-field-row span-2 compact">
-                <label>401 处理</label>
-                <a-switch v-model:checked="form.retryOnceOn401" :disabled="readonly" />
-                <span class="field-helper">收到 401 时清理缓存并自动重试一次。</span>
-              </div>
-            </div>
-          </a-collapse-panel>
-        </a-collapse>
+        <McpAuthAdvancedSection
+          v-model:manifest-scope="form.manifestScope"
+          v-model:pre-refresh-seconds="form.preRefreshSeconds"
+          v-model:retry-once-on401="form.retryOnceOn401"
+          :readonly="readonly"
+        />
       </template>
 
-      <div v-if="form.provider !== 'none'" class="auth-preview-panel">
-        <div>
-          <span class="preview-label">连接页需要填写</span>
-          <div v-if="secretFields.length > 0" class="secret-chip-row">
-            <span v-for="field in secretFields" :key="field" class="secret-chip">
-              {{ getSecretFieldLabel(field) }}
-            </span>
-          </div>
-          <p v-else style="margin: 0;">
-            当前配置未引用 <code>${secret.xxx}</code>，由于无需长期凭据，您可以直接进行测试，无需强制绑定连接。
-          </p>
-        </div>
-        <div>
-          <span class="preview-label">可用模板变量</span>
-          <p>
-            <code>${access_token}</code>、<code>${secret.client_id}</code>、<code>${context.user_id}</code>、<code>${context.work_id}</code>、<code>${context.department_id}</code>
-          </p>
-        </div>
-      </div>
+      <McpAuthPreviewPanel v-if="form.provider !== 'none'" :secret-fields="secretFields" />
 
       <a-alert
         v-if="formWarning"
@@ -297,44 +86,19 @@
       />
     </template>
 
-    <div v-else class="auth-json-mode">
-      <div class="json-guide-grid">
-        <div>
-          <strong>常用字段</strong>
-          <p><code>provider</code> 决定鉴权方式，<code>binding_scope</code> 决定连接隔离。</p>
-        </div>
-        <div>
-          <strong>接口换 Token</strong>
-          <p><code>token_request</code> 描述 URL、请求头、Body 模板和响应映射。</p>
-        </div>
-        <div>
-          <strong>注入规则</strong>
-          <p><code>inject.entries</code> 决定最终写入 MCP 请求头或环境变量。</p>
-        </div>
-      </div>
-      <a-textarea
-        v-model:value="jsonDraft"
-        :rows="12"
-        class="auth-json-textarea" :readonly="readonly"
-        placeholder="粘贴 auth_config JSON；留空表示不启用动态鉴权"
-      />
-      <div class="json-action-row" v-if="!readonly">
-        <a-button size="small" @click="formatJsonDraft">格式化</a-button>
-        <a-button size="small" type="primary" @click="importJsonToForm">导入到向导</a-button>
-      </div>
-      <a-alert
-        v-if="jsonError"
-        class="auth-warning"
-        type="warning"
-        show-icon
-        :message="jsonError"
-      />
-    </div>
+    <McpAuthJsonMode
+      v-else
+      v-model="jsonDraft"
+      :readonly="readonly"
+      :json-error="jsonError"
+      @format="formatJsonDraft"
+      @import="importJsonToForm"
+    />
   </div>
 </template>
 
 <script setup>
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, reactive, shallowRef, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import {
   Building2,
@@ -342,12 +106,16 @@ import {
   Copy,
   Globe2,
   KeyRound,
-  Plus,
   ShieldOff,
   Shuffle,
-  Trash2,
   UserRound
 } from 'lucide-vue-next'
+import McpAuthAdvancedSection from '@/components/mcp/McpAuthAdvancedSection.vue'
+import McpAuthInjectionSection from '@/components/mcp/McpAuthInjectionSection.vue'
+import McpAuthJsonMode from '@/components/mcp/McpAuthJsonMode.vue'
+import McpAuthOptionGrid from '@/components/mcp/McpAuthOptionGrid.vue'
+import McpAuthPreviewPanel from '@/components/mcp/McpAuthPreviewPanel.vue'
+import McpAuthTokenRequestSection from '@/components/mcp/McpAuthTokenRequestSection.vue'
 import {
   authConfigToBuilderForm,
   buildAuthConfigFromBuilderForm,
@@ -355,7 +123,6 @@ import {
   extractSecretFieldNames,
   isAuthConfigSupportedByBuilder
 } from '@/utils/mcpAuthConfigBuilder'
-import { getMcpSecretFieldLabel } from '@/utils/mcpConnectionUtils'
 
 const props = defineProps({
   readonly: { type: Boolean, default: false },
@@ -365,12 +132,38 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue'])
 
-const configMode = ref('form')
-const jsonDraft = ref('')
-const jsonError = ref('')
-const syncing = ref(false)
-const lastEmittedValue = ref(null)
+const configMode = shallowRef('form')
+const jsonDraft = shallowRef('')
+const jsonError = shallowRef('')
+const syncing = shallowRef(false)
+const lastEmittedValue = shallowRef(null)
 const form = reactive(createDefaultAuthBuilderForm())
+
+const bindingScopeOptions = [
+  {
+    value: 'system',
+    label: '全局共享',
+    description: '全员使用同一组凭据',
+    icon: Globe2
+  },
+  {
+    value: 'department',
+    label: '部门共享',
+    description: '按部门隔离权限',
+    icon: Building2
+  },
+  {
+    value: 'user',
+    label: '个人专用',
+    description: '按用户隔离权限',
+    icon: UserRound
+  }
+]
+
+const injectTargetOptions = [
+  { label: '请求头', value: 'headers' },
+  { label: '环境变量', value: 'env' }
+]
 
 const providerOptions = computed(() => {
   const options = [
@@ -406,32 +199,6 @@ const providerOptions = computed(() => {
   return options
 })
 
-const bindingScopeOptions = [
-  {
-    value: 'system',
-    label: '全局共享',
-    description: '全员使用同一组凭据',
-    icon: Globe2
-  },
-  {
-    value: 'department',
-    label: '部门共享',
-    description: '按部门隔离权限',
-    icon: Building2
-  },
-  {
-    value: 'user',
-    label: '个人专用',
-    description: '按用户隔离权限',
-    icon: UserRound
-  }
-]
-
-const injectTargetOptions = [
-  { label: '请求头', value: 'headers' },
-  { label: '环境变量', value: 'env' }
-]
-
 const quickInjectEntries = computed(() => {
   if (form.injectTarget === 'env') {
     return [
@@ -449,7 +216,8 @@ const quickInjectEntries = computed(() => {
     {
       label: 'Authorization Bearer',
       name: 'Authorization',
-      value_template: form.provider === 'bound_secret' ? 'Bearer ${secret.access_token}' : 'Bearer ${access_token}'
+      value_template:
+        form.provider === 'bound_secret' ? 'Bearer ${secret.access_token}' : 'Bearer ${access_token}'
     },
     { label: '用户 ID', name: 'X-Yuxi-User', value_template: '${context.user_id}' },
     { label: '员工工号', name: 'X-Yuxi-Work-Id', value_template: '${context.work_id}' },
@@ -545,44 +313,6 @@ const switchProvider = (provider) => {
   Object.assign(form, createDefaultAuthBuilderForm(provider))
 }
 
-const addInjectEntry = () => {
-  form.injectEntries.push({ name: '', value_template: '' })
-}
-
-const removeInjectEntry = (index) => {
-  if (form.injectEntries.length === 1) {
-    form.injectEntries[0].name = ''
-    form.injectEntries[0].value_template = ''
-    return
-  }
-  form.injectEntries.splice(index, 1)
-}
-
-const addKeyValueRow = (rows) => {
-  rows.push({ key: '', value: '' })
-}
-
-const removeKeyValueRow = (rows, index) => {
-  if (rows.length === 1) {
-    rows[0].key = ''
-    rows[0].value = ''
-    return
-  }
-  rows.splice(index, 1)
-}
-
-const addQuickInjectEntry = (entry) => {
-  const existing = form.injectEntries.find((item) => item.name === entry.name)
-  if (existing) {
-    existing.value_template = entry.value_template
-    return
-  }
-  form.injectEntries.push({
-    name: entry.name,
-    value_template: entry.value_template
-  })
-}
-
 const copyCurrentJson = async () => {
   try {
     await navigator.clipboard.writeText(getCurrentJsonText())
@@ -634,8 +364,6 @@ const importJsonToForm = () => {
   }
 }
 
-const getSecretFieldLabel = getMcpSecretFieldLabel
-
 watch(
   () => props.modelValue,
   (value) => {
@@ -656,8 +384,6 @@ watch(jsonDraft, (value) => {
 </script>
 
 <style lang="less" scoped>
-@import '@/assets/css/extensions.less';
-
 .mcp-auth-builder {
   display: flex;
   flex-direction: column;
@@ -695,57 +421,6 @@ watch(jsonDraft, (value) => {
   }
 }
 
-.auth-provider-grid,
-.binding-scope-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
-  gap: 8px;
-}
-
-.auth-provider-card,
-.binding-scope-card {
-  display: flex;
-  min-height: 88px;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  gap: 5px;
-  padding: 11px 12px;
-  border: 1px solid var(--gray-150);
-  border-radius: 8px;
-  background: var(--gray-0);
-  color: var(--gray-700);
-  cursor: pointer;
-  text-align: left;
-
-  span {
-    color: var(--gray-900);
-    font-size: 13px;
-    font-weight: 600;
-  }
-
-  small {
-    color: var(--gray-500);
-    font-size: 12px;
-    line-height: 1.35;
-  }
-
-  &.active {
-    border-color: var(--main-color);
-    background: var(--main-10);
-    color: var(--main-color);
-  }
-
-  &:disabled {
-    cursor: not-allowed;
-    opacity: 0.7;
-  }
-}
-
-.binding-scope-card {
-  min-height: 76px;
-}
-
 .auth-config-section {
   display: flex;
   flex-direction: column;
@@ -756,202 +431,16 @@ watch(jsonDraft, (value) => {
   background: var(--gray-0);
 }
 
-.auth-form-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.auth-field-row {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 6px;
-
-  &.compact {
-    flex-direction: row;
-    align-items: center;
-    gap: 10px;
-  }
-
-  &.span-2 {
-    grid-column: 1 / -1;
-  }
-
-  label {
-    color: var(--gray-700);
-    font-size: 13px;
-    font-weight: 500;
-  }
-}
-
-.field-helper {
-  color: var(--gray-500);
-  font-size: 12px;
-}
-
-.quick-template-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-
-  button {
-    padding: 3px 8px;
-    border: 1px solid var(--gray-150);
-    border-radius: 6px;
-    background: var(--gray-25);
-    color: var(--gray-600);
-    cursor: pointer;
-    font-size: 12px;
-
-    &:hover {
-      border-color: var(--main-color);
-      color: var(--main-color);
-    }
-  }
-}
-
-.row-editor {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.row-editor-line {
-  display: grid;
-  grid-template-columns: minmax(130px, 0.7fr) minmax(180px, 1.3fr) 36px;
-  gap: 8px;
-  align-items: center;
-}
-
-.auth-inner-collapse,
-.auth-advanced-collapse {
-  border-radius: 8px;
-  background: var(--gray-25);
-}
-
-.kv-section {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-
-  & + .kv-section {
-    margin-top: 14px;
-  }
-}
-
-.kv-title,
-.preview-label {
-  color: var(--gray-700);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.auth-preview-panel {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
-  gap: 12px;
-  padding: 12px 14px;
-  border: 1px dashed var(--gray-200);
-  border-radius: 8px;
-  background: var(--gray-0);
-
-  p {
-    margin: 6px 0 0;
-    color: var(--gray-500);
-    font-size: 12px;
-    line-height: 1.6;
-  }
-
-  code {
-    font-family: @mono-font;
-  }
-}
-
-.secret-chip-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.secret-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  border-radius: 6px;
-  background: var(--main-10);
-  color: var(--main-color);
-  font-size: 12px;
-  font-weight: 500;
-}
-
 .auth-warning {
   margin-top: 0;
-}
-
-.auth-json-mode {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.json-guide-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-
-  > div {
-    padding: 10px;
-    border: 1px solid var(--gray-150);
-    border-radius: 8px;
-    background: var(--gray-0);
-  }
-
-  strong {
-    color: var(--gray-900);
-    font-size: 13px;
-  }
-
-  p {
-    margin: 6px 0 0;
-    color: var(--gray-500);
-    font-size: 12px;
-    line-height: 1.5;
-  }
-
-  code {
-    font-family: @mono-font;
-  }
-}
-
-.auth-json-textarea {
-  font-family: @mono-font;
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-.json-action-row {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
 }
 
 @media (max-width: 720px) {
   .auth-builder-toolbar {
     flex-direction: column;
   }
-
-  .auth-form-grid,
-  .auth-preview-panel,
-  .json-guide-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .row-editor-line {
-    grid-template-columns: 1fr;
-  }
 }
+
 .is-readonly {
   :deep(.ant-input[disabled]),
   :deep(.ant-input[readonly]),
@@ -963,13 +452,14 @@ watch(jsonDraft, (value) => {
     border-color: transparent;
     cursor: default;
   }
-  
-  :deep(.ant-input), :deep(.ant-input-number), :deep(.ant-select-selector) {
+
+  :deep(.ant-input),
+  :deep(.ant-input-number),
+  :deep(.ant-select-selector) {
     border-color: transparent;
     background-color: transparent;
   }
-  
-  /* Retain some outline so they don't look like floating text completely? Let's just make it subtle */
+
   :deep(.ant-input[disabled]),
   :deep(.ant-input[readonly]),
   :deep(.ant-input-number-disabled),
@@ -978,32 +468,28 @@ watch(jsonDraft, (value) => {
     background-color: var(--gray-0);
   }
 
-  .auth-provider-card:disabled,
-  .binding-scope-card:disabled {
+  :deep(.auth-option-card:disabled) {
     cursor: default;
     opacity: 1;
     background: var(--gray-25);
   }
 
-  .auth-provider-card.active:disabled,
-  .binding-scope-card.active:disabled {
+  :deep(.auth-option-card.active:disabled) {
     color: var(--main-color);
     background: var(--main-10);
     border-color: var(--main-color);
-
-    span {
-      color: var(--main-color);
-    }
   }
 
-  .auth-provider-card:not(.active):disabled,
-  .binding-scope-card:not(.active):disabled {
-    span {
-      color: var(--gray-700);
-    }
-    small {
-      color: var(--gray-500);
-    }
+  :deep(.auth-option-card.active:disabled span) {
+    color: var(--main-color);
+  }
+
+  :deep(.auth-option-card:not(.active):disabled span) {
+    color: var(--gray-700);
+  }
+
+  :deep(.auth-option-card:not(.active):disabled small) {
+    color: var(--gray-500);
   }
 
   :deep(.ant-radio-button-wrapper-disabled) {
@@ -1013,5 +499,4 @@ watch(jsonDraft, (value) => {
     cursor: default;
   }
 }
-
 </style>
