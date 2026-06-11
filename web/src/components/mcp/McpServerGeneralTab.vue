@@ -248,7 +248,14 @@ import { message } from 'ant-design-vue'
 import { Braces, Rows3, Save, X } from 'lucide-vue-next'
 import { mcpApi } from '@/apis/mcp_api'
 import { formatFullDateTime } from '@/utils/time'
-import { parseMcpJsonText } from '@/utils/mcpConnectionUtils'
+import {
+  buildMcpServerPayloadFromForm,
+  createMcpServerFormState,
+  formatMcpServerJsonContent,
+  parseMcpServerJsonContent,
+  stringifyMcpServerConfig,
+  validateMcpServerPayload
+} from '@/utils/mcpServerFormUtils'
 import McpAuthConfigBuilder from '@/components/extensions/McpAuthConfigBuilder.vue'
 import McpEnvEditor from '@/components/McpEnvEditor.vue'
 
@@ -263,21 +270,7 @@ const editLoading = shallowRef(false)
 const formMode = shallowRef('form')
 const jsonContent = shallowRef('')
 
-const editForm = reactive({
-  name: '',
-  description: '',
-  transport: 'streamable_http',
-  url: '',
-  command: '',
-  args: [],
-  env: null,
-  headersText: '',
-  authConfigText: '',
-  timeout: null,
-  sse_read_timeout: null,
-  tags: [],
-  icon: ''
-})
+const editForm = reactive(createMcpServerFormState())
 
 const isStdioTransport = computed(
   () =>
@@ -294,22 +287,8 @@ const getTransportColor = (transport) => {
 }
 
 const resetEditForm = (data) => {
-  Object.assign(editForm, {
-    name: data?.name || '',
-    description: data?.description || '',
-    transport: data?.transport || 'streamable_http',
-    url: data?.url || '',
-    command: data?.command || '',
-    args: data?.args || [],
-    env: data?.env || null,
-    headersText: data?.headers ? JSON.stringify(data.headers, null, 2) : '',
-    authConfigText: data?.auth_config ? JSON.stringify(data.auth_config, null, 2) : '',
-    timeout: data?.timeout,
-    sse_read_timeout: data?.sse_read_timeout,
-    tags: data?.tags || [],
-    icon: data?.icon || ''
-  })
-  jsonContent.value = data ? JSON.stringify(data, null, 2) : ''
+  Object.assign(editForm, createMcpServerFormState(data))
+  jsonContent.value = stringifyMcpServerConfig(data)
 }
 
 const cancelEdit = () => {
@@ -318,93 +297,29 @@ const cancelEdit = () => {
 }
 
 const formatJson = () => {
-  try {
-    const obj = JSON.parse(jsonContent.value)
-    jsonContent.value = JSON.stringify(obj, null, 2)
-  } catch {
-    message.error('JSON 格式错误，无法格式化')
-  }
+  const formatted = formatMcpServerJsonContent(jsonContent.value, message.error)
+  if (formatted !== undefined) jsonContent.value = formatted
 }
 
 const parseJsonToForm = () => {
-  try {
-    const obj = JSON.parse(jsonContent.value)
-    resetEditForm(obj)
-    formMode.value = 'form'
-    message.success('已解析到表单')
-  } catch {
-    message.error('JSON 格式错误')
-  }
+  const data = parseMcpServerJsonContent(jsonContent.value, message.error)
+  if (data === undefined) return
+  resetEditForm(data)
+  formMode.value = 'form'
+  message.success('已解析到表单')
 }
-
-const parseJsonText = (text, label, options = {}) =>
-  parseMcpJsonText(text, label, { ...options, onError: message.error })
 
 const buildEditPayload = () => {
   if (formMode.value === 'json') {
-    try {
-      return JSON.parse(jsonContent.value)
-    } catch {
-      message.error('JSON 格式错误')
-      return null
-    }
+    return parseMcpServerJsonContent(jsonContent.value, message.error) || null
   }
 
-  let headers = null
-  if (editForm.headersText.trim()) {
-    try {
-      headers = JSON.parse(editForm.headersText)
-    } catch {
-      message.error('请求头 JSON 格式错误')
-      return null
-    }
-  }
-
-  const authConfig = parseJsonText(editForm.authConfigText, '认证配置')
-  if (authConfig === undefined) {
-    return null
-  }
-
-  return {
-    name: editForm.name,
-    description: editForm.description || null,
-    transport: editForm.transport,
-    url: editForm.url || null,
-    command: editForm.command || null,
-    args: editForm.args.length > 0 ? editForm.args : null,
-    env: editForm.env,
-    headers,
-    auth_config: authConfig,
-    timeout: editForm.timeout || null,
-    sse_read_timeout: editForm.sse_read_timeout || null,
-    tags: editForm.tags.length > 0 ? editForm.tags : null,
-    icon: editForm.icon || null
-  }
-}
-
-const validateEditPayload = (data) => {
-  if (!data.name?.trim()) {
-    message.error('MCP 名称不能为空')
-    return false
-  }
-  if (!data.transport) {
-    message.error('请选择传输类型')
-    return false
-  }
-  if (['sse', 'streamable_http'].includes(data.transport) && !data.url?.trim()) {
-    message.error('HTTP 类型必须填写 MCP URL')
-    return false
-  }
-  if (data.transport === 'stdio' && !data.command?.trim()) {
-    message.error('StdIO 类型必须填写命令')
-    return false
-  }
-  return true
+  return buildMcpServerPayloadFromForm(editForm, message.error)
 }
 
 const handleSaveEdit = async () => {
   const data = buildEditPayload()
-  if (!data || !validateEditPayload(data)) return
+  if (!data || !validateMcpServerPayload(data, message.error)) return
 
   try {
     editLoading.value = true
