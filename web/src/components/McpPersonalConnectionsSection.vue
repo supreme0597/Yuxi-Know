@@ -138,23 +138,15 @@ import { message } from 'ant-design-vue'
 import { Building2, Globe2, Plus, RefreshCw, UserRound } from 'lucide-vue-next'
 import { mcpApi } from '@/apis/mcp_api'
 import { useMcpConnectionActions } from '@/composables/useMcpConnectionActions'
+import { useMcpConnectionCardState } from '@/composables/useMcpConnectionCardState'
 import { useMcpConnectionForm } from '@/composables/useMcpConnectionForm'
 import McpConnectionCard from '@/components/mcp/McpConnectionCard.vue'
 import McpConnectionForm from '@/components/mcp/McpConnectionForm.vue'
 import { extractSecretFieldNames } from '@/utils/mcpAuthConfigBuilder'
 import {
   MCP_CONNECTION_SCOPE_LABELS,
-  MCP_CONNECTION_STATUS_LABELS,
-  canRunMcpConnectionAction,
-  canToggleMcpConnectionStatus,
-  formatMcpConnectionLastInfo,
-  getMcpConnectionActionTooltip,
-  getMcpConnectionIssue,
-  getMcpConnectionStatusSwitchLabel,
-  getMcpConnectionStatusToggleTooltip,
   isMcpConnectionCredentialMissing
 } from '@/utils/mcpConnectionUtils'
-import { formatFullDateTime } from '@/utils/time'
 
 const loading = shallowRef(false)
 const detailLoading = shallowRef(false)
@@ -166,7 +158,6 @@ const selectedServer = shallowRef(null)
 const connections = shallowRef([])
 
 const scopeLabelMap = MCP_CONNECTION_SCOPE_LABELS
-const statusLabelMap = MCP_CONNECTION_STATUS_LABELS
 
 const selectedConnection = computed(() => connections.value[0] || null)
 const authConfig = computed(() => selectedServer.value?.auth_config || {})
@@ -217,38 +208,24 @@ const credentialHint = computed(() => {
 
 const isConnectionCredentialMissing = (connection) =>
   isMcpConnectionCredentialMissing(connection, connectionCredentialsRequired.value)
-const getStatusLabel = (status) => statusLabelMap[status] || status || '未知状态'
 const getConnectionTitle = (connection) =>
   connection?.display_name || selectedServer.value?.name || '个人连接'
-const canToggleConnectionStatus = (connection) =>
-  canToggleMcpConnectionStatus(connection, { isCredentialMissing: isConnectionCredentialMissing })
-const getConnectionStatusSwitchLabel = (connection) =>
-  getMcpConnectionStatusSwitchLabel(connection, getStatusLabel)
-const getConnectionStatusToggleTooltip = (connection) =>
-  getMcpConnectionStatusToggleTooltip(connection, {
-    isCredentialMissing: isConnectionCredentialMissing
-  })
-const canTestConnection = (connection) =>
-  canRunMcpConnectionAction(connection, { isCredentialMissing: isConnectionCredentialMissing })
-const getConnectionTestTooltip = (connection) =>
-  getMcpConnectionActionTooltip(connection, '测试连接', '当前连接不可测试', {
-    isCredentialMissing: isConnectionCredentialMissing
-  })
-const canReauthorizeConnection = (connection) =>
-  canRunMcpConnectionAction(connection, { isCredentialMissing: isConnectionCredentialMissing })
-const getConnectionReauthorizeTooltip = (connection) =>
-  getMcpConnectionActionTooltip(connection, '重置授权并重新激活', '当前连接不可重连', {
-    isCredentialMissing: isConnectionCredentialMissing
-  })
-const getConnectionIssue = (connection) =>
-  getMcpConnectionIssue(connection, {
-    includeScopeMismatch: false,
-    isCredentialMissing: isConnectionCredentialMissing,
-    missingCredentialsDescription: '缺少长期凭据，当前账号无法使用该 MCP。',
-    reauthRequiredDescription: '授权缓存已失效，需要重新连接后继续使用。'
-  })
-const getConnectionLastInfo = (connection) =>
-  formatMcpConnectionLastInfo(connection, formatFullDateTime)
+const {
+  canToggleConnectionStatus,
+  canTestConnection,
+  canReauthorizeConnection,
+  getConnectionStatusSwitchLabel,
+  getConnectionStatusToggleTooltip,
+  getConnectionTestTooltip,
+  getConnectionReauthorizeTooltip,
+  getConnectionIssue,
+  getConnectionLastInfo
+} = useMcpConnectionCardState({
+  includeScopeMismatch: false,
+  isCredentialMissing: isConnectionCredentialMissing,
+  missingCredentialsDescription: '缺少长期凭据，当前账号无法使用该 MCP。',
+  reauthRequiredDescription: '授权缓存已失效，需要重新连接后继续使用。'
+})
 
 const {
   isActionLoading,

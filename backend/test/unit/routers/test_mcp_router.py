@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -11,6 +12,8 @@ from yuxi.storage.postgres.models_business import User
 
 
 BOUND_CONNECTION_MISSING = "Active MCP connection not found for server 'gateway' and scope department:42"
+SECRET_AUTH_ENTRY = {"name": "Authorization", "value_template": "Bearer ${secret.access_token}"}
+TOKEN_AUTH_ENTRY = {"name": "Authorization", "value_template": "Bearer ${access_token}"}
 
 
 def _build_app(*, allow_admin: bool = True) -> FastAPI:
@@ -53,10 +56,20 @@ def _auth_config(binding_scope: str = "user") -> dict:
         "version": 1,
         "provider": "bound_secret",
         "binding_scope": binding_scope,
-        "inject": {
-            "target": "headers",
-            "entries": [{"name": "Authorization", "value_template": "Bearer ${secret.access_token}"}],
-        },
+        "inject": {"target": "headers", "entries": [SECRET_AUTH_ENTRY]},
+    }
+
+
+def _normalized_auth_config(provider: str, *, token_request: dict | None = None) -> dict:
+    entry = TOKEN_AUTH_ENTRY if provider == "custom_http_token" else SECRET_AUTH_ENTRY
+    return {
+        "version": 1,
+        "provider": provider,
+        "binding_scope": "department",
+        "manifest_scope": "server",
+        "inject": {"target": "headers", "entries": [entry]},
+        "refresh_policy": {"pre_refresh_seconds": 0, "retry_once_on_401": False},
+        "token_request": token_request,
     }
 
 
@@ -260,27 +273,16 @@ def test_create_mcp_server_forwards_auth_config(monkeypatch):
                 "version": 1,
                 "provider": "custom_http_token",
                 "binding_scope": "department",
-                "inject": {
-                    "target": "headers",
-                    "entries": [{"name": "Authorization", "value_template": "Bearer ${access_token}"}],
-                },
+                "inject": {"target": "headers", "entries": [TOKEN_AUTH_ENTRY]},
                 "token_request": {"url": "http://gateway.local/auth/token", "method": "POST"},
             },
         },
     )
     assert resp.status_code == 200, resp.text
-    assert captured["auth_config"] == {
-        "version": 1,
-        "provider": "custom_http_token",
-        "binding_scope": "department",
-        "manifest_scope": "server",
-        "inject": {
-            "target": "headers",
-            "entries": [{"name": "Authorization", "value_template": "Bearer ${access_token}"}],
-        },
-        "refresh_policy": {"pre_refresh_seconds": 0, "retry_once_on_401": False},
-        "token_request": {"url": "http://gateway.local/auth/token", "method": "POST"},
-    }
+    assert captured["auth_config"] == _normalized_auth_config(
+        "custom_http_token",
+        token_request={"url": "http://gateway.local/auth/token", "method": "POST"},
+    )
 
 
 def test_update_mcp_server_forwards_auth_config(monkeypatch):
@@ -303,27 +305,13 @@ def test_update_mcp_server_forwards_auth_config(monkeypatch):
                 "version": 1,
                 "provider": "bound_secret",
                 "binding_scope": "department",
-                "inject": {
-                    "target": "headers",
-                    "entries": [{"name": "Authorization", "value_template": "Bearer ${secret.access_token}"}],
-                },
+                "inject": {"target": "headers", "entries": [SECRET_AUTH_ENTRY]},
             },
         },
     )
     assert resp.status_code == 200, resp.text
     assert captured["name"] == "gateway"
-    assert captured["auth_config"] == {
-        "version": 1,
-        "provider": "bound_secret",
-        "binding_scope": "department",
-        "manifest_scope": "server",
-        "inject": {
-            "target": "headers",
-            "entries": [{"name": "Authorization", "value_template": "Bearer ${secret.access_token}"}],
-        },
-        "refresh_policy": {"pre_refresh_seconds": 0, "retry_once_on_401": False},
-        "token_request": None,
-    }
+    assert captured["auth_config"] == _normalized_auth_config("bound_secret")
 
 
 def test_create_mcp_server_rejects_invalid_auth_config(monkeypatch):
@@ -343,10 +331,7 @@ def test_create_mcp_server_rejects_invalid_auth_config(monkeypatch):
                 "version": 1,
                 "provider": "custom_http_token",
                 "binding_scope": "department",
-                "inject": {
-                    "target": "headers",
-                    "entries": [{"name": "Authorization", "value_template": "Bearer ${access_token}"}],
-                },
+                "inject": {"target": "headers", "entries": [TOKEN_AUTH_ENTRY]},
             },
         },
     )
@@ -755,7 +740,14 @@ def test_get_mcp_server_tools_uses_current_admin_auth_context(monkeypatch):
     assert payload["data"][0]["enabled"] is True
 
 
-def test_get_mcp_server_tools_returns_403_when_bound_connection_missing(monkeypatch):
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("get", "/api/system/mcp-servers/gateway/tools"),
+        ("post", "/api/system/mcp-servers/gateway/tools/refresh"),
+    ],
+)
+def test_mcp_server_tools_returns_403_when_bound_connection_missing(monkeypatch, method, path):
     async def fake_get_all_mcp_tools(server_name, *, auth_context=None, db=None, http_client=None, force_refresh=False):
         del server_name, auth_context, db, http_client, force_refresh
         raise ValueError(BOUND_CONNECTION_MISSING)
@@ -764,21 +756,7 @@ def test_get_mcp_server_tools_returns_403_when_bound_connection_missing(monkeypa
     monkeypatch.setattr("server.routers.mcp_router.get_all_mcp_tools", fake_get_all_mcp_tools)
 
     client = TestClient(_build_app())
-    resp = client.get("/api/system/mcp-servers/gateway/tools")
-
-    assert resp.status_code == 403, resp.text
-
-
-def test_refresh_mcp_server_tools_returns_403_when_bound_connection_missing(monkeypatch):
-    async def fake_get_all_mcp_tools(server_name, *, auth_context=None, db=None, http_client=None, force_refresh=False):
-        del server_name, auth_context, db, http_client, force_refresh
-        raise ValueError(BOUND_CONNECTION_MISSING)
-
-    _patch_get_server_or_404(monkeypatch)
-    monkeypatch.setattr("server.routers.mcp_router.get_all_mcp_tools", fake_get_all_mcp_tools)
-
-    client = TestClient(_build_app())
-    resp = client.post("/api/system/mcp-servers/gateway/tools/refresh")
+    resp = getattr(client, method)(path)
 
     assert resp.status_code == 403, resp.text
 

@@ -27,6 +27,11 @@ BOUND_SECRET_USER_AUTH_CONFIG = {
 }
 
 
+@pytest.fixture(autouse=True)
+def mcp_credentials_master_key(monkeypatch):
+    monkeypatch.setenv("MCP_CREDENTIALS_MASTER_KEY", "local-test-master-key")
+
+
 def make_mcp_server(name: str, **overrides) -> MCPServer:
     payload = {
         "name": name,
@@ -56,6 +61,45 @@ def make_mcp_connection(server_name: str, **overrides) -> MCPConnection:
 async def add_mcp_server(session, name: str, **overrides) -> None:
     session.add(make_mcp_server(name, **overrides))
     await session.commit()
+
+
+async def add_scope_mismatched_connection(session, server_name: str, **connection_overrides):
+    session.add(
+        make_mcp_server(
+            server_name,
+            url=f"http://{server_name}.local/mcp",
+            auth_config_json=BOUND_SECRET_USER_AUTH_CONFIG,
+        )
+    )
+    session.add(
+        make_mcp_connection(
+            server_name,
+            display_name="历史全局连接",
+            **connection_overrides,
+        )
+    )
+    await session.commit()
+    return (
+        await connection_service.list_mcp_connections(
+            session,
+            server_name=server_name,
+        )
+    )[0]
+
+
+def patch_token_cache(monkeypatch):
+    cleared_connection_ids = []
+    released_connection_ids = []
+
+    class DummyTokenCache:
+        async def delete_access_token(self, connection_id):
+            cleared_connection_ids.append(connection_id)
+
+        async def release_refresh_lock(self, connection_id):
+            released_connection_ids.append(connection_id)
+
+    monkeypatch.setattr("yuxi.services.mcp_auth.redis_token_cache.RedisTokenCache", lambda: DummyTokenCache())
+    return cleared_connection_ids, released_connection_ids
 
 
 @pytest_asyncio.fixture
@@ -106,7 +150,6 @@ async def connection_listing_session():
 
 
 async def test_create_and_list_mcp_connections(connection_service_session, monkeypatch):
-    monkeypatch.setenv("MCP_CREDENTIALS_MASTER_KEY", "local-test-master-key")
     await add_mcp_server(connection_service_session, "finance-gateway", url="http://finance.local/mcp")
 
     created = await connection_service.create_mcp_connection(
@@ -129,7 +172,6 @@ async def test_create_and_list_mcp_connections(connection_service_session, monke
 
 
 async def test_create_mcp_connection_normalizes_system_scope_to_global(connection_service_session, monkeypatch):
-    monkeypatch.setenv("MCP_CREDENTIALS_MASTER_KEY", "local-test-master-key")
     await add_mcp_server(connection_service_session, "global-gateway", url="http://global.local/mcp")
 
     created = await connection_service.create_mcp_connection(
@@ -250,7 +292,6 @@ async def test_list_mcp_connections_page_filters_health_and_searches_scope_targe
 async def test_create_mcp_connection_duplicate_scope_uses_user_friendly_message(
     connection_service_session, monkeypatch
 ):
-    monkeypatch.setenv("MCP_CREDENTIALS_MASTER_KEY", "local-test-master-key")
     await add_mcp_server(connection_service_session, "demo_mcp_server", url="http://demo.local/mcp")
 
     await connection_service.create_mcp_connection(
@@ -282,7 +323,6 @@ async def test_create_mcp_connection_duplicate_scope_uses_user_friendly_message(
 async def test_create_mcp_connection_rejects_scope_that_does_not_match_server_binding(
     connection_service_session, monkeypatch
 ):
-    monkeypatch.setenv("MCP_CREDENTIALS_MASTER_KEY", "local-test-master-key")
     await add_mcp_server(
         connection_service_session,
         "personal-gateway",
@@ -305,7 +345,6 @@ async def test_create_mcp_connection_rejects_scope_that_does_not_match_server_bi
 
 
 async def test_set_mcp_connection_status_updates_status(connection_service_session, monkeypatch):
-    monkeypatch.setenv("MCP_CREDENTIALS_MASTER_KEY", "local-test-master-key")
     await add_mcp_server(connection_service_session, "corp-gateway", url="http://corp.local/mcp")
 
     created = await connection_service.create_mcp_connection(
@@ -330,7 +369,6 @@ async def test_set_mcp_connection_status_updates_status(connection_service_sessi
 
 
 async def test_create_mcp_connection_rejects_invalid_scope_type(connection_service_session, monkeypatch):
-    monkeypatch.setenv("MCP_CREDENTIALS_MASTER_KEY", "local-test-master-key")
     await add_mcp_server(
         connection_service_session,
         "invalid-scope-gateway",
@@ -348,7 +386,6 @@ async def test_create_mcp_connection_rejects_invalid_scope_type(connection_servi
 
 
 async def test_create_mcp_connection_rejects_missing_department_scope_id(connection_service_session, monkeypatch):
-    monkeypatch.setenv("MCP_CREDENTIALS_MASTER_KEY", "local-test-master-key")
     await add_mcp_server(
         connection_service_session,
         "missing-scope-id-gateway",
@@ -366,7 +403,6 @@ async def test_create_mcp_connection_rejects_missing_department_scope_id(connect
 
 
 async def test_set_mcp_connection_status_rejects_invalid_status(connection_service_session, monkeypatch):
-    monkeypatch.setenv("MCP_CREDENTIALS_MASTER_KEY", "local-test-master-key")
     await add_mcp_server(
         connection_service_session,
         "invalid-status-gateway",
@@ -390,45 +426,54 @@ async def test_set_mcp_connection_status_rejects_invalid_status(connection_servi
         )
 
 
-async def test_set_mcp_connection_status_rejects_reactivating_scope_mismatch(
-    connection_service_session, monkeypatch
+@pytest.mark.parametrize(
+    ("operation", "server_name", "connection_overrides"),
+    [
+        ("set_status", "personal-status-gateway", {"status": "disabled"}),
+        (
+            "reauthorize",
+            "personal-reauth-gateway",
+            {"status": "reauth_required", "meta_json": {"last_error": {"message": "expired"}}},
+        ),
+        ("test", "personal-runtime-gateway", {}),
+    ],
+)
+async def test_mcp_connection_operations_reject_scope_mismatch(
+    connection_service_session, operation, server_name, connection_overrides
 ):
-    monkeypatch.setenv("MCP_CREDENTIALS_MASTER_KEY", "local-test-master-key")
-    connection_service_session.add(
-        make_mcp_server(
-            "personal-status-gateway",
-            url="http://personal-status.local/mcp",
-            auth_config_json=BOUND_SECRET_USER_AUTH_CONFIG,
-        )
+    connection = await add_scope_mismatched_connection(
+        connection_service_session,
+        server_name,
+        **connection_overrides,
     )
-    connection_service_session.add(
-        make_mcp_connection(
-            "personal-status-gateway",
-            display_name="历史全局连接",
-            status="disabled",
-        )
-    )
-    await connection_service_session.commit()
-    connection = (
-        await connection_service.list_mcp_connections(
-            connection_service_session,
-            server_name="personal-status-gateway",
-        )
-    )[0]
 
     with pytest.raises(ValueError) as exc_info:
-        await connection_service.set_mcp_connection_status(
-            connection_service_session,
-            connection.id,
-            status="active",
-            updated_by="admin",
-        )
+        if operation == "set_status":
+            await connection_service.set_mcp_connection_status(
+                connection_service_session,
+                connection.id,
+                status="active",
+                updated_by="admin",
+            )
+        elif operation == "reauthorize":
+            await connection_service.reauthorize_mcp_connection(
+                connection_service_session,
+                connection.id,
+                updated_by="admin",
+            )
+        else:
+            await connection_service.test_mcp_connection(
+                connection_service_session,
+                connection.id,
+                updated_by="admin",
+            )
 
-    assert str(exc_info.value) == 'MCP "personal-status-gateway" 当前绑定类型是个人专用，只能使用个人专用连接。'
+    message = str(exc_info.value)
+    assert message == f'MCP "{server_name}" 当前绑定类型是个人专用，只能使用个人专用连接。'
+    assert "user_id is required" not in message
 
 
 async def test_create_mcp_connection_encrypts_credentials(connection_service_session, monkeypatch):
-    monkeypatch.setenv("MCP_CREDENTIALS_MASTER_KEY", "local-test-master-key")
     await add_mcp_server(connection_service_session, "secure-gateway", url="http://secure.local/mcp")
 
     plaintext = '{"secrets":{"access_token":"secure-token"}}'
@@ -518,7 +563,6 @@ async def test_get_mcp_server_dependency_summary_reports_runtime_references(dele
 
 
 async def test_update_mcp_connection_reencrypts_credentials(connection_service_session, monkeypatch):
-    monkeypatch.setenv("MCP_CREDENTIALS_MASTER_KEY", "local-test-master-key")
     await add_mcp_server(connection_service_session, "update-gateway", url="http://update.local/mcp")
 
     created = await connection_service.create_mcp_connection(
@@ -545,18 +589,7 @@ async def test_update_mcp_connection_reencrypts_credentials(connection_service_s
 
 
 async def test_delete_mcp_connection_removes_record(connection_service_session, monkeypatch):
-    monkeypatch.setenv("MCP_CREDENTIALS_MASTER_KEY", "local-test-master-key")
-    cleared_connection_ids = []
-    released_connection_ids = []
-
-    class DummyTokenCache:
-        async def delete_access_token(self, connection_id):
-            cleared_connection_ids.append(connection_id)
-
-        async def release_refresh_lock(self, connection_id):
-            released_connection_ids.append(connection_id)
-
-    monkeypatch.setattr("yuxi.services.mcp_auth.redis_token_cache.RedisTokenCache", lambda: DummyTokenCache())
+    cleared_connection_ids, released_connection_ids = patch_token_cache(monkeypatch)
     await add_mcp_server(
         connection_service_session,
         "delete-connection-gateway",
@@ -581,19 +614,7 @@ async def test_delete_mcp_connection_removes_record(connection_service_session, 
 
 
 async def test_reauthorize_mcp_connection_clears_runtime_error(connection_service_session, monkeypatch):
-    monkeypatch.setenv("MCP_CREDENTIALS_MASTER_KEY", "local-test-master-key")
-    cleared_connection_ids = []
-    released_connection_ids = []
-
-    class DummyTokenCache:
-        async def delete_access_token(self, connection_id):
-            cleared_connection_ids.append(connection_id)
-
-        async def release_refresh_lock(self, connection_id):
-            released_connection_ids.append(connection_id)
-
-    monkeypatch.setattr("yuxi.services.mcp_auth.redis_token_cache.RedisTokenCache", lambda: DummyTokenCache())
-
+    cleared_connection_ids, released_connection_ids = patch_token_cache(monkeypatch)
     await add_mcp_server(connection_service_session, "reauth-gateway", url="http://reauth.local/mcp")
 
     created = await connection_service.create_mcp_connection(
@@ -620,60 +641,10 @@ async def test_reauthorize_mcp_connection_clears_runtime_error(connection_servic
     assert updated.updated_by == "admin"
 
 
-async def test_reauthorize_mcp_connection_rejects_scope_that_does_not_match_server_binding(
-    connection_service_session, monkeypatch
-):
-    monkeypatch.setenv("MCP_CREDENTIALS_MASTER_KEY", "local-test-master-key")
-    connection_service_session.add(
-        make_mcp_server(
-            "personal-reauth-gateway",
-            url="http://personal-reauth.local/mcp",
-            auth_config_json=BOUND_SECRET_USER_AUTH_CONFIG,
-        )
-    )
-    connection_service_session.add(
-        make_mcp_connection(
-            "personal-reauth-gateway",
-            display_name="历史全局连接",
-            status="reauth_required",
-            meta_json={"last_error": {"message": "expired"}},
-        )
-    )
-    await connection_service_session.commit()
-    connection = (
-        await connection_service.list_mcp_connections(
-            connection_service_session,
-            server_name="personal-reauth-gateway",
-        )
-    )[0]
-
-    with pytest.raises(ValueError) as exc_info:
-        await connection_service.reauthorize_mcp_connection(
-            connection_service_session,
-            connection.id,
-            updated_by="admin",
-        )
-
-    message = str(exc_info.value)
-    assert message == 'MCP "personal-reauth-gateway" 当前绑定类型是个人专用，只能使用个人专用连接。'
-    assert "user_id is required" not in message
-
-
 async def test_update_mcp_connection_clears_runtime_auth_cache_on_credential_change(
     connection_service_session, monkeypatch
 ):
-    monkeypatch.setenv("MCP_CREDENTIALS_MASTER_KEY", "local-test-master-key")
-    cleared_connection_ids = []
-    released_connection_ids = []
-
-    class DummyTokenCache:
-        async def delete_access_token(self, connection_id):
-            cleared_connection_ids.append(connection_id)
-
-        async def release_refresh_lock(self, connection_id):
-            released_connection_ids.append(connection_id)
-
-    monkeypatch.setattr("yuxi.services.mcp_auth.redis_token_cache.RedisTokenCache", lambda: DummyTokenCache())
+    cleared_connection_ids, released_connection_ids = patch_token_cache(monkeypatch)
     await add_mcp_server(
         connection_service_session,
         "credential-update-gateway",
@@ -704,18 +675,7 @@ async def test_update_mcp_connection_clears_runtime_auth_cache_on_credential_cha
 async def test_set_server_enabled_clears_runtime_auth_cache_when_retiring(
     connection_service_session, monkeypatch
 ):
-    monkeypatch.setenv("MCP_CREDENTIALS_MASTER_KEY", "local-test-master-key")
-    cleared_connection_ids = []
-    released_connection_ids = []
-
-    class DummyTokenCache:
-        async def delete_access_token(self, connection_id):
-            cleared_connection_ids.append(connection_id)
-
-        async def release_refresh_lock(self, connection_id):
-            released_connection_ids.append(connection_id)
-
-    monkeypatch.setattr("yuxi.services.mcp_auth.redis_token_cache.RedisTokenCache", lambda: DummyTokenCache())
+    cleared_connection_ids, released_connection_ids = patch_token_cache(monkeypatch)
     await add_mcp_server(connection_service_session, "retire-gateway", url="http://retire.local/mcp", enabled=1)
 
     first = await connection_service.create_mcp_connection(
@@ -749,7 +709,6 @@ async def test_set_server_enabled_clears_runtime_auth_cache_when_retiring(
 
 
 async def test_test_mcp_connection_refreshes_success_metadata(connection_service_session, monkeypatch):
-    monkeypatch.setenv("MCP_CREDENTIALS_MASTER_KEY", "local-test-master-key")
 
     async def fake_get_runtime_mcp_server_config(server_name, *, auth_context=None, db=None, http_client=None):
         del auth_context, db, http_client
@@ -785,43 +744,6 @@ async def test_test_mcp_connection_refreshes_success_metadata(connection_service
     assert result["connection"].status == "active"
     assert "last_success_at" in result["connection"].meta_json
     assert "last_error" not in result["connection"].meta_json
-
-
-async def test_test_mcp_connection_rejects_scope_that_does_not_match_server_binding(
-    connection_service_session, monkeypatch
-):
-    monkeypatch.setenv("MCP_CREDENTIALS_MASTER_KEY", "local-test-master-key")
-    connection_service_session.add(
-        make_mcp_server(
-            "personal-runtime-gateway",
-            url="http://personal-runtime.local/mcp",
-            auth_config_json=BOUND_SECRET_USER_AUTH_CONFIG,
-        )
-    )
-    connection_service_session.add(
-        make_mcp_connection(
-            "personal-runtime-gateway",
-            display_name="历史全局连接",
-        )
-    )
-    await connection_service_session.commit()
-    connection = (
-        await connection_service.list_mcp_connections(
-            connection_service_session,
-            server_name="personal-runtime-gateway",
-        )
-    )[0]
-
-    with pytest.raises(ValueError) as exc_info:
-        await connection_service.test_mcp_connection(
-            connection_service_session,
-            connection.id,
-            updated_by="admin",
-        )
-
-    message = str(exc_info.value)
-    assert message == 'MCP "personal-runtime-gateway" 当前绑定类型是个人专用，只能使用个人专用连接。'
-    assert "user_id is required" not in message
 
 
 async def test_test_mcp_connection_populates_work_id_for_user_scope(connection_service_session, monkeypatch):

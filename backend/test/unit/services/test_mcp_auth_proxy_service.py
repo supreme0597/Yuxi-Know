@@ -43,6 +43,106 @@ async def get_response_json(response):
 pytestmark = [pytest.mark.asyncio, pytest.mark.unit]
 
 
+TOKEN_INJECT = {
+    "target": "headers",
+    "entries": [{"name": "Authorization", "value_template": "Bearer ${access_token}"}],
+}
+SECRET_INJECT = {
+    "target": "headers",
+    "entries": [{"name": "Authorization", "value_template": "Bearer ${secret.access_token}"}],
+}
+
+
+def token_auth_config(*, binding_scope="department", body_template=None, response_map=None):
+    return {
+        "version": 1,
+        "provider": "custom_http_token",
+        "binding_scope": binding_scope,
+        "manifest_scope": "server",
+        "inject": TOKEN_INJECT,
+        "refresh_policy": {"pre_refresh_seconds": 60, "retry_once_on_401": True},
+        "token_request": {
+            "url": "http://gateway.local/auth/token",
+            "method": "POST",
+            "body_type": "json",
+            "body_template": body_template
+            or {
+                "client_id": "${secret.client_id}",
+                "client_secret": "${secret.client_secret}",
+            },
+            "response_map": response_map
+            or {
+                "access_token": "access_token",
+                "refresh_token": "refresh_token",
+                "expires_in": "expires_in",
+            },
+        },
+    }
+
+
+def make_mcp_server(name: str, *, auth_config: dict, **overrides) -> MCPServer:
+    payload = {
+        "name": name,
+        "transport": "streamable_http",
+        "url": "http://upstream.local/mcp",
+        "auth_config_json": auth_config,
+        "created_by": "tester",
+        "updated_by": "tester",
+    }
+    payload.update(overrides)
+    return MCPServer(**payload)
+
+
+def make_mcp_connection(connection_id: int, server_name: str, *, credential: dict, **overrides):
+    payload = {
+        "id": connection_id,
+        "server_name": server_name,
+        "scope_type": "department",
+        "scope_id": "dep-1",
+        "status": "active",
+        "credential_blob": json.dumps(credential),
+        "meta_json": {},
+        "created_by": "tester",
+        "updated_by": "tester",
+    }
+    payload.update(overrides)
+    return MCPConnection(**payload)
+
+
+def future_token_payload(access_token: str, *, minutes: int = 30, **extra) -> dict:
+    return {
+        "access_token": access_token,
+        "expires_at": (datetime.now(tz=UTC) + timedelta(minutes=minutes)).isoformat(),
+        **extra,
+    }
+
+
+def make_json_request(receive=None):
+    return Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "headers": [(b"content-type", b"application/json")],
+            "query_string": b"",
+        },
+        receive,
+    )
+
+
+class EmptyResult:
+    def scalar_one_or_none(self):
+        return None
+
+
+class DummyDB:
+    async def commit(self):
+        pass
+
+    async def execute(self, stmt):
+        del stmt
+        return EmptyResult()
+
+
 class DummyTokenCache:
     def __init__(self, token_payload: dict | None = None):
         self.token_payload = token_payload
@@ -92,74 +192,24 @@ async def test_proxy_mcp_request_retries_once_after_401_with_refreshed_token():
         raise AssertionError(f"unexpected request: {request.method} {request.url}")
 
     http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    server = MCPServer(
-        name="proxy-retry",
-        transport="streamable_http",
-        url="http://upstream.local/mcp",
-        auth_config_json={
-            "version": 1,
-            "provider": "custom_http_token",
-            "binding_scope": "department",
-            "manifest_scope": "server",
-            "inject": {
-                "target": "headers",
-                "entries": [{"name": "Authorization", "value_template": "Bearer ${access_token}"}],
-            },
-            "refresh_policy": {"pre_refresh_seconds": 60, "retry_once_on_401": True},
-            "token_request": {
-                "url": "http://gateway.local/auth/token",
-                "method": "POST",
-                "body_type": "json",
-                "body_template": {
-                    "client_id": "${secret.client_id}",
-                    "client_secret": "${secret.client_secret}",
-                },
-                "response_map": {
-                    "access_token": "access_token",
-                    "refresh_token": "refresh_token",
-                    "expires_in": "expires_in",
-                },
-            },
-        },
-        created_by="tester",
-        updated_by="tester",
+    server = make_mcp_server(
+        "proxy-retry",
+        auth_config=token_auth_config(),
     )
-    connection = MCPConnection(
-        id=41,
-        server_name="proxy-retry",
-        scope_type="department",
-        scope_id="dep-1",
-        status="active",
-        credential_blob=json.dumps({"secrets": {"client_id": "cid", "client_secret": "secret"}}),
-        meta_json={},
-        created_by="tester",
-        updated_by="tester",
+    connection = make_mcp_connection(
+        41,
+        "proxy-retry",
+        credential={"secrets": {"client_id": "cid", "client_secret": "secret"}},
     )
     token_cache = DummyTokenCache(
-        {
-            "access_token": "stale-token",
-            "refresh_token": "refresh-old",
-            "expires_at": (datetime.now(tz=UTC) + timedelta(minutes=30)).isoformat(),
-        }
+        future_token_payload("stale-token", refresh_token="refresh-old")
     )
-
-    req = Request(
-        {
-            "type": "http",
-            "method": "POST",
-            "headers": [(b"content-type", b"application/json")],
-            "query_string": b"",
-        }
-    )
-
-    class DummyDB:
-        async def commit(self): pass
 
     response = await _proxy_mcp_request_stream(
         server,
         connection=connection,
         auth_context=AuthContext(user_id="user-1", department_id="dep-1"),
-        request=req,
+        request=make_json_request(),
         body=b'{"jsonrpc":"2.0","id":1}',
         db=DummyDB(),
         _http_client=http_client,
@@ -198,74 +248,24 @@ async def test_proxy_mcp_request_marks_reauth_required_after_final_401():
         raise AssertionError(f"unexpected request: {request.method} {request.url}")
 
     http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    server = MCPServer(
-        name="proxy-fail-401",
-        transport="streamable_http",
-        url="http://upstream.local/mcp",
-        auth_config_json={
-            "version": 1,
-            "provider": "custom_http_token",
-            "binding_scope": "department",
-            "manifest_scope": "server",
-            "inject": {
-                "target": "headers",
-                "entries": [{"name": "Authorization", "value_template": "Bearer ${access_token}"}],
-            },
-            "refresh_policy": {"pre_refresh_seconds": 60, "retry_once_on_401": True},
-            "token_request": {
-                "url": "http://gateway.local/auth/token",
-                "method": "POST",
-                "body_type": "json",
-                "body_template": {
-                    "client_id": "${secret.client_id}",
-                    "client_secret": "${secret.client_secret}",
-                },
-                "response_map": {
-                    "access_token": "access_token",
-                    "refresh_token": "refresh_token",
-                    "expires_in": "expires_in",
-                },
-            },
-        },
-        created_by="tester",
-        updated_by="tester",
+    server = make_mcp_server(
+        "proxy-fail-401",
+        auth_config=token_auth_config(),
     )
-    connection = MCPConnection(
-        id=42,
-        server_name="proxy-fail-401",
-        scope_type="department",
-        scope_id="dep-1",
-        status="active",
-        credential_blob=json.dumps({"secrets": {"client_id": "cid", "client_secret": "secret"}}),
-        meta_json={},
-        created_by="tester",
-        updated_by="tester",
+    connection = make_mcp_connection(
+        42,
+        "proxy-fail-401",
+        credential={"secrets": {"client_id": "cid", "client_secret": "secret"}},
     )
     token_cache = DummyTokenCache(
-        {
-            "access_token": "stale-token",
-            "refresh_token": "refresh-old",
-            "expires_at": (datetime.now(tz=UTC) + timedelta(minutes=30)).isoformat(),
-        }
+        future_token_payload("stale-token", refresh_token="refresh-old")
     )
-
-    req = Request(
-        {
-            "type": "http",
-            "method": "POST",
-            "headers": [(b"content-type", b"application/json")],
-            "query_string": b"",
-        }
-    )
-
-    class DummyDB:
-        async def commit(self): pass
 
     response = await _proxy_mcp_request_stream(
         server,
         connection=connection,
         auth_context=AuthContext(user_id="user-1", department_id="dep-1"),
-        request=req,
+        request=make_json_request(),
         body=b'{"jsonrpc":"2.0","id":1}',
         db=DummyDB(),
         _http_client=http_client,
@@ -287,52 +287,28 @@ async def test_proxy_mcp_request_records_scope_error_on_403():
         raise AssertionError(f"unexpected request: {request.method} {request.url}")
 
     http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    server = MCPServer(
-        name="proxy-403",
-        transport="streamable_http",
-        url="http://upstream.local/mcp",
+    server = make_mcp_server(
+        "proxy-403",
         headers={"Authorization": "Bearer static-token"},
-        auth_config_json={
+        auth_config={
             "version": 1,
             "provider": "bound_secret",
             "binding_scope": "department",
             "manifest_scope": "server",
-            "inject": {
-                "target": "headers",
-                "entries": [{"name": "Authorization", "value_template": "Bearer ${secret.access_token}"}],
-            },
+            "inject": SECRET_INJECT,
         },
-        created_by="tester",
-        updated_by="tester",
     )
-    connection = MCPConnection(
-        id=43,
-        server_name="proxy-403",
-        scope_type="department",
-        scope_id="dep-1",
-        status="active",
-        credential_blob=json.dumps({"secrets": {"access_token": "static-token"}}),
-        meta_json={},
-        created_by="tester",
-        updated_by="tester",
+    connection = make_mcp_connection(
+        43,
+        "proxy-403",
+        credential={"secrets": {"access_token": "static-token"}},
     )
 
-    req = Request(
-        {
-            "type": "http",
-            "method": "POST",
-            "headers": [(b"content-type", b"application/json")],
-            "query_string": b"",
-        }
-    )
-
-    class DummyDB:
-        async def commit(self): pass
     response = await _proxy_mcp_request_stream(
         server,
         connection=connection,
         auth_context=AuthContext(user_id="user-1", department_id="dep-1"),
-        request=req,
+        request=make_json_request(),
         body=b'{"jsonrpc":"2.0","id":1}',
         db=DummyDB(),
         _http_client=http_client,
@@ -351,30 +327,14 @@ async def test_handle_mcp_proxy_request_allows_no_secret_dynamic_config_without_
     monkeypatch.setenv("JWT_SECRET_KEY", "unit-test-jwt-secret-with-at-least-32-bytes")
     monkeypatch.setenv("YUXI_INSTANCE_ID", "unit-test-instance")
 
-    server = MCPServer(
-        name="proxy-no-secret",
-        transport="streamable_http",
-        url="http://upstream.local/mcp",
-        auth_config_json={
-            "version": 1,
-            "provider": "custom_http_token",
-            "binding_scope": "user",
-            "manifest_scope": "server",
-            "inject": {
-                "target": "headers",
-                "entries": [{"name": "Authorization", "value_template": "Bearer ${access_token}"}],
-            },
-            "token_request": {
-                "url": "http://gateway.local/auth/token",
-                "method": "POST",
-                "body_type": "json",
-                "body_template": {"work_id": "${context.work_id}"},
-                "response_map": {"access_token": "access_token", "expires_in": "expires_in"},
-            },
-        },
+    server = make_mcp_server(
+        "proxy-no-secret",
+        auth_config=token_auth_config(
+            binding_scope="user",
+            body_template={"work_id": "${context.work_id}"},
+            response_map={"access_token": "access_token", "expires_in": "expires_in"},
+        ),
         enabled=1,
-        created_by="tester",
-        updated_by="tester",
     )
 
     async def fake_get_mcp_server(db, server_name):
@@ -391,15 +351,6 @@ async def test_handle_mcp_proxy_request_allows_no_secret_dynamic_config_without_
         observed["body"] = kwargs["body"]
         return Response(status_code=204)
 
-    class EmptyResult:
-        def scalar_one_or_none(self):
-            return None
-
-    class DummyDB:
-        async def execute(self, stmt):
-            del stmt
-            return EmptyResult()
-
     monkeypatch.setattr(server_service, "get_mcp_server", fake_get_mcp_server)
     monkeypatch.setattr(proxy_service, "_proxy_mcp_request_stream", fake_proxy_mcp_request_stream)
 
@@ -410,19 +361,9 @@ async def test_handle_mcp_proxy_request_allows_no_secret_dynamic_config_without_
     async def receive():
         return {"type": "http.request", "body": b'{"jsonrpc":"2.0","id":1}', "more_body": False}
 
-    req = Request(
-        {
-            "type": "http",
-            "method": "POST",
-            "headers": [(b"content-type", b"application/json")],
-            "query_string": b"",
-        },
-        receive,
-    )
-
     response = await handle_mcp_proxy_request(
         "proxy-no-secret",
-        request=req,
+        request=make_json_request(receive),
         path="",
         internal_token=token,
         db=DummyDB(),

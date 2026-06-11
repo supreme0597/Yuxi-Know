@@ -35,13 +35,81 @@ class _FakeRedis:
         return next_value
 
 
-async def test_get_enabled_mcp_tools_loads_latest_config_from_db(monkeypatch):
-    captured: list[dict] = []
+def stdio_config(command: str, *, disabled_tools: list[str] | None = None) -> dict:
+    return {"transport": "stdio", "command": command, "disabled_tools": disabled_tools or []}
 
+
+def proxy_config(
+    token: str,
+    *,
+    partition: str,
+    disable_tool_object_cache: bool = False,
+) -> dict:
+    config = {
+        "transport": "streamable_http",
+        "url": "http://internal-api:5050/api/internal/mcp-proxy/demo",
+        "headers": {INTERNAL_PROXY_TOKEN_HEADER: token},
+        "__yuxi_cache_partition": partition,
+        "__yuxi_allow_global_cache": False,
+    }
+    if disable_tool_object_cache:
+        config["__yuxi_disable_tool_object_cache"] = True
+    return config
+
+
+def patch_enabled_config(monkeypatch, config: dict, *, expected_name: str = "demo") -> None:
     async def fake_get_enabled_mcp_server_config(server_name: str, db=None):
         del db
-        assert server_name == "demo"
-        return {"transport": "stdio", "command": "demo", "disabled_tools": ["tool_b"]}
+        assert server_name == expected_name
+        return config() if callable(config) else config
+
+    monkeypatch.setattr(server_service, "get_enabled_mcp_server_config", fake_get_enabled_mcp_server_config)
+
+
+def patch_server_config_loader(monkeypatch, server_configs: dict, *, loaded_names: list | None = None) -> None:
+    async def fake_load_enabled_mcp_server_configs(*, names=None, db=None):
+        del db
+        if loaded_names is not None:
+            loaded_names.append(names)
+        if names is None:
+            return server_configs
+        return {name: server_configs[name] for name in names if name in server_configs}
+
+    monkeypatch.setattr(server_service, "_load_enabled_mcp_server_configs", fake_load_enabled_mcp_server_configs)
+
+
+def patch_recording_tool_loader(monkeypatch) -> list[tuple[str, dict[str, dict]]]:
+    calls: list[tuple[str, dict[str, dict]]] = []
+
+    async def fake_get_mcp_tools(server_name: str, additional_servers=None, **kwargs):
+        del kwargs
+        calls.append((server_name, additional_servers or {}))
+        return [server_name]
+
+    monkeypatch.setattr(tool_registry_service, "get_mcp_tools", fake_get_mcp_tools)
+    return calls
+
+
+def patch_redis_tool_cache(monkeypatch) -> _FakeRedis:
+    fake_redis = _FakeRedis()
+
+    async def fake_redis_factory():
+        return fake_redis
+
+    monkeypatch.setattr(
+        tool_registry_service,
+        "_mcp_tool_cache_store",
+        RedisMcpToolCache(redis_client_factory=fake_redis_factory),
+    )
+    return fake_redis
+
+
+def tool_names(tools) -> list[str]:
+    return [tool.name for tool in tools]
+
+
+async def test_get_enabled_mcp_tools_loads_latest_config_from_db(monkeypatch):
+    captured: list[dict] = []
 
     async def fake_get_mcp_tools(server_name: str, additional_servers=None, disabled_tools=None, **kwargs):
         del kwargs
@@ -54,7 +122,7 @@ async def test_get_enabled_mcp_tools_loads_latest_config_from_db(monkeypatch):
         )
         return ["tool-a"]
 
-    monkeypatch.setattr(server_service, "get_enabled_mcp_server_config", fake_get_enabled_mcp_server_config)
+    patch_enabled_config(monkeypatch, stdio_config("demo", disabled_tools=["tool_b"]))
     monkeypatch.setattr(tool_registry_service, "get_mcp_tools", fake_get_mcp_tools)
 
     tools = await tool_registry_service.get_enabled_mcp_tools("demo")
@@ -72,16 +140,8 @@ async def test_get_enabled_mcp_tools_loads_latest_config_from_db(monkeypatch):
 async def test_get_mcp_tools_rebuilds_cache_when_config_hash_changes(monkeypatch):
     await tool_registry_service.clear_mcp_cache()
 
-    configs = [
-        {"transport": "stdio", "command": "demo-v1", "disabled_tools": []},
-        {"transport": "stdio", "command": "demo-v2", "disabled_tools": []},
-    ]
+    configs = [stdio_config("demo-v1"), stdio_config("demo-v2")]
     build_calls: list[str] = []
-
-    async def fake_get_enabled_mcp_server_config(server_name: str, db=None):
-        del db
-        assert server_name == "demo"
-        return configs[0]
 
     async def fake_get_mcp_client(server_configs):
         config = server_configs["demo"]
@@ -89,7 +149,7 @@ async def test_get_mcp_tools_rebuilds_cache_when_config_hash_changes(monkeypatch
         tool = SimpleNamespace(name=f"tool_for_{config['command']}", metadata={})
         return _FakeClient([tool])
 
-    monkeypatch.setattr(server_service, "get_enabled_mcp_server_config", fake_get_enabled_mcp_server_config)
+    patch_enabled_config(monkeypatch, lambda: configs[0])
     monkeypatch.setattr(mcp_client_pool, "_get_mcp_client", fake_get_mcp_client)
 
     tools_v1_first = await tool_registry_service.get_mcp_tools("demo")
@@ -108,22 +168,11 @@ async def test_get_mcp_tools_rebuilds_cache_when_config_hash_changes(monkeypatch
 
 async def test_get_tools_from_all_servers_loads_names_from_db_once(monkeypatch):
     server_configs = {
-        "alpha": {"transport": "stdio", "command": "cmd-a", "disabled_tools": []},
-        "beta": {"transport": "stdio", "command": "cmd-b", "disabled_tools": []},
+        "alpha": stdio_config("cmd-a"),
+        "beta": stdio_config("cmd-b"),
     }
-    calls: list[tuple[str, dict[str, dict]]] = []
-
-    async def fake_load_enabled_mcp_server_configs(*, names=None, db=None):
-        del names, db
-        return server_configs
-
-    async def fake_get_mcp_tools(server_name: str, additional_servers=None, **kwargs):
-        del kwargs
-        calls.append((server_name, additional_servers or {}))
-        return [server_name]
-
-    monkeypatch.setattr(server_service, "_load_enabled_mcp_server_configs", fake_load_enabled_mcp_server_configs)
-    monkeypatch.setattr(tool_registry_service, "get_mcp_tools", fake_get_mcp_tools)
+    patch_server_config_loader(monkeypatch, server_configs)
+    calls = patch_recording_tool_loader(monkeypatch)
 
     tools = await tool_registry_service.get_tools_from_all_servers()
 
@@ -136,26 +185,12 @@ async def test_get_tools_from_all_servers_loads_names_from_db_once(monkeypatch):
 
 async def test_get_tools_from_all_servers_limits_preload_to_selected_names(monkeypatch):
     server_configs = {
-        "alpha": {"transport": "stdio", "command": "cmd-a", "disabled_tools": []},
-        "beta": {"transport": "stdio", "command": "cmd-b", "disabled_tools": []},
+        "alpha": stdio_config("cmd-a"),
+        "beta": stdio_config("cmd-b"),
     }
     loaded_names: list[list[str] | None] = []
-    calls: list[str] = []
-
-    async def fake_load_enabled_mcp_server_configs(*, names=None, db=None):
-        del db
-        loaded_names.append(names)
-        if not names:
-            return server_configs
-        return {name: server_configs[name] for name in names if name in server_configs}
-
-    async def fake_get_mcp_tools(server_name: str, additional_servers=None, **kwargs):
-        del additional_servers, kwargs
-        calls.append(server_name)
-        return [server_name]
-
-    monkeypatch.setattr(server_service, "_load_enabled_mcp_server_configs", fake_load_enabled_mcp_server_configs)
-    monkeypatch.setattr(tool_registry_service, "get_mcp_tools", fake_get_mcp_tools)
+    patch_server_config_loader(monkeypatch, server_configs, loaded_names=loaded_names)
+    calls = patch_recording_tool_loader(monkeypatch)
 
     tools = await tool_registry_service.get_tools_from_all_servers(["alpha", "alpha", "missing"])
     empty_tools = await tool_registry_service.get_tools_from_all_servers([])
@@ -163,23 +198,17 @@ async def test_get_tools_from_all_servers_limits_preload_to_selected_names(monke
     assert tools == ["alpha"]
     assert empty_tools == []
     assert loaded_names == [["alpha", "missing"]]
-    assert calls == ["alpha"]
+    assert calls == [("alpha", {"alpha": server_configs["alpha"]})]
 
 
 async def test_get_mcp_tools_sets_handle_tool_error(monkeypatch):
     await tool_registry_service.clear_mcp_cache()
 
-    config = {"transport": "stdio", "command": "demo-tool", "disabled_tools": []}
-
-    async def fake_get_enabled_mcp_server_config(server_name: str, db=None):
-        del db
-        return config
-
     async def fake_get_mcp_client(server_configs):
         tool = SimpleNamespace(name="demo_tool", metadata={})
         return _FakeClient([tool])
 
-    monkeypatch.setattr(server_service, "get_enabled_mcp_server_config", fake_get_enabled_mcp_server_config)
+    patch_enabled_config(monkeypatch, stdio_config("demo-tool"))
     monkeypatch.setattr(mcp_client_pool, "_get_mcp_client", fake_get_mcp_client)
 
     tools = await tool_registry_service.get_mcp_tools("demo")
@@ -192,7 +221,7 @@ async def test_get_mcp_tools_sets_handle_tool_error(monkeypatch):
 async def test_get_mcp_tools_suppresses_retries_during_failure_cooldown(monkeypatch):
     await tool_registry_service.clear_mcp_cache()
 
-    config = {"transport": "stdio", "command": "offline-demo", "disabled_tools": []}
+    config = stdio_config("offline-demo")
     build_calls: list[dict] = []
 
     async def fail_get_mcp_client(server_configs):
@@ -221,24 +250,8 @@ async def test_get_mcp_tools_keeps_connection_partitions_separate(monkeypatch):
     await tool_registry_service.clear_mcp_cache()
 
     configs = [
-        {
-            "transport": "streamable_http",
-            "url": "http://internal-api:5050/api/internal/mcp-proxy/demo",
-            "headers": {
-                INTERNAL_PROXY_TOKEN_HEADER: "proxy-token-user-a",
-            },
-            "__yuxi_cache_partition": "connection:101",
-            "__yuxi_allow_global_cache": False,
-        },
-        {
-            "transport": "streamable_http",
-            "url": "http://internal-api:5050/api/internal/mcp-proxy/demo",
-            "headers": {
-                INTERNAL_PROXY_TOKEN_HEADER: "proxy-token-user-b",
-            },
-            "__yuxi_cache_partition": "connection:202",
-            "__yuxi_allow_global_cache": False,
-        },
+        proxy_config("proxy-token-user-a", partition="connection:101"),
+        proxy_config("proxy-token-user-b", partition="connection:202"),
     ]
     build_calls: list[str] = []
 
@@ -253,8 +266,8 @@ async def test_get_mcp_tools_keeps_connection_partitions_separate(monkeypatch):
     tools_a = await tool_registry_service.get_mcp_tools("demo", additional_servers={"demo": configs[0]})
     tools_b = await tool_registry_service.get_mcp_tools("demo", additional_servers={"demo": configs[1]})
 
-    assert [tool.name for tool in tools_a] == ["tool_for_proxy-token-user-a"]
-    assert [tool.name for tool in tools_b] == ["tool_for_proxy-token-user-b"]
+    assert tool_names(tools_a) == ["tool_for_proxy-token-user-a"]
+    assert tool_names(tools_b) == ["tool_for_proxy-token-user-b"]
     assert build_calls == ["proxy-token-user-a", "proxy-token-user-b"]
 
     await tool_registry_service.clear_mcp_cache()
@@ -264,26 +277,8 @@ async def test_get_mcp_tools_does_not_cache_internal_proxy_tool_objects(monkeypa
     await tool_registry_service.clear_mcp_cache()
 
     configs = [
-        {
-            "transport": "streamable_http",
-            "url": "http://internal-api:5050/api/internal/mcp-proxy/demo",
-            "headers": {
-                INTERNAL_PROXY_TOKEN_HEADER: "proxy-token-v1",
-            },
-            "__yuxi_cache_partition": "connection:101",
-            "__yuxi_allow_global_cache": False,
-            "__yuxi_disable_tool_object_cache": True,
-        },
-        {
-            "transport": "streamable_http",
-            "url": "http://internal-api:5050/api/internal/mcp-proxy/demo",
-            "headers": {
-                INTERNAL_PROXY_TOKEN_HEADER: "proxy-token-v2",
-            },
-            "__yuxi_cache_partition": "connection:101",
-            "__yuxi_allow_global_cache": False,
-            "__yuxi_disable_tool_object_cache": True,
-        },
+        proxy_config("proxy-token-v1", partition="connection:101", disable_tool_object_cache=True),
+        proxy_config("proxy-token-v2", partition="connection:101", disable_tool_object_cache=True),
     ]
     build_calls: list[str] = []
     tool_load_count = 0
@@ -305,8 +300,8 @@ async def test_get_mcp_tools_does_not_cache_internal_proxy_tool_objects(monkeypa
     tools_first = await tool_registry_service.get_mcp_tools("demo", additional_servers={"demo": configs[0]})
     tools_second = await tool_registry_service.get_mcp_tools("demo", additional_servers={"demo": configs[1]})
 
-    assert [tool.name for tool in tools_first] == ["tool_for_load_1"]
-    assert [tool.name for tool in tools_second] == ["tool_for_load_2"]
+    assert tool_names(tools_first) == ["tool_for_load_1"]
+    assert tool_names(tools_second) == ["tool_for_load_2"]
     assert build_calls == ["proxy-token-v1"]
 
     await tool_registry_service.clear_mcp_cache()
@@ -314,7 +309,7 @@ async def test_get_mcp_tools_does_not_cache_internal_proxy_tool_objects(monkeypa
 
 async def test_get_tools_from_all_servers_skips_runtime_auth_servers_without_context(monkeypatch):
     server_configs = {
-        "shared": {"transport": "stdio", "command": "cmd-shared", "disabled_tools": []},
+        "shared": stdio_config("cmd-shared"),
         "bound": {
             "transport": "streamable_http",
             "url": "http://bound.local/mcp",
@@ -335,19 +330,8 @@ async def test_get_tools_from_all_servers_skips_runtime_auth_servers_without_con
             "disabled_tools": [],
         },
     }
-    calls: list[tuple[str, dict[str, dict]]] = []
-
-    async def fake_load_enabled_mcp_server_configs(*, names=None, db=None):
-        del names, db
-        return server_configs
-
-    async def fake_get_mcp_tools(server_name: str, additional_servers=None, **kwargs):
-        del kwargs
-        calls.append((server_name, additional_servers or {}))
-        return [server_name]
-
-    monkeypatch.setattr(server_service, "_load_enabled_mcp_server_configs", fake_load_enabled_mcp_server_configs)
-    monkeypatch.setattr(tool_registry_service, "get_mcp_tools", fake_get_mcp_tools)
+    patch_server_config_loader(monkeypatch, server_configs)
+    calls = patch_recording_tool_loader(monkeypatch)
 
     tools = await tool_registry_service.get_tools_from_all_servers()
 
@@ -360,16 +344,8 @@ async def test_get_tools_from_all_servers_skips_runtime_auth_servers_without_con
 async def test_get_mcp_tools_rebuilds_when_redis_server_revision_changes(monkeypatch):
     await tool_registry_service.clear_mcp_cache()
 
-    fake_redis = _FakeRedis()
-
-    async def fake_redis_factory():
-        return fake_redis
-
-    monkeypatch.setattr(tool_registry_service, "_mcp_tool_cache_store",
-        RedisMcpToolCache(redis_client_factory=fake_redis_factory),
-    )
-
-    config = {"transport": "stdio", "command": "demo-tool", "disabled_tools": []}
+    patch_redis_tool_cache(monkeypatch)
+    config = stdio_config("demo-tool")
     build_calls: list[str] = []
 
     async def fake_get_mcp_client(server_configs):
@@ -384,9 +360,9 @@ async def test_get_mcp_tools_rebuilds_when_redis_server_revision_changes(monkeyp
     await tool_registry_service._mcp_tool_cache_store.bump_server_revision("demo")
     tools_third = await tool_registry_service.get_mcp_tools("demo", additional_servers={"demo": config})
 
-    assert [tool.name for tool in tools_first] == ["tool_1"]
-    assert [tool.name for tool in tools_second] == ["tool_1"]
-    assert [tool.name for tool in tools_third] == ["tool_2"]
+    assert tool_names(tools_first) == ["tool_1"]
+    assert tool_names(tools_second) == ["tool_1"]
+    assert tool_names(tools_third) == ["tool_2"]
     assert build_calls == ["demo-tool", "demo-tool"]
 
     await tool_registry_service.clear_mcp_cache()
@@ -395,16 +371,8 @@ async def test_get_mcp_tools_rebuilds_when_redis_server_revision_changes(monkeyp
 async def test_get_all_mcp_tools_uses_redis_manifest_when_local_cache_is_empty(monkeypatch):
     await tool_registry_service.clear_mcp_cache()
 
-    fake_redis = _FakeRedis()
-
-    async def fake_redis_factory():
-        return fake_redis
-
-    monkeypatch.setattr(tool_registry_service, "_mcp_tool_cache_store",
-        RedisMcpToolCache(redis_client_factory=fake_redis_factory),
-    )
-
-    config = {"transport": "stdio", "command": "demo-tool", "disabled_tools": []}
+    patch_redis_tool_cache(monkeypatch)
+    config = stdio_config("demo-tool")
 
     async def fake_get_mcp_client(server_configs):
         del server_configs
@@ -421,15 +389,11 @@ async def test_get_all_mcp_tools_uses_redis_manifest_when_local_cache_is_empty(m
         )
         return _FakeClient([tool])
 
-    async def fake_get_enabled_mcp_server_config(server_name: str, db=None):
-        del server_name, db
-        return config
-
-    monkeypatch.setattr(server_service, "get_enabled_mcp_server_config", fake_get_enabled_mcp_server_config)
+    patch_enabled_config(monkeypatch, config)
     monkeypatch.setattr(mcp_client_pool, "_get_mcp_client", fake_get_mcp_client)
 
     tools_first = await tool_registry_service.get_all_mcp_tools("demo")
-    assert [tool.name for tool in tools_first] == ["alpha_tool"]
+    assert tool_names(tools_first) == ["alpha_tool"]
 
     await tool_registry_service.clear_mcp_cache()
 
@@ -440,5 +404,5 @@ async def test_get_all_mcp_tools_uses_redis_manifest_when_local_cache_is_empty(m
 
     tools_second = await tool_registry_service.get_all_mcp_tools("demo")
 
-    assert [tool.name for tool in tools_second] == ["alpha_tool"]
+    assert tool_names(tools_second) == ["alpha_tool"]
     assert tools_second[0].metadata["id"] == "mcp__demo__alphaTool"

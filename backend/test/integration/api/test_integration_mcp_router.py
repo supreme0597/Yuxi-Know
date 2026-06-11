@@ -60,6 +60,18 @@ def _build_auth_config() -> dict:
     }
 
 
+def _build_bound_secret_auth_config(binding_scope: str) -> dict:
+    return {
+        "version": 1,
+        "provider": "bound_secret",
+        "binding_scope": binding_scope,
+        "inject": {
+            "target": "headers",
+            "entries": [{"name": "Authorization", "value_template": "Bearer ${secret.access_token}"}],
+        },
+    }
+
+
 async def _create_server(test_client, admin_headers: dict[str, str], name: str) -> None:
     response = await test_client.post(
         "/api/system/mcp-servers",
@@ -73,6 +85,60 @@ async def _create_server(test_client, admin_headers: dict[str, str], name: str) 
         headers=admin_headers,
     )
     assert response.status_code == 200, response.text
+
+
+async def _create_demo_bound_secret_server(
+    test_client,
+    admin_headers: dict[str, str],
+    name: str,
+    binding_scope: str,
+    description: str,
+) -> None:
+    response = await test_client.post(
+        "/api/system/mcp-servers",
+        json={
+            "name": name,
+            "transport": "sse",
+            "url": "http://mcp-demo-server:8999/sse",
+            "description": description,
+            "auth_config": _build_bound_secret_auth_config(binding_scope),
+        },
+        headers=admin_headers,
+    )
+    assert response.status_code == 200, response.text
+
+
+async def _create_bound_secret_connection(
+    test_client,
+    admin_headers: dict[str, str],
+    server_name: str,
+    *,
+    scope_type: str,
+    scope_id: str,
+    display_name: str,
+    access_token: str,
+) -> int:
+    conn_response = await test_client.post(
+        f"/api/system/mcp-servers/{server_name}/connections",
+        json={
+            "scope_type": scope_type,
+            "scope_id": scope_id,
+            "display_name": display_name,
+            "credential": {"secrets": {"access_token": access_token}},
+        },
+        headers=admin_headers,
+    )
+    assert conn_response.status_code == 200, conn_response.text
+    return conn_response.json()["data"]["id"]
+
+
+async def _assert_connection_test_succeeds(test_client, admin_headers: dict[str, str], server_name: str, conn_id: int):
+    test_conn_response = await test_client.post(
+        f"/api/system/mcp-servers/{server_name}/connections/{conn_id}/test",
+        headers=admin_headers,
+    )
+    assert test_conn_response.status_code == 200, test_conn_response.text
+    assert test_conn_response.json()["tool_count"] > 0
 
 
 async def _cleanup_server(test_client, admin_headers: dict[str, str], name: str) -> None:
@@ -286,49 +352,31 @@ async def test_bound_auth_server_test_endpoint_succeeds_with_connection(test_cli
 
     server_name = _build_server_name("pytest-mcp-bound-test-ok")
 
-    response = await test_client.post(
-        "/api/system/mcp-servers",
-        json={
-            "name": server_name,
-            "transport": "sse",
-            "url": "http://mcp-demo-server:8999/sse",
-            "description": "pytest mcp auth server ok",
-            "auth_config": {
-                "version": 1,
-                "provider": "bound_secret",
-                "binding_scope": "department",
-                "inject": {
-                    "target": "headers",
-                    "entries": [
-                        {
-                            "name": "Authorization",
-                            "value_template": "Bearer ${secret.access_token}",
-                        }
-                    ],
-                },
-            },
-        },
-        headers=admin_headers,
+    await _create_demo_bound_secret_server(
+        test_client,
+        admin_headers,
+        server_name,
+        "department",
+        "pytest mcp auth server ok",
     )
-    assert response.status_code == 200, response.text
 
     try:
-        test_fail_response = await test_client.post(f"/api/system/mcp-servers/{server_name}/test", headers=admin_headers)
+        test_fail_response = await test_client.post(
+            f"/api/system/mcp-servers/{server_name}/test",
+            headers=admin_headers,
+        )
         assert test_fail_response.status_code == 400, test_fail_response.text
         assert "需要绑定连接" in test_fail_response.json()["detail"]
 
-        conn_response = await test_client.post(
-            f"/api/system/mcp-servers/{server_name}/connections",
-            json={
-                "scope_type": "department",
-                "scope_id": admin_dept_id,
-                "display_name": "Dept Scope Test OK",
-                "credential": {"secrets": {"access_token": "dummy_dept_token"}},
-            },
-            headers=admin_headers,
+        await _create_bound_secret_connection(
+            test_client,
+            admin_headers,
+            server_name,
+            scope_type="department",
+            scope_id=admin_dept_id,
+            display_name="Dept Scope Test OK",
+            access_token="dummy_dept_token",
         )
-        assert conn_response.status_code == 200, conn_response.text
-        conn_id = conn_response.json()["data"]["id"]
 
         test_ok_response = await test_client.post(f"/api/system/mcp-servers/{server_name}/test", headers=admin_headers)
         assert test_ok_response.status_code == 200, test_ok_response.text
@@ -423,162 +471,28 @@ async def test_mcp_connections_all_scopes_e2e(test_client, admin_headers):
     server_name = _build_server_name("pytest-mcp-scopes")
 
     try:
-        # A. 测试个人 (User) 范围
-        # 创建一个 binding_scope="user" 的服务器
-        create_response = await test_client.post(
-            "/api/system/mcp-servers",
-            json={
-                "name": server_name,
-                "transport": "sse",
-                "url": "http://mcp-demo-server:8999/sse",  # 使用启动的 mock server sse 端口
-                "description": "pytest scopes user test",
-                "auth_config": {
-                    "version": 1,
-                    "provider": "bound_secret",
-                    "binding_scope": "user",
-                    "inject": {
-                        "target": "headers",
-                        "entries": [{"name": "Authorization", "value_template": "Bearer ${secret.access_token}"}],
-                    },
-                },
-            },
-            headers=admin_headers,
-        )
-        assert create_response.status_code == 200, create_response.text
-
-        # 创建对应的个人连接，scope_id 必须与当前用户的 db_id (主键数字字符串) 一致
-        conn_response = await test_client.post(
-            f"/api/system/mcp-servers/{server_name}/connections",
-            json={
-                "scope_type": "user",
-                "scope_id": admin_db_id,
-                "display_name": "User Scope Test",
-                "credential": {"secrets": {"access_token": "dummy_user_token"}},
-            },
-            headers=admin_headers,
-        )
-        assert conn_response.status_code == 200, conn_response.text
-        conn_id = conn_response.json()["data"]["id"]
-
-        # 测试该连接的可用性，测试时会根据 auth_context 自动解析并匹配 scope_id
-        test_conn_response = await test_client.post(
-            f"/api/system/mcp-servers/{server_name}/connections/{conn_id}/test",
-            headers=admin_headers,
-        )
-        assert test_conn_response.status_code == 200, test_conn_response.text
-        assert test_conn_response.json()["tool_count"] > 0
-
-        # 清理该连接
-        del_response = await test_client.delete(
-            f"/api/system/mcp-servers/{server_name}/connections/{conn_id}",
-            headers=admin_headers,
-        )
-        assert del_response.status_code == 200, del_response.text
-
-        # 清理服务器 (软删除)
-        retire_response = await test_client.delete(f"/api/system/mcp-servers/{server_name}", headers=admin_headers)
-        assert retire_response.status_code == 200, retire_response.text
-        hard_del_response = await test_client.delete(f"/api/system/mcp-servers/{server_name}?hard=true", headers=admin_headers)
-        assert hard_del_response.status_code == 200, hard_del_response.text
-
-        # B. 测试部门 (Department) 范围
-        create_response = await test_client.post(
-            "/api/system/mcp-servers",
-            json={
-                "name": server_name,
-                "transport": "sse",
-                "url": "http://mcp-demo-server:8999/sse",
-                "description": "pytest scopes dept test",
-                "auth_config": {
-                    "version": 1,
-                    "provider": "bound_secret",
-                    "binding_scope": "department",
-                    "inject": {
-                        "target": "headers",
-                        "entries": [{"name": "Authorization", "value_template": "Bearer ${secret.access_token}"}],
-                    },
-                },
-            },
-            headers=admin_headers,
-        )
-        assert create_response.status_code == 200, create_response.text
-
-        # 创建对应的部门连接
-        conn_response = await test_client.post(
-            f"/api/system/mcp-servers/{server_name}/connections",
-            json={
-                "scope_type": "department",
-                "scope_id": admin_dept_id,
-                "display_name": "Dept Scope Test",
-                "credential": {"secrets": {"access_token": "dummy_dept_token"}},
-            },
-            headers=admin_headers,
-        )
-        assert conn_response.status_code == 200, conn_response.text
-        conn_id = conn_response.json()["data"]["id"]
-
-        # 测试连接
-        test_conn_response = await test_client.post(
-            f"/api/system/mcp-servers/{server_name}/connections/{conn_id}/test",
-            headers=admin_headers,
-        )
-        assert test_conn_response.status_code == 200, test_conn_response.text
-        assert test_conn_response.json()["tool_count"] > 0
-
-        # 清理
-        await test_client.delete(f"/api/system/mcp-servers/{server_name}/connections/{conn_id}", headers=admin_headers)
-        await test_client.delete(f"/api/system/mcp-servers/{server_name}", headers=admin_headers)
-        await test_client.delete(f"/api/system/mcp-servers/{server_name}?hard=true", headers=admin_headers)
-
-        # C. 测试系统 (System) 范围
-        create_response = await test_client.post(
-            "/api/system/mcp-servers",
-            json={
-                "name": server_name,
-                "transport": "sse",
-                "url": "http://mcp-demo-server:8999/sse",
-                "description": "pytest scopes system test",
-                "auth_config": {
-                    "version": 1,
-                    "provider": "bound_secret",
-                    "binding_scope": "system",
-                    "inject": {
-                        "target": "headers",
-                        "entries": [{"name": "Authorization", "value_template": "Bearer ${secret.access_token}"}],
-                    },
-                },
-            },
-            headers=admin_headers,
-        )
-        assert create_response.status_code == 200, create_response.text
-
-        # 创建对应的全局连接
-        conn_response = await test_client.post(
-            f"/api/system/mcp-servers/{server_name}/connections",
-            json={
-                "scope_type": "system",
-                "scope_id": "global",
-                "display_name": "Global Scope Test",
-                "credential": {"secrets": {"access_token": "dummy_global_token"}},
-            },
-            headers=admin_headers,
-        )
-        assert conn_response.status_code == 200, conn_response.text
-        conn_id = conn_response.json()["data"]["id"]
-
-        # 测试连接
-        test_conn_response = await test_client.post(
-            f"/api/system/mcp-servers/{server_name}/connections/{conn_id}/test",
-            headers=admin_headers,
-        )
-        assert test_conn_response.status_code == 200, test_conn_response.text
-        assert test_conn_response.json()["tool_count"] > 0
-
-        # 清理
-        await test_client.delete(f"/api/system/mcp-servers/{server_name}/connections/{conn_id}", headers=admin_headers)
-        await test_client.delete(f"/api/system/mcp-servers/{server_name}", headers=admin_headers)
-        await test_client.delete(f"/api/system/mcp-servers/{server_name}?hard=true", headers=admin_headers)
-
+        for scope_type, scope_id, display_name, access_token in [
+            ("user", admin_db_id, "User Scope Test", "dummy_user_token"),
+            ("department", admin_dept_id, "Dept Scope Test", "dummy_dept_token"),
+            ("system", "global", "Global Scope Test", "dummy_global_token"),
+        ]:
+            await _create_demo_bound_secret_server(
+                test_client,
+                admin_headers,
+                server_name,
+                scope_type,
+                f"pytest scopes {scope_type} test",
+            )
+            conn_id = await _create_bound_secret_connection(
+                test_client,
+                admin_headers,
+                server_name,
+                scope_type=scope_type,
+                scope_id=scope_id,
+                display_name=display_name,
+                access_token=access_token,
+            )
+            await _assert_connection_test_succeeds(test_client, admin_headers, server_name, conn_id)
+            await _cleanup_server(test_client, admin_headers, server_name)
     finally:
         await _cleanup_server(test_client, admin_headers, server_name)
-

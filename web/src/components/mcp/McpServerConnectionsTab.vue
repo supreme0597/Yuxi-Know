@@ -177,19 +177,11 @@ import { departmentApi } from '@/apis/department_api'
 import { mcpApi } from '@/apis/mcp_api'
 import { userApi } from '@/apis/user_api'
 import { useMcpConnectionActions } from '@/composables/useMcpConnectionActions'
+import { useMcpConnectionCardState } from '@/composables/useMcpConnectionCardState'
 import { useMcpConnectionForm } from '@/composables/useMcpConnectionForm'
-import { formatFullDateTime } from '@/utils/time'
 import { extractSecretFieldNames } from '@/utils/mcpAuthConfigBuilder'
 import {
   MCP_CONNECTION_SCOPE_LABELS,
-  MCP_CONNECTION_STATUS_LABELS,
-  canRunMcpConnectionAction,
-  canToggleMcpConnectionStatus,
-  formatMcpConnectionLastInfo,
-  getMcpConnectionActionTooltip,
-  getMcpConnectionIssue,
-  getMcpConnectionStatusSwitchLabel,
-  getMcpConnectionStatusToggleTooltip,
   isMcpConnectionCredentialMissing
 } from '@/utils/mcpConnectionUtils'
 import McpConnectionCard from './McpConnectionCard.vue'
@@ -244,7 +236,6 @@ const connectionScopeOptions = [
 ]
 
 const scopeLabelMap = MCP_CONNECTION_SCOPE_LABELS
-const statusLabelMap = MCP_CONNECTION_STATUS_LABELS
 const providerLabelMap = {
   none: '不启用',
   bound_secret: '绑定长期密钥',
@@ -333,9 +324,7 @@ const credentialHint = computed(() => {
   return '当前认证配置没有声明密钥字段，可直接粘贴长期 token。'
 })
 
-const formatTime = (timeStr) => formatFullDateTime(timeStr)
 const getConnectionScopeLabel = (scopeType) => scopeLabelMap[scopeType] || scopeType || '未知范围'
-const getConnectionStatusLabel = (status) => statusLabelMap[status] || status || '未知状态'
 const isConnectionScopeMatched = (connection) =>
   !effectiveConnectionScopeType.value ||
   connection?.scope_type === effectiveConnectionScopeType.value
@@ -365,44 +354,21 @@ const getConnectionTitle = (connection) =>
   connection.display_name ||
   `${getConnectionScopeLabel(connection.scope_type)} ${getConnectionScopeTargetLabel(connection)}`
 
-const connectionActionOptions = computed(() => ({
+const {
+  canToggleConnectionStatus,
+  canTestConnection,
+  canReauthorizeConnection,
+  getConnectionStatusSwitchLabel,
+  getConnectionStatusToggleTooltip,
+  getConnectionTestTooltip,
+  getConnectionReauthorizeTooltip,
+  getConnectionIssue,
+  getConnectionLastInfo
+} = useMcpConnectionCardState({
   isScopeMatched: isConnectionScopeMatched,
   isCredentialMissing: isConnectionCredentialMissing,
-  authBindingScopeLabel: authBindingScopeLabel.value
-}))
-
-const canToggleConnectionStatusFor = (connection) =>
-  canToggleMcpConnectionStatus(connection, connectionActionOptions.value)
-const canToggleConnectionStatus = canToggleConnectionStatusFor
-const getConnectionStatusSwitchLabel = (connection) =>
-  getMcpConnectionStatusSwitchLabel(connection, getConnectionStatusLabel)
-const getConnectionStatusToggleTooltip = (connection) =>
-  getMcpConnectionStatusToggleTooltip(connection, connectionActionOptions.value)
-const canTestConnection = (connection) =>
-  canRunMcpConnectionAction(connection, connectionActionOptions.value)
-const getConnectionTestTooltip = (connection) =>
-  getMcpConnectionActionTooltip(
-    connection,
-    '测试连接',
-    `该连接未生效，当前 MCP 使用${authBindingScopeLabel.value}`,
-    connectionActionOptions.value
-  )
-const canReauthorizeConnection = (connection) =>
-  canRunMcpConnectionAction(connection, connectionActionOptions.value)
-const getConnectionReauthorizeTooltip = (connection) =>
-  getMcpConnectionActionTooltip(
-    connection,
-    '重置授权并重新激活',
-    `该连接未生效，不能重连；当前 MCP 使用${authBindingScopeLabel.value}`,
-    connectionActionOptions.value
-  )
-const getConnectionIssue = (connection) =>
-  getMcpConnectionIssue(connection, {
-    isScopeMatched: isConnectionScopeMatched,
-    isCredentialMissing: isConnectionCredentialMissing,
-    authBindingScopeLabel: authBindingScopeLabel.value
-  })
-const getConnectionLastInfo = (connection) => formatMcpConnectionLastInfo(connection, formatTime)
+  authBindingScopeLabel
+})
 
 const fetchConnections = async () => {
   if (!props.server) return
@@ -500,7 +466,7 @@ const {
 })
 
 const handleToggleConnectionStatus = (connection, checked) =>
-  updateConnectionStatus(connection, checked, { canToggle: canToggleConnectionStatusFor })
+  updateConnectionStatus(connection, checked, { canToggle: canToggleConnectionStatus })
 const handleTestConnection = (connection) =>
   testConnection(connection, { canTest: canTestConnection })
 const handleReauthorizeConnection = (connection) =>

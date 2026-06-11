@@ -17,6 +17,11 @@ from yuxi.storage.postgres.models_business import MCPConnection, MCPServer
 pytestmark = [pytest.mark.asyncio, pytest.mark.unit]
 
 
+@pytest.fixture(autouse=True)
+def mcp_credentials_master_key():
+    os.environ["MCP_CREDENTIALS_MASTER_KEY"] = "local-test-master-key"
+
+
 AUTH_HEADER_FROM_SECRET = {
     "target": "headers",
     "entries": [{"name": "Authorization", "value_template": "Bearer ${secret.access_token}"}],
@@ -103,6 +108,14 @@ def token_auth_config(
     }
 
 
+def future_token_payload(access_token: str, *, minutes: int = 30, **extra) -> dict:
+    return {
+        "access_token": access_token,
+        "expires_at": (datetime.now(tz=UTC) + timedelta(minutes=minutes)).isoformat(),
+        **extra,
+    }
+
+
 class DummyTokenCache:
     def __init__(self, token_payload: dict | None = None):
         self.token_payload = token_payload
@@ -139,54 +152,51 @@ class DummyTokenCache:
         self.release_calls.append(connection_id)
 
 
-async def test_resolve_runtime_mcp_config_injects_bound_secret_header():
-    os.environ["MCP_CREDENTIALS_MASTER_KEY"] = "local-test-master-key"
+@pytest.mark.parametrize(
+    ("server_name", "server_headers", "binding_scope", "scope_id", "credential_text", "expected_headers"),
+    [
+        (
+            "finance-gateway",
+            {"X-App": "yuxi"},
+            "department",
+            "42",
+            json.dumps({"secrets": {"access_token": "dept-token"}}),
+            {"X-App": "yuxi", "Authorization": "Bearer dept-token"},
+        ),
+        (
+            "raw-token-gateway",
+            {},
+            "system",
+            "global",
+            "raw-token-value",
+            {"Authorization": "Bearer raw-token-value"},
+        ),
+    ],
+)
+async def test_resolve_runtime_mcp_config_injects_bound_secret_header(
+    server_name, server_headers, binding_scope, scope_id, credential_text, expected_headers
+):
     server = make_mcp_server(
-        name="finance-gateway",
-        headers={"X-App": "yuxi"},
-        auth_config=bound_secret_auth_config(binding_scope="department"),
+        name=server_name,
+        headers=server_headers,
+        auth_config=bound_secret_auth_config(binding_scope=binding_scope),
     )
     connection = make_mcp_connection(
-        server_name="finance-gateway",
-        scope_type="department",
-        scope_id="42",
-        credential_blob=encrypt_credential_blob(json.dumps({"secrets": {"access_token": "dept-token"}})),
+        server_name=server_name,
+        scope_type=binding_scope,
+        scope_id=scope_id,
+        credential_blob=encrypt_credential_blob(credential_text),
     )
 
     resolved = await resolve_runtime_mcp_config(
         server,
-        auth_context=AuthContext(user_id="u-1", department_id="42"),
+        auth_context=AuthContext(user_id="u-1", department_id=scope_id),
         connection=connection,
     )
 
     assert resolved["transport"] == "streamable_http"
-    assert resolved["headers"] == {
-        "X-App": "yuxi",
-        "Authorization": "Bearer dept-token",
-    }
+    assert resolved["headers"] == expected_headers
     assert "auth_config" not in resolved
-
-
-async def test_resolve_runtime_mcp_config_supports_raw_token_string_binding():
-    os.environ["MCP_CREDENTIALS_MASTER_KEY"] = "local-test-master-key"
-    server = make_mcp_server(
-        name="raw-token-gateway",
-        auth_config=bound_secret_auth_config(binding_scope="system"),
-    )
-    connection = make_mcp_connection(
-        server_name="raw-token-gateway",
-        scope_type="system",
-        scope_id="global",
-        credential_blob=encrypt_credential_blob("raw-token-value"),
-    )
-
-    resolved = await resolve_runtime_mcp_config(
-        server,
-        auth_context=AuthContext(),
-        connection=connection,
-    )
-
-    assert resolved["headers"] == {"Authorization": "Bearer raw-token-value"}
 
 
 async def test_resolve_runtime_mcp_config_fetches_custom_http_token_with_user_context():
@@ -384,11 +394,7 @@ async def test_resolve_runtime_mcp_config_uses_cached_custom_http_token_before_f
         credential={"secrets": {"client_id": "cid", "client_secret": "secret"}},
     )
     token_cache = DummyTokenCache(
-        {
-            "access_token": "cached-token",
-            "expires_at": (datetime.now(tz=UTC) + timedelta(minutes=10)).isoformat(),
-            "token_type": "Bearer",
-        }
+        future_token_payload("cached-token", minutes=10, token_type="Bearer")
     )
 
     resolved = await resolve_runtime_mcp_config(
@@ -460,11 +466,7 @@ async def test_resolve_runtime_mcp_config_refreshes_cached_token_when_expiring_s
         },
     )
     token_cache = DummyTokenCache(
-        {
-            "access_token": "stale-token",
-            "refresh_token": "refresh-old",
-            "expires_at": (datetime.now(tz=UTC) + timedelta(seconds=60)).isoformat(),
-        }
+        future_token_payload("stale-token", minutes=1, refresh_token="refresh-old")
     )
 
     resolved = await resolve_runtime_mcp_config(
@@ -509,14 +511,8 @@ async def test_resolve_runtime_mcp_config_waits_for_refresh_lock_owner_to_publis
     token_cache = DummyTokenCache()
     token_cache.acquire_result = False
     token_cache.token_payloads = [
-        {
-            "access_token": "stale-token",
-            "expires_at": (datetime.now(tz=UTC) + timedelta(seconds=10)).isoformat(),
-        },
-        {
-            "access_token": "fresh-from-other-worker",
-            "expires_at": (datetime.now(tz=UTC) + timedelta(minutes=30)).isoformat(),
-        },
+        future_token_payload("stale-token", minutes=0),
+        future_token_payload("fresh-from-other-worker"),
     ]
 
     resolved = await resolve_runtime_mcp_config(
@@ -610,24 +606,14 @@ async def test_resolve_runtime_mcp_config_refreshes_authorization_code_token():
     assert resolved["headers"] == {"Authorization": "Bearer oidc-access-token"}
 
 
-async def test_normalize_token_payload_naive_datetime():
-    """测试 _normalize_token_payload 对 naive datetime 默认填充 UTC 时区"""
-    naive_dt = datetime(2026, 6, 5, 12, 0, 0)
-    payload = {"expires_at": naive_dt}
+@pytest.mark.parametrize(
+    "expires_at",
+    [
+        datetime(2026, 6, 5, 12, 0, 0),
+        datetime(2026, 6, 5, 20, 0, 0, tzinfo=timezone(timedelta(hours=8))),
+    ],
+)
+async def test_normalize_token_payload_datetime_to_utc(expires_at):
+    normalized = _normalize_token_payload({"expires_at": expires_at})
 
-    normalized = _normalize_token_payload(payload)
-
-    expected_iso = datetime(2026, 6, 5, 12, 0, 0, tzinfo=UTC).isoformat()
-    assert normalized["expires_at"] == expected_iso
-
-
-async def test_normalize_token_payload_aware_datetime():
-    """测试 _normalize_token_payload 对于带时区的 datetime 维持原时区对应 UTC 时间"""
-    shanghai_tz = timezone(timedelta(hours=8))
-    aware_dt = datetime(2026, 6, 5, 20, 0, 0, tzinfo=shanghai_tz)
-    payload = {"expires_at": aware_dt}
-
-    normalized = _normalize_token_payload(payload)
-
-    expected_iso = datetime(2026, 6, 5, 12, 0, 0, tzinfo=UTC).isoformat()
-    assert normalized["expires_at"] == expected_iso
+    assert normalized["expires_at"] == datetime(2026, 6, 5, 12, 0, 0, tzinfo=UTC).isoformat()
