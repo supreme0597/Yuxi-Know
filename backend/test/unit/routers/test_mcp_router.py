@@ -51,6 +51,16 @@ def _build_app(*, allow_admin: bool = True) -> FastAPI:
     return app
 
 
+@pytest.fixture
+def client() -> TestClient:
+    return TestClient(_build_app())
+
+
+@pytest.fixture
+def user_client() -> TestClient:
+    return TestClient(_build_app(allow_admin=False))
+
+
 def _auth_config(binding_scope: str = "user") -> dict:
     return {
         "version": 1,
@@ -118,7 +128,7 @@ def _patch_get_server_or_404(monkeypatch, server: object | None = None):
     monkeypatch.setattr("server.routers.mcp_router.get_server_or_404", fake_get_server_or_404)
 
 
-def test_update_mcp_server_status(monkeypatch):
+def test_update_mcp_server_status(monkeypatch, client):
     captured = {}
 
     async def fake_set_server_enabled(db, name, enabled, updated_by=None):
@@ -129,7 +139,6 @@ def test_update_mcp_server_status(monkeypatch):
 
     monkeypatch.setattr("server.routers.mcp_router.set_server_enabled", fake_set_server_enabled)
 
-    client = TestClient(_build_app())
     resp = client.put("/api/system/mcp-servers/sequentialthinking/status", json={"enabled": False})
     assert resp.status_code == 200, resp.text
     payload = resp.json()
@@ -139,18 +148,17 @@ def test_update_mcp_server_status(monkeypatch):
     assert captured == {"name": "sequentialthinking", "enabled": False, "updated_by": "admin"}
 
 
-def test_update_mcp_server_status_not_found(monkeypatch):
+def test_update_mcp_server_status_not_found(monkeypatch, client):
     async def fake_set_server_enabled(db, name, enabled, updated_by=None):
         raise ValueError(f"Server '{name}' does not exist")
 
     monkeypatch.setattr("server.routers.mcp_router.set_server_enabled", fake_set_server_enabled)
 
-    client = TestClient(_build_app())
     resp = client.put("/api/system/mcp-servers/missing/status", json={"enabled": True})
     assert resp.status_code == 404, resp.text
 
 
-def test_get_mcp_servers_normal_user_is_stripped(monkeypatch):
+def test_get_mcp_servers_normal_user_is_stripped(monkeypatch, client, user_client):
     async def fake_get_all_mcp_servers(db):
         return [
             DictModel(
@@ -180,8 +188,7 @@ def test_get_mcp_servers_normal_user_is_stripped(monkeypatch):
     monkeypatch.setattr("server.routers.mcp_router.get_all_mcp_servers", fake_get_all_mcp_servers)
 
     # 1. 管理员请求，应该返回全部字段
-    client_admin = TestClient(_build_app(allow_admin=True))
-    resp_admin = client_admin.get("/api/system/mcp-servers")
+    resp_admin = client.get("/api/system/mcp-servers")
     assert resp_admin.status_code == 200
     data_admin = resp_admin.json()["data"][0]
     assert data_admin["url"] == "http://localhost:8000"
@@ -189,8 +196,7 @@ def test_get_mcp_servers_normal_user_is_stripped(monkeypatch):
     assert data_admin["env"] == {"API_KEY": "secret"}
 
     # 2. 普通用户请求，敏感字段及一切非安全白名单字段应该被彻底脱敏
-    client_user = TestClient(_build_app(allow_admin=False))
-    resp_user = client_user.get("/api/system/mcp-servers")
+    resp_user = user_client.get("/api/system/mcp-servers")
     assert resp_user.status_code == 200
     data_user = resp_user.json()["data"][0]
     assert "url" not in data_user
@@ -203,7 +209,7 @@ def test_get_mcp_servers_normal_user_is_stripped(monkeypatch):
     assert data_user["enabled"] is True
 
 
-def test_get_mcp_server_normal_user_gets_public_detail(monkeypatch):
+def test_get_mcp_server_normal_user_gets_public_detail(monkeypatch, user_client):
     async def fake_get_mcp_server(db, name):
         del db
         assert name == "personal-gateway"
@@ -226,8 +232,7 @@ def test_get_mcp_server_normal_user_gets_public_detail(monkeypatch):
 
     monkeypatch.setattr("server.routers.mcp_router.get_mcp_server", fake_get_mcp_server)
 
-    client = TestClient(_build_app(allow_admin=False))
-    resp = client.get("/api/system/mcp-servers/personal-gateway")
+    resp = user_client.get("/api/system/mcp-servers/personal-gateway")
 
     assert resp.status_code == 200, resp.text
     data = resp.json()["data"]
@@ -243,16 +248,15 @@ def test_get_mcp_server_normal_user_gets_public_detail(monkeypatch):
     assert "headers" not in data
 
 
-def test_get_mcp_server_normal_user_cannot_read_disabled_server(monkeypatch):
+def test_get_mcp_server_normal_user_cannot_read_disabled_server(monkeypatch, user_client):
     _patch_get_mcp_server(monkeypatch, DictModel(name="disabled-gateway", enabled=0))
 
-    client = TestClient(_build_app(allow_admin=False))
-    resp = client.get("/api/system/mcp-servers/disabled-gateway")
+    resp = user_client.get("/api/system/mcp-servers/disabled-gateway")
 
     assert resp.status_code == 404, resp.text
 
 
-def test_create_mcp_server_forwards_auth_config(monkeypatch):
+def test_create_mcp_server_forwards_auth_config(monkeypatch, client):
     captured = {}
 
     async def fake_create_mcp_server(db, **kwargs):
@@ -262,7 +266,6 @@ def test_create_mcp_server_forwards_auth_config(monkeypatch):
 
     monkeypatch.setattr("server.routers.mcp_router.create_mcp_server", fake_create_mcp_server)
 
-    client = TestClient(_build_app())
     resp = client.post(
         "/api/system/mcp-servers",
         json={
@@ -285,7 +288,7 @@ def test_create_mcp_server_forwards_auth_config(monkeypatch):
     )
 
 
-def test_update_mcp_server_forwards_auth_config(monkeypatch):
+def test_update_mcp_server_forwards_auth_config(monkeypatch, client):
     captured = {}
 
     async def fake_update_mcp_server(db, name, **kwargs):
@@ -296,7 +299,6 @@ def test_update_mcp_server_forwards_auth_config(monkeypatch):
 
     monkeypatch.setattr("server.routers.mcp_router.update_mcp_server", fake_update_mcp_server)
 
-    client = TestClient(_build_app())
     resp = client.put(
         "/api/system/mcp-servers/gateway",
         json={
@@ -314,13 +316,12 @@ def test_update_mcp_server_forwards_auth_config(monkeypatch):
     assert captured["auth_config"] == _normalized_auth_config("bound_secret")
 
 
-def test_create_mcp_server_rejects_invalid_auth_config(monkeypatch):
+def test_create_mcp_server_rejects_invalid_auth_config(monkeypatch, client):
     async def fake_create_mcp_server(db, **kwargs):
         raise AssertionError("create_mcp_server should not be called when auth_config is invalid")
 
     monkeypatch.setattr("server.routers.mcp_router.create_mcp_server", fake_create_mcp_server)
 
-    client = TestClient(_build_app())
     resp = client.post(
         "/api/system/mcp-servers",
         json={
@@ -339,7 +340,7 @@ def test_create_mcp_server_rejects_invalid_auth_config(monkeypatch):
     assert "auth_config 配置无效" in resp.json()["detail"]
 
 
-def test_list_mcp_connections(monkeypatch):
+def test_list_mcp_connections(monkeypatch, client):
     async def fake_list_mcp_connections(db, **kwargs):
         del db, kwargs
         return [
@@ -350,7 +351,6 @@ def test_list_mcp_connections(monkeypatch):
     _patch_get_mcp_server(monkeypatch)
     monkeypatch.setattr("server.routers.mcp_router.list_mcp_connections", fake_list_mcp_connections)
 
-    client = TestClient(_build_app())
     resp = client.get("/api/system/mcp-servers/gateway/connections")
     assert resp.status_code == 200, resp.text
     assert resp.json()["data"] == [
@@ -359,7 +359,7 @@ def test_list_mcp_connections(monkeypatch):
     ]
 
 
-def test_list_mcp_connections_normal_user_only_lists_own_user_scope(monkeypatch):
+def test_list_mcp_connections_normal_user_only_lists_own_user_scope(monkeypatch, user_client):
     captured = {}
 
     async def fake_list_mcp_connections(db, **kwargs):
@@ -370,8 +370,7 @@ def test_list_mcp_connections_normal_user_only_lists_own_user_scope(monkeypatch)
     _patch_get_mcp_server(monkeypatch)
     monkeypatch.setattr("server.routers.mcp_router.list_mcp_connections", fake_list_mcp_connections)
 
-    client = TestClient(_build_app(allow_admin=False))
-    resp = client.get("/api/system/mcp-servers/gateway/connections")
+    resp = user_client.get("/api/system/mcp-servers/gateway/connections")
 
     assert resp.status_code == 200, resp.text
     assert captured == {"server_name": "gateway", "scope_type": "user", "scope_id": "user"}
@@ -380,7 +379,7 @@ def test_list_mcp_connections_normal_user_only_lists_own_user_scope(monkeypatch)
     ]
 
 
-def test_list_mcp_connections_admin_mine_filters_to_current_user(monkeypatch):
+def test_list_mcp_connections_admin_mine_filters_to_current_user(monkeypatch, client):
     captured = {}
 
     async def fake_list_mcp_connections(db, **kwargs):
@@ -391,14 +390,13 @@ def test_list_mcp_connections_admin_mine_filters_to_current_user(monkeypatch):
     _patch_get_mcp_server(monkeypatch)
     monkeypatch.setattr("server.routers.mcp_router.list_mcp_connections", fake_list_mcp_connections)
 
-    client = TestClient(_build_app())
     resp = client.get("/api/system/mcp-servers/gateway/connections?mine=true")
 
     assert resp.status_code == 200, resp.text
     assert captured == {"server_name": "gateway", "scope_type": "user", "scope_id": "admin"}
 
 
-def test_list_mcp_connections_paginated_returns_summary(monkeypatch):
+def test_list_mcp_connections_paginated_returns_summary(monkeypatch, client):
     captured = {}
     count_filters = []
 
@@ -421,7 +419,6 @@ def test_list_mcp_connections_paginated_returns_summary(monkeypatch):
     )
     monkeypatch.setattr("server.routers.mcp_router.count_mcp_connections", fake_count_mcp_connections)
 
-    client = TestClient(_build_app())
     resp = client.get(
         "/api/system/mcp-servers/gateway/connections?paginated=true&status=attention&search=alice&page=2&page_size=5"
     )
@@ -441,7 +438,7 @@ def test_list_mcp_connections_paginated_returns_summary(monkeypatch):
     assert count_filters == ["all", "active", "attention", "disabled"]
 
 
-def test_create_mcp_connection(monkeypatch):
+def test_create_mcp_connection(monkeypatch, client):
     captured = {}
 
     async def fake_create_mcp_connection(db, **kwargs):
@@ -452,7 +449,6 @@ def test_create_mcp_connection(monkeypatch):
     _patch_get_mcp_server(monkeypatch)
     monkeypatch.setattr("server.routers.mcp_router.create_mcp_connection", fake_create_mcp_connection)
 
-    client = TestClient(_build_app())
     resp = client.post(
         "/api/system/mcp-servers/gateway/connections",
         json={
@@ -472,7 +468,7 @@ def test_create_mcp_connection(monkeypatch):
     assert captured["created_by"] == "admin"
 
 
-def test_create_mcp_connection_normal_user_auto_binds_own_scope(monkeypatch):
+def test_create_mcp_connection_normal_user_auto_binds_own_scope(monkeypatch, user_client):
     captured = {}
 
     async def fake_create_mcp_connection(db, **kwargs):
@@ -483,8 +479,7 @@ def test_create_mcp_connection_normal_user_auto_binds_own_scope(monkeypatch):
     _patch_get_mcp_server(monkeypatch)
     monkeypatch.setattr("server.routers.mcp_router.create_mcp_connection", fake_create_mcp_connection)
 
-    client = TestClient(_build_app(allow_admin=False))
-    resp = client.post(
+    resp = user_client.post(
         "/api/system/mcp-servers/gateway/connections",
         json={
             "scope_type": "user",
@@ -500,15 +495,14 @@ def test_create_mcp_connection_normal_user_auto_binds_own_scope(monkeypatch):
     assert captured["created_by"] == "user"
 
 
-def test_create_mcp_connection_normal_user_rejects_non_user_scope(monkeypatch):
+def test_create_mcp_connection_normal_user_rejects_non_user_scope(monkeypatch, user_client):
     async def fake_create_mcp_connection(db, **kwargs):
         raise AssertionError("ordinary users must not create shared MCP connections")
 
     _patch_get_mcp_server(monkeypatch)
     monkeypatch.setattr("server.routers.mcp_router.create_mcp_connection", fake_create_mcp_connection)
 
-    client = TestClient(_build_app(allow_admin=False))
-    resp = client.post(
+    resp = user_client.post(
         "/api/system/mcp-servers/gateway/connections",
         json={"scope_type": "department", "scope_id": "42"},
     )
@@ -516,7 +510,7 @@ def test_create_mcp_connection_normal_user_rejects_non_user_scope(monkeypatch):
     assert resp.status_code == 403, resp.text
 
 
-def test_update_mcp_connection_normal_user_rejects_non_user_binding(monkeypatch):
+def test_update_mcp_connection_normal_user_rejects_non_user_binding(monkeypatch, user_client):
     async def fake_get_mcp_connection(db, connection_id):
         del db, connection_id
         raise AssertionError("ordinary users must not manage connections on shared-bound MCPs")
@@ -524,8 +518,7 @@ def test_update_mcp_connection_normal_user_rejects_non_user_binding(monkeypatch)
     _patch_get_mcp_server(monkeypatch, _server_stub(auth_config_json=_auth_config("department")))
     monkeypatch.setattr("server.routers.mcp_router.get_mcp_connection", fake_get_mcp_connection)
 
-    client = TestClient(_build_app(allow_admin=False))
-    resp = client.put(
+    resp = user_client.put(
         "/api/system/mcp-servers/gateway/connections/7",
         json={"display_name": "我的连接"},
     )
@@ -533,7 +526,7 @@ def test_update_mcp_connection_normal_user_rejects_non_user_binding(monkeypatch)
     assert resp.status_code == 403, resp.text
 
 
-def test_update_mcp_connection_status(monkeypatch):
+def test_update_mcp_connection_status(monkeypatch, client):
     captured = {}
 
     async def fake_set_mcp_connection_status(db, connection_id, **kwargs):
@@ -546,7 +539,6 @@ def test_update_mcp_connection_status(monkeypatch):
     _patch_get_mcp_connection(monkeypatch)
     monkeypatch.setattr("server.routers.mcp_router.set_mcp_connection_status", fake_set_mcp_connection_status)
 
-    client = TestClient(_build_app())
     resp = client.put(
         "/api/system/mcp-servers/gateway/connections/7/status",
         json={"status": "reauth_required"},
@@ -559,7 +551,7 @@ def test_update_mcp_connection_status(monkeypatch):
     }
 
 
-def test_update_mcp_connection(monkeypatch):
+def test_update_mcp_connection(monkeypatch, client):
     captured = {}
 
     async def fake_update_mcp_connection(db, connection_id, **kwargs):
@@ -572,7 +564,6 @@ def test_update_mcp_connection(monkeypatch):
     _patch_get_mcp_connection(monkeypatch)
     monkeypatch.setattr("server.routers.mcp_router.update_mcp_connection", fake_update_mcp_connection)
 
-    client = TestClient(_build_app())
     resp = client.put(
         "/api/system/mcp-servers/gateway/connections/7",
         json={
@@ -587,7 +578,7 @@ def test_update_mcp_connection(monkeypatch):
     assert captured["updated_by"] == "admin"
 
 
-def test_delete_mcp_connection(monkeypatch):
+def test_delete_mcp_connection(monkeypatch, client):
     captured = {}
 
     async def fake_delete_mcp_connection(db, connection_id):
@@ -599,13 +590,12 @@ def test_delete_mcp_connection(monkeypatch):
     _patch_get_mcp_connection(monkeypatch)
     monkeypatch.setattr("server.routers.mcp_router.delete_mcp_connection", fake_delete_mcp_connection)
 
-    client = TestClient(_build_app())
     resp = client.delete("/api/system/mcp-servers/gateway/connections/7")
     assert resp.status_code == 200, resp.text
     assert captured == {"connection_id": 7}
 
 
-def test_delete_mcp_connection_normal_user_cannot_delete_other_user_connection(monkeypatch):
+def test_delete_mcp_connection_normal_user_cannot_delete_other_user_connection(monkeypatch, user_client):
     async def fake_delete_mcp_connection(db, connection_id):
         raise AssertionError("should not delete another user's MCP connection")
 
@@ -613,13 +603,12 @@ def test_delete_mcp_connection_normal_user_cannot_delete_other_user_connection(m
     _patch_get_mcp_connection(monkeypatch, _connection_ref(scope_type="user", scope_id="other-user"))
     monkeypatch.setattr("server.routers.mcp_router.delete_mcp_connection", fake_delete_mcp_connection)
 
-    client = TestClient(_build_app(allow_admin=False))
-    resp = client.delete("/api/system/mcp-servers/gateway/connections/7")
+    resp = user_client.delete("/api/system/mcp-servers/gateway/connections/7")
 
     assert resp.status_code == 404, resp.text
 
 
-def test_test_mcp_connection_route(monkeypatch):
+def test_test_mcp_connection_route(monkeypatch, client):
     captured = {}
 
     async def fake_test_mcp_connection(db, connection_id, *, updated_by=None):
@@ -632,14 +621,13 @@ def test_test_mcp_connection_route(monkeypatch):
     _patch_get_mcp_connection(monkeypatch)
     monkeypatch.setattr("server.routers.mcp_router.test_mcp_connection", fake_test_mcp_connection)
 
-    client = TestClient(_build_app())
     resp = client.post("/api/system/mcp-servers/gateway/connections/7/test")
     assert resp.status_code == 200, resp.text
     assert resp.json()["tool_count"] == 3
     assert captured == {"connection_id": 7, "updated_by": "admin"}
 
 
-def test_reauthorize_mcp_connection_route(monkeypatch):
+def test_reauthorize_mcp_connection_route(monkeypatch, client):
     captured = {}
 
     async def fake_reauthorize_mcp_connection(db, connection_id, *, updated_by=None):
@@ -652,13 +640,12 @@ def test_reauthorize_mcp_connection_route(monkeypatch):
     _patch_get_mcp_connection(monkeypatch)
     monkeypatch.setattr("server.routers.mcp_router.reauthorize_mcp_connection", fake_reauthorize_mcp_connection)
 
-    client = TestClient(_build_app())
     resp = client.post("/api/system/mcp-servers/gateway/connections/7/reauth")
     assert resp.status_code == 200, resp.text
     assert captured == {"connection_id": 7, "updated_by": "admin"}
 
 
-def test_update_mcp_connection_status_rejects_connection_from_other_server(monkeypatch):
+def test_update_mcp_connection_status_rejects_connection_from_other_server(monkeypatch, client):
     async def fake_set_mcp_connection_status(db, connection_id, **kwargs):
         raise AssertionError("should not update a connection that belongs to another server")
 
@@ -666,7 +653,6 @@ def test_update_mcp_connection_status_rejects_connection_from_other_server(monke
     _patch_get_mcp_connection(monkeypatch, _connection_ref(server_name="other-gateway"))
     monkeypatch.setattr("server.routers.mcp_router.set_mcp_connection_status", fake_set_mcp_connection_status)
 
-    client = TestClient(_build_app())
     resp = client.put(
         "/api/system/mcp-servers/gateway/connections/7/status",
         json={"status": "reauth_required"},
@@ -674,7 +660,7 @@ def test_update_mcp_connection_status_rejects_connection_from_other_server(monke
     assert resp.status_code == 404, resp.text
 
 
-def test_test_mcp_server_requires_connection_level_test_for_bound_auth(monkeypatch):
+def test_test_mcp_server_requires_connection_level_test_for_bound_auth(monkeypatch, client):
     server = DictModel(
         auth_config_json={
             "version": 1,
@@ -695,12 +681,11 @@ def test_test_mcp_server_requires_connection_level_test_for_bound_auth(monkeypat
     _patch_get_server_or_404(monkeypatch, server)
     monkeypatch.setattr("server.routers.mcp_router.get_all_mcp_tools", fake_get_all_mcp_tools)
 
-    client = TestClient(_build_app())
     resp = client.post("/api/system/mcp-servers/gateway/test", json={})
     assert resp.status_code == 400, resp.text
 
 
-def test_get_mcp_server_tools_uses_current_admin_auth_context(monkeypatch):
+def test_get_mcp_server_tools_uses_current_admin_auth_context(monkeypatch, client):
     captured = {}
 
     class DummyArgsSchema:
@@ -725,7 +710,6 @@ def test_get_mcp_server_tools_uses_current_admin_auth_context(monkeypatch):
     _patch_get_server_or_404(monkeypatch, DictModel(disabled_tools=["tool_b"]))
     monkeypatch.setattr("server.routers.mcp_router.get_all_mcp_tools", fake_get_all_mcp_tools)
 
-    client = TestClient(_build_app())
     resp = client.get("/api/system/mcp-servers/gateway/tools")
 
     assert resp.status_code == 200, resp.text
@@ -747,7 +731,7 @@ def test_get_mcp_server_tools_uses_current_admin_auth_context(monkeypatch):
         ("post", "/api/system/mcp-servers/gateway/tools/refresh"),
     ],
 )
-def test_mcp_server_tools_returns_403_when_bound_connection_missing(monkeypatch, method, path):
+def test_mcp_server_tools_returns_403_when_bound_connection_missing(monkeypatch, client, method, path):
     async def fake_get_all_mcp_tools(server_name, *, auth_context=None, db=None, http_client=None, force_refresh=False):
         del server_name, auth_context, db, http_client, force_refresh
         raise ValueError(BOUND_CONNECTION_MISSING)
@@ -755,13 +739,12 @@ def test_mcp_server_tools_returns_403_when_bound_connection_missing(monkeypatch,
     _patch_get_server_or_404(monkeypatch, DictModel(disabled_tools=[]))
     monkeypatch.setattr("server.routers.mcp_router.get_all_mcp_tools", fake_get_all_mcp_tools)
 
-    client = TestClient(_build_app())
     resp = getattr(client, method)(path)
 
     assert resp.status_code == 403, resp.text
 
 
-def test_delete_mcp_server_defaults_to_retire(monkeypatch):
+def test_delete_mcp_server_defaults_to_retire(monkeypatch, client):
     captured = {}
     retired_server = DictModel(created_by="tester", to_dict={"name": "gateway", "enabled": False})
 
@@ -775,7 +758,6 @@ def test_delete_mcp_server_defaults_to_retire(monkeypatch):
     _patch_get_mcp_server(monkeypatch, retired_server)
     monkeypatch.setattr("server.routers.mcp_router.set_server_enabled", fake_set_server_enabled)
 
-    client = TestClient(_build_app())
     resp = client.delete("/api/system/mcp-servers/gateway")
 
     assert resp.status_code == 200, resp.text
@@ -787,7 +769,7 @@ def test_delete_mcp_server_defaults_to_retire(monkeypatch):
     }
 
 
-def test_delete_mcp_server_hard_delete_returns_conflict(monkeypatch):
+def test_delete_mcp_server_hard_delete_returns_conflict(monkeypatch, client):
     async def fake_get_dependency_summary(db, name):
         del db, name
         return {
@@ -800,7 +782,6 @@ def test_delete_mcp_server_hard_delete_returns_conflict(monkeypatch):
     _patch_get_mcp_server(monkeypatch, DictModel(created_by="tester", enabled=0))
     monkeypatch.setattr("server.routers.mcp_router.get_mcp_server_dependency_summary", fake_get_dependency_summary)
 
-    client = TestClient(_build_app())
     resp = client.delete("/api/system/mcp-servers/gateway?hard=true")
 
     assert resp.status_code == 409, resp.text
