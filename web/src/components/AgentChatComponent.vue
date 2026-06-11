@@ -1502,6 +1502,17 @@ const handleExampleClick = (questionText) => {
   })
 }
 
+// 处理外部 postMessage 发送消息（供 defineExpose 暴露给父组件）
+const sendTextMessage = (text) => {
+  if (!text || typeof text !== 'string') return
+  const trimmed = text.trim()
+  if (!trimmed) return
+  userInput.value = trimmed
+  nextTick(() => {
+    handleSendMessage()
+  })
+}
+
 const buildExportPayload = () => {
   const agentId = currentAgentId.value
   let agentDescription = ''
@@ -1525,7 +1536,8 @@ const buildExportPayload = () => {
 
 defineExpose({
   getExportPayload: buildExportPayload,
-  selectThreadFromRoute
+  selectThreadFromRoute,
+  sendTextMessage
 })
 
 const handleAgentStateRefresh = async (threadId = null) => {
