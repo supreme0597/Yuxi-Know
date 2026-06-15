@@ -52,6 +52,25 @@ const router = createRouter({
       ]
     },
     {
+      path: '/widget',
+      name: 'WidgetMain',
+      component: BlankLayout,
+      children: [
+        {
+          path: '',
+          name: 'WidgetComp',
+          component: () => import('../views/AgentWidget.vue'),
+          meta: { keepAlive: true, requiresAuth: true }
+        },
+        {
+          path: ':thread_id',
+          name: 'WidgetCompWithThreadId',
+          component: () => import('../views/AgentWidget.vue'),
+          meta: { keepAlive: true, requiresAuth: true }
+        }
+      ]
+    },
+    {
       path: '/workspace',
       name: 'workspace',
       component: AppLayout,

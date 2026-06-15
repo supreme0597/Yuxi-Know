@@ -1,9 +1,33 @@
+<!-- 父页面调用示例
+const iframe = document.getElementById('my-widget-iframe')
+
+// 监听结果回执
+window.addEventListener('message', (event) => {
+  if (event.data?.type === 'xiaobei-send-result') {
+    console.log(event.data.success ? '✅ 发送成功' : `❌ 失败: ${event.data.error}`)
+  }
+
+  // 监听高度变化（可选，用于动态调整 iframe 高度）
+  if (event.data?.type === 'xiaobei-resize') {
+    iframe.style.height = event.data.height + 'px'
+  }
+})
+
+// 发送消息
+iframe.contentWindow.postMessage(
+  { type: 'xiaobei-send-message', text: '请总结一下' },
+  '*'
+)
+-->
+
 <template>
   <div class="agent-widget">
     <!-- 顶栏区域 -->
     <div class="widget-topbar">
       <div class="topbar-left">
-        <span class="topbar-brand">{{ organizationName }}</span>
+        <button type="button" class="topbar-btn topbar-close" title="关闭" @click="handleWidgetClose">
+          <X size="18" />
+        </button>
       </div>
       <div class="topbar-right">
         <button type="button" class="topbar-btn" title="新对话" @click="handleNewChat">
@@ -28,7 +52,7 @@
         >
           <Ellipsis size="18" />
         </div>
-        <UserInfoComponent />
+        <!-- widget 模式隐藏头像 -->
       </div>
     </div>
 
@@ -204,7 +228,7 @@
 import { computed, ref, watch, onMounted } from 'vue'
 import { MessageOutlined, ShareAltOutlined } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
-import { Settings2, Ellipsis, ChevronDown, Check, Plus, FolderKanban, Clock } from 'lucide-vue-next'
+import { Settings2, Ellipsis, ChevronDown, Check, Plus, FolderKanban, Clock, X } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { onClickOutside } from '@vueuse/core'
@@ -212,7 +236,6 @@ import { onClickOutside } from '@vueuse/core'
 import AgentChatComponent from '@/components/AgentChatComponent.vue'
 import AgentConfigSidebar from '@/components/AgentConfigSidebar.vue'
 import FeedbackModalComponent from '@/components/dashboard/FeedbackModalComponent.vue'
-import UserInfoComponent from '@/components/UserInfoComponent.vue'
 import ConversationNavSection from '@/components/ConversationNavSection.vue'
 
 import { useUserStore } from '@/stores/user'
@@ -240,11 +263,6 @@ const router = useRouter()
 // 从 agentStore 中获取响应式状态
 const { selectedAgentId, defaultAgentId, selectedAgentConfigId, agentConfigs, isLoadingConfig } =
   storeToRefs(agentStore)
-
-// 品牌名称
-const organizationName = computed(() => {
-  return infoStore.organization.name || infoStore.branding.name || 'Yuxi'
-})
 
 // Drawer 与模态框状态
 const historyDrawerOpen = ref(false)
@@ -516,6 +534,17 @@ const handleTogglePinChat = async (threadId) => {
 
 const handleLoadMoreChats = () => {
   chatThreadsStore.loadMoreThreads()
+}
+
+// ===== iframe 跨域通信：通知父页面关闭 =====
+const handleWidgetClose = () => {
+  if (window.parent !== window) {
+    try {
+      window.parent.postMessage({ type: 'xiaobei-close' }, '*')
+    } catch {
+      // 跨域安全限制，静默失败
+    }
+  }
 }
 
 // ===== 生命周期 =====
