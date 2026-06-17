@@ -75,5 +75,6 @@ Yuxi 是一个面向 RAG、知识图谱和多智能体工作流的知识库平�
 - **配置**：环境变量来自 Compose 和 `.env`，用户持久化配置由 `yuxi.config.app.Config` 管理，运行时配置通过智能体 context 进入 LangGraph。
 - **权限**：前端路由守卫提供页面级跳转，后端认证与权限检查仍是最终边界。
 - **状态与存储**：Postgres 存业务与知识库元数据，LangGraph checkpoint 使用独立连接池或 SQLite fallback，Redis 承载运行事件和取消信号，MinIO/本地 `saves`/沙盒目录承载文件。
+- **MCP 动态鉴权网关**：`YUXI_INTERNAL_MCP_PROXY_BASE_URL` 指向 API 内部的 `/api/internal/mcp-proxy/{server_name}`。当 HTTP MCP 使用 `custom_http_token`、`client_credentials` 或 `authorization_code` 等动态鉴权 provider 时，运行时配置会把 MCP URL 改写到该内部网关，并用短期 `X-Yuxi-MCP-Proxy-Token` 传递当前用户/部门/工号上下文；真实上游 token 获取、刷新、401 重试和连接失效标记都在服务端代理层完成。
 - **文档处理**：上传文件先进入解析和分块边界，再进入知识库实现；解析插件和知识库实现应保持可替换。
 - **观测与调试**：开发阶段优先使用 `docker logs api-dev --tail 100`、worker 日志和现有测试分层定位问题；Langfuse 相关逻辑集中在服务层和智能体运行配置附近。

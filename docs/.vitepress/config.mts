@@ -69,6 +69,7 @@ export default defineConfig({
           { text: '开发路线图', link: '/develop-guides/roadmap' },
           { text: '版本变更记录', link: '/develop-guides/changelog' },
           { text: '界面设计规范', link: '/develop-guides/design' },
+          { text: 'MCP 动态鉴权开发手册', link: '/develop-guides/mcp-dynamic-auth' },
           { text: '测试规范', link: '/develop-guides/testing-guidelines' },
         ]
       }
