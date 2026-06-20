@@ -15,6 +15,8 @@ from typing import Any, cast
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from yuxi.services.mcp.server_service import _load_enabled_mcp_server_configs, get_enabled_mcp_server_config
+from yuxi.services.mcp_auth import MCPAuthConfig, decrypt_credential_blob, resolve_template_value
+from yuxi.storage.postgres.models_business import MCPConnection
 from yuxi.utils import logger
 
 # =============================================================================
@@ -24,11 +26,13 @@ from yuxi.utils import logger
 # Per-server locks to prevent concurrent duplicate initialization (Cache Stampede protection)
 _server_locks: dict[str, asyncio.Lock] = {}
 
+
 def _get_server_lock(server_name: str) -> asyncio.Lock:
     """Get or create a lock for the given server name."""
     if server_name not in _server_locks:
         _server_locks[server_name] = asyncio.Lock()
     return _server_locks[server_name]
+
 
 # 本地仅缓存工具对象。配置始终以数据库为准，每次按 server_name 现查。
 # cache key 使用 server_name:config_hash，当配置变化时会自然失效。
@@ -64,6 +68,126 @@ def to_camel_case(s: str) -> str:
     if len(s) > 0:
         s = s[0].lower() + s[1:]
     return s
+
+
+MCP_TOOLS_CONNECT_TIMEOUT = 10  # seconds per-server timeout for tool loading
+
+
+async def _inject_credentials_into_config(
+    server_name: str,
+    config: dict[str, Any],
+) -> dict[str, Any]:
+    """Resolve MCPConnection credentials and inject into config headers/env.
+
+    For servers with auth_config that requires credentials (binding_scope != inline),
+    this function:
+    1. Looks up the active system-scope MCPConnection
+    2. Decrypts the credential blob
+    3. Resolves template placeholders (${secret.xxx}) in inject entries
+    4. Applies resolved values to the appropriate target (headers or env)
+
+    Returns the modified config dict (mutated in place for callers that hold a reference).
+    """
+    auth_config_raw = config.get("auth_config")
+    if not auth_config_raw:
+        return config
+
+    try:
+        auth_config = MCPAuthConfig.model_validate(auth_config_raw)
+    except Exception:
+        logger.warning(
+            f"_inject_credentials: invalid auth_config for server '{server_name}', skip credential injection"
+        )
+        return config
+
+    # Only resolve when credentials are needed
+    if auth_config.binding_scope == "inline" or not auth_config.get_secret_fields():
+        return config
+
+    # Look up the best-scoped active connection (system first, then scope_id)
+    from sqlalchemy import select
+
+    from yuxi.storage.postgres.manager import pg_manager
+
+    async with pg_manager.get_async_session_context() as session:
+        # Try system scope first (most common / default)
+        stmt = (
+            select(MCPConnection)
+            .where(
+                MCPConnection.server_name == server_name,
+                MCPConnection.scope_type == "system",
+                MCPConnection.scope_id == "global",
+                MCPConnection.status == "active",
+            )
+            .limit(1)
+        )
+        result = await session.execute(stmt)
+        connection = result.scalar_one_or_none()
+
+    if connection is None or not connection.credential_blob:
+        logger.warning(
+            f"_inject_credentials: no active connection found for server '{server_name}', "
+            f"tools may fail due to missing credentials"
+        )
+        return config
+
+    # Decrypt the credential blob
+    try:
+        raw_json = decrypt_credential_blob(connection.credential_blob)
+    except Exception as e:
+        logger.error(f"_inject_credentials: failed to decrypt credential blob for server '{server_name}': {e}")
+        return config
+
+    if raw_json is None:
+        return config
+
+    # Parse decrypted secrets (assumed to be JSON object of key-value pairs)
+    import json as _json
+
+    try:
+        secrets = _json.loads(raw_json) if isinstance(raw_json, str) else raw_json
+    except (_json.JSONDecodeError, TypeError):
+        logger.warning(f"_inject_credentials: credential blob is not valid JSON for server '{server_name}'")
+        return config
+
+    if not isinstance(secrets, dict):
+        logger.warning(f"_inject_credentials: credentials are not a dict for server '{server_name}'")
+        return config
+
+    # Resolve and inject each inject entry
+    resolved_context: dict[str, Any] = {}
+    resolved_token: dict[str, Any] = {}
+
+    inject = auth_config.inject
+    target_field = inject.target  # "headers" or "env"
+
+    for entry in inject.entries:
+        try:
+            resolved_value = resolve_template_value(
+                entry.value_template,
+                context=resolved_context,
+                secret=secrets,
+                token=resolved_token,
+                access_token=None,
+            )
+        except Exception as e:
+            logger.warning(
+                f"_inject_credentials: failed to resolve template '{entry.value_template}' "
+                f"for server '{server_name}': {e}"
+            )
+            continue
+
+        # Initialize the target dict if needed
+        if target_field not in config:
+            config[target_field] = {}
+        elif not isinstance(config[target_field], dict):
+            config[target_field] = {}
+
+        config[target_field][entry.name] = str(resolved_value)
+        logger.debug(f"_inject_credentials: injected '{entry.name}' into {target_field} for '{server_name}'")
+
+    logger.info(f"_inject_credentials: resolved credentials for server '{server_name}' into {target_field}")
+    return config
 
 
 async def get_mcp_tools(
@@ -112,8 +236,12 @@ async def get_mcp_tools(
 
         if not all_processed_tools:
             try:
-                # disabled_tools 只影响返回值过滤，不参与 MCP client 建连参数。
-                client_config = {k: v for k, v in server_config.items() if k not in ("disabled_tools",)}
+                # Resolve and inject credentials from MCPConnection store
+                await _inject_credentials_into_config(server_name, server_config)
+
+                # disabled_tools 和 auth_config 不参与 MCP client 建连参数。
+                # credentials (headers/env) 已由 _inject_credentials_into_config 注入。
+                client_config = {k: v for k, v in server_config.items() if k not in ("disabled_tools", "auth_config")}
 
                 client = await get_mcp_client({server_name: client_config})
                 if client is None:
@@ -174,11 +302,30 @@ async def get_mcp_tools(
 
 
 async def get_tools_from_all_servers() -> list[Callable[..., Any]]:
-    """Get all tools from all configured MCP servers."""
+    """Get all tools from all configured MCP servers (parallel loading with per-server timeout).
+
+    A single slow or unreachable server does NOT block other servers or the caller.
+    """
     server_configs = await _load_enabled_mcp_server_configs()
-    all_tools = []
-    for server_name in server_configs:
-        tools = await get_mcp_tools(server_name, additional_servers=server_configs)
+    if not server_configs:
+        return []
+
+    async def _load_one(server_name: str) -> list[Callable[..., Any]]:
+        try:
+            return await asyncio.wait_for(
+                get_mcp_tools(server_name, additional_servers=server_configs),
+                timeout=MCP_TOOLS_CONNECT_TIMEOUT,
+            )
+        except TimeoutError:
+            logger.warning(f"MCP server '{server_name}' timed out after {MCP_TOOLS_CONNECT_TIMEOUT}s")
+            return []
+        except Exception:
+            # Already logged inside get_mcp_tools
+            return []
+
+    results = await asyncio.gather(*[_load_one(name) for name in server_configs], return_exceptions=False)
+    all_tools: list[Callable[..., Any]] = []
+    for tools in results:
         all_tools.extend(tools)
     return all_tools
 
