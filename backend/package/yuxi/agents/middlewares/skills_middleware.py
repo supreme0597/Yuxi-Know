@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from yuxi.agents.toolkits import get_all_tool_instances
 from yuxi.repositories.skill_repository import SkillRepository
 from yuxi.services.mcp.tool_registry_service import get_enabled_mcp_tools
+from yuxi.services.mcp_auth.orchestrator import AuthContext, RuntimeMCPAuthError, mcp_auth_context_var
 from yuxi.services.skill_service import _normalize_string_list, is_valid_skill_slug
 from yuxi.storage.postgres.manager import pg_manager
 from yuxi.utils.logging_config import logger
@@ -341,14 +342,25 @@ class SkillsMiddleware(AgentMiddleware):
 
         async def load_mcp_tools(server_name: str) -> list:
             """加载单个 MCP 服务器的工具"""
+            token = mcp_auth_context_var.set(AuthContext.from_runtime_context_or_none(context))
             try:
                 mcp_tools = await get_enabled_mcp_tools(server_name)
                 if not mcp_tools:
                     logger.warning(f"SkillsMiddleware: mcp dependency unavailable, skip: {server_name}")
                 return mcp_tools
-            except Exception as e:
-                logger.warning(f"SkillsMiddleware: failed to load mcp dependency '{server_name}': {e}")
+            except RuntimeMCPAuthError as exc:
+                logger.warning(
+                    "SkillsMiddleware: MCP authentication unavailable for dependency "
+                    f"'{server_name}' ({type(exc).__name__})"
+                )
+                raise RuntimeMCPAuthError(f'MCP "{server_name}" authentication is unavailable') from None
+            except Exception as exc:
+                logger.warning(
+                    f"SkillsMiddleware: failed to load MCP dependency '{server_name}' ({type(exc).__name__})"
+                )
                 return []
+            finally:
+                mcp_auth_context_var.reset(token)
 
         # 并行加载所有 MCP 工具
         results = await asyncio.gather(*[load_mcp_tools(name) for name in unique_mcp_names])

@@ -10,6 +10,7 @@ from langchain_core.messages import SystemMessage
 from yuxi.agents import load_chat_model
 from yuxi.agents.toolkits import get_all_tool_instances
 from yuxi.services.mcp.tool_registry_service import get_enabled_mcp_tools
+from yuxi.services.mcp_auth.orchestrator import AuthContext, RuntimeMCPAuthError, mcp_auth_context_var
 from yuxi.utils.datetime_utils import shanghai_now
 from yuxi.utils.logging_config import logger
 
@@ -155,14 +156,25 @@ class RuntimeConfigMiddleware(AgentMiddleware):
         unique_mcp_names = list(dict.fromkeys(all_mcp_names))
 
         async def load_mcp_tools(server_name: str) -> list:
+            token = mcp_auth_context_var.set(AuthContext.from_runtime_context_or_none(context))
             try:
                 mcp_tools = await get_enabled_mcp_tools(server_name)
                 if not mcp_tools:
                     logger.warning(f"RuntimeConfigMiddleware: mcp dependency unavailable, skip: {server_name}")
                 return mcp_tools
-            except Exception as e:
-                logger.warning(f"RuntimeConfigMiddleware: failed to load mcp dependency '{server_name}': {e}")
+            except RuntimeMCPAuthError as exc:
+                logger.warning(
+                    "RuntimeConfigMiddleware: MCP authentication unavailable for dependency "
+                    f"'{server_name}' ({type(exc).__name__})"
+                )
+                raise RuntimeMCPAuthError(f'MCP "{server_name}" authentication is unavailable') from None
+            except Exception as exc:
+                logger.warning(
+                    f"RuntimeConfigMiddleware: failed to load MCP dependency '{server_name}' ({type(exc).__name__})"
+                )
                 return []
+            finally:
+                mcp_auth_context_var.reset(token)
 
         results = await asyncio.gather(*[load_mcp_tools(name) for name in unique_mcp_names])
         for mcp_tools in results:

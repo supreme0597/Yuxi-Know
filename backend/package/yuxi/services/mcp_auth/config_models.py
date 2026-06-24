@@ -61,3 +61,12 @@ class MCPAuthConfig(BaseModel):
         matches = pattern.findall(dumped)
         # Deduplicate while preserving order
         return list(dict.fromkeys(matches))
+
+    def requires_bound_connection(self) -> bool:
+        """Return whether injection needs values stored in an MCP connection."""
+        connection_markers = ("${secret.", "${token.", "${access_token}")
+        return self.binding_scope != "inline" and any(
+            marker in entry.value_template
+            for entry in self.inject.entries
+            for marker in connection_markers
+        )

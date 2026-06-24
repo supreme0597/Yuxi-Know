@@ -24,7 +24,7 @@ _MCP_CONNECTION_HEALTH_FILTERS = {"all", "active", "attention", "disabled"}
 
 def requires_bound_mcp_connection(auth_config: MCPAuthConfig) -> bool:
     """Check if the auth config requires a bound MCP connection with credentials."""
-    return auth_config.binding_scope != "inline" and bool(auth_config.get_secret_fields())
+    return auth_config.requires_bound_connection()
 
 
 def _normalize_mcp_connection_scope(scope_type: str, scope_id: str | None) -> tuple[str, str]:
@@ -310,12 +310,31 @@ async def create_mcp_connection(
         if dept_result.scalar_one_or_none() is None:
             raise ValueError(f"Department with id '{normalized_scope_id}' does not exist")
     elif normalized_scope_type == "user":
-        user_conditions = [User.user_id == normalized_scope_id]
+        user = None
         if normalized_scope_id.isdigit():
-            user_conditions.append(User.id == int(normalized_scope_id))
-        user_result = await db.execute(select(User.id).where(or_(*user_conditions), User.is_deleted == 0))
-        if user_result.scalar_one_or_none() is None:
+            user_result = await db.execute(
+                select(User).where(User.id == int(normalized_scope_id), User.is_deleted == 0)
+            )
+            user = user_result.scalar_one_or_none()
+        if user is None:
+            user_result = await db.execute(
+                select(User).where(User.user_id == normalized_scope_id, User.is_deleted == 0)
+            )
+            user = user_result.scalar_one_or_none()
+        if user is None:
             raise ValueError(f"User '{normalized_scope_id}' does not exist")
+
+        normalized_scope_id = str(user.id)
+        user_scope_aliases = {normalized_scope_id, user.user_id}
+        duplicate_result = await db.execute(
+            select(MCPConnection.id).where(
+                MCPConnection.server_name == server_name,
+                MCPConnection.scope_type == "user",
+                MCPConnection.scope_id.in_(user_scope_aliases),
+            )
+        )
+        if duplicate_result.scalars().first() is not None:
+            raise ValueError(_format_duplicate_connection_message(server_name, normalized_scope_type))
 
     encrypted_credential_blob = (
         encrypt_credential_blob(credential_blob)

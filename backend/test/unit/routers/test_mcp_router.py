@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from server.routers.mcp_router import mcp
 from server.utils.auth_middleware import get_admin_user, get_db, get_required_user
+from yuxi.services.mcp_auth.orchestrator import AuthContext
 from yuxi.storage.postgres.models_business import User
 
 
@@ -21,10 +23,12 @@ def _build_app(*, allow_admin: bool = True) -> FastAPI:
 
             raise HTTPException(status_code=403, detail="需要管理员权限")
         return User(
+            id=42,
             username="admin",
-            user_id="admin",
+            user_id="W-7",
             password_hash="x",
             role="admin",
+            department_id=9,
         )
 
     async def fake_required_user():
@@ -39,6 +43,38 @@ def _build_app(*, allow_admin: bool = True) -> FastAPI:
     app.dependency_overrides[get_admin_user] = fake_admin_user
     app.dependency_overrides[get_required_user] = fake_required_user
     return app
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("post", "/api/system/mcp-servers/billing/test"),
+        ("get", "/api/system/mcp-servers/billing/tools"),
+        ("post", "/api/system/mcp-servers/billing/tools/refresh"),
+    ],
+)
+def test_management_tool_discovery_passes_current_admin_auth_context(monkeypatch, method, path):
+    captured: list[AuthContext] = []
+
+    class DummyServer:
+        disabled_tools = []
+
+    async def fake_get_server_or_404(db, name):
+        assert name == "billing"
+        return DummyServer()
+
+    async def fake_get_all_mcp_tools(name, *, auth_context):
+        assert name == "billing"
+        captured.append(auth_context)
+        return []
+
+    monkeypatch.setattr("server.routers.mcp_router.get_server_or_404", fake_get_server_or_404)
+    monkeypatch.setattr("server.routers.mcp_router.get_all_mcp_tools", fake_get_all_mcp_tools)
+
+    response = getattr(TestClient(_build_app()), method)(path)
+
+    assert response.status_code == 200, response.text
+    assert captured == [AuthContext(user_id="42", work_id="W-7", department_id="9")]
 
 
 def test_update_mcp_server_status(monkeypatch):

@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from yuxi.services.mcp_auth.config_models import MCPAuthConfig
+from yuxi.services.mcp_auth.orchestrator import AuthContext
 from yuxi.services.mcp.server_service import (
     create_mcp_server,
     delete_mcp_server,
@@ -407,12 +408,15 @@ async def test_mcp_server(
     current_user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """测试 MCP 服务器连接"""
+    """使用当前管理员身份测试 MCP 服务器连接。"""
     try:
         await get_server_or_404(db, name)
 
         try:
-            tools = await get_all_mcp_tools(name)
+            tools = await get_all_mcp_tools(
+                name,
+                auth_context=AuthContext.from_current_user(current_user),
+            )
             return {
                 "success": True,
                 "message": f"连接成功，共发现 {len(tools)} 个工具",
@@ -684,13 +688,16 @@ async def get_mcp_server_tools(
     current_user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """获取 MCP 服务器的工具列表"""
+    """使用当前管理员身份获取 MCP 服务器的工具列表。"""
     try:
         server = await get_server_or_404(db, name)
         disabled_tools = server.disabled_tools or []
 
         try:
-            tools = await get_all_mcp_tools(name)
+            tools = await get_all_mcp_tools(
+                name,
+                auth_context=AuthContext.from_current_user(current_user),
+            )
             tool_list = []
 
             for tool in tools:
@@ -733,12 +740,15 @@ async def refresh_mcp_server_tools(
     current_user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """刷新 MCP 服务器的工具列表（清除缓存重新获取）"""
+    """使用当前管理员身份刷新 MCP 服务器的工具列表。"""
     try:
         await get_server_or_404(db, name)
 
         try:
-            tools = await get_all_mcp_tools(name)
+            tools = await get_all_mcp_tools(
+                name,
+                auth_context=AuthContext.from_current_user(current_user),
+            )
 
             stats = get_mcp_tools_stats(name)
             enabled_count = stats.get("enabled", len(tools)) if stats else len(tools)

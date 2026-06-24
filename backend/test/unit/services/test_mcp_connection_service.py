@@ -220,6 +220,54 @@ async def test_user_scope_requires_existing_user(conn_session):
         )
 
 
+async def test_user_scope_normalizes_login_id_to_database_id(conn_session):
+    await _add_server(conn_session, "srv", auth_config_json=USER_BOUND_AUTH_CONFIG)
+    conn_session.add(
+        User(id=42, username="user-42", user_id="W-7", password_hash="x", role="user")
+    )
+    await conn_session.commit()
+
+    connection = await connection_service.create_mcp_connection(
+        conn_session,
+        server_name="srv",
+        scope_type="user",
+        scope_id="W-7",
+        credential_blob='{"secrets":{"token":"my-token"}}',
+        created_by="tester",
+    )
+
+    assert connection.scope_id == "42"
+
+
+async def test_user_scope_rejects_duplicate_legacy_login_id_alias(conn_session):
+    await _add_server(conn_session, "srv", auth_config_json=USER_BOUND_AUTH_CONFIG)
+    conn_session.add(
+        User(id=42, username="user-42", user_id="W-7", password_hash="x", role="user")
+    )
+    conn_session.add(
+        MCPConnection(
+            server_name="srv",
+            scope_type="user",
+            scope_id="W-7",
+            status="active",
+            credential_blob="legacy",
+            created_by="tester",
+            updated_by="tester",
+        )
+    )
+    await conn_session.commit()
+
+    with pytest.raises(ValueError, match="每个作用域只允许一个连接"):
+        await connection_service.create_mcp_connection(
+            conn_session,
+            server_name="srv",
+            scope_type="user",
+            scope_id="42",
+            credential_blob='{"secrets":{"token":"new-token"}}',
+            created_by="tester",
+        )
+
+
 # =============================================================================
 # === Status Management ===
 # =============================================================================
