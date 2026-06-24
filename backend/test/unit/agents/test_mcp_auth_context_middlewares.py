@@ -59,3 +59,24 @@ async def test_skills_middleware_sets_auth_context_for_dependency_mcp_loading(mo
     assert [tool.name for tool in tools] == ["mcp_tool"]
     assert captured == [AuthContext(user_id="42", work_id="W-7", department_id="9")]
     assert mcp_auth_context_var.get() is None
+
+
+async def test_skills_middleware_allows_plain_dependency_mcp_loading_without_auth_context(monkeypatch):
+    captured: list[AuthContext | None] = []
+
+    async def fake_get_enabled_mcp_tools(server_name: str):
+        captured.append(mcp_auth_context_var.get())
+        assert server_name == "plain-mcp"
+        return [DummyTool()]
+
+    import yuxi.agents.middlewares.skills_middleware as skills_middleware_module
+
+    monkeypatch.setattr(skills_middleware_module, "get_enabled_mcp_tools", fake_get_enabled_mcp_tools)
+    middleware = SkillsMiddleware()
+    context = SimpleNamespace(mcps=[])
+
+    tools = await middleware._get_mcp_tools_from_context(context, extra_mcps=["plain-mcp"])
+
+    assert [tool.name for tool in tools] == ["mcp_tool"]
+    assert captured == [None]
+    assert mcp_auth_context_var.get() is None

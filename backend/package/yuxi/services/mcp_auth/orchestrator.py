@@ -24,10 +24,10 @@ class AuthContext:
     department_id: str | None = None
 
     @classmethod
-    def from_runtime_context(cls, runtime_context: Any) -> AuthContext:
+    def from_runtime_context_or_none(cls, runtime_context: Any) -> AuthContext | None:
         user_id = getattr(runtime_context, "user_id", None)
         if user_id is None or str(user_id).strip() == "":
-            raise RuntimeMCPAuthError("MCP runtime auth context is missing user_id")
+            return None
 
         work_id = getattr(runtime_context, "work_id", None)
         department_id = getattr(runtime_context, "department_id", None)
@@ -36,6 +36,13 @@ class AuthContext:
             work_id=str(work_id) if work_id is not None else None,
             department_id=str(department_id) if department_id is not None else None,
         )
+
+    @classmethod
+    def from_runtime_context(cls, runtime_context: Any) -> AuthContext:
+        auth_context = cls.from_runtime_context_or_none(runtime_context)
+        if auth_context is None:
+            raise RuntimeMCPAuthError("MCP runtime auth context is missing user_id")
+        return auth_context
 
     def to_template_context(self) -> dict[str, str]:
         context = {"user_id": self.user_id}

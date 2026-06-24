@@ -342,7 +342,8 @@ class SkillsMiddleware(AgentMiddleware):
 
         async def load_mcp_tools(server_name: str) -> list:
             """加载单个 MCP 服务器的工具"""
-            token = mcp_auth_context_var.set(AuthContext.from_runtime_context(context))
+            auth_context = AuthContext.from_runtime_context_or_none(context)
+            token = mcp_auth_context_var.set(auth_context)
             try:
                 mcp_tools = await get_enabled_mcp_tools(server_name)
                 if not mcp_tools:

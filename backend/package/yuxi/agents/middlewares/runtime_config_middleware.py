@@ -156,7 +156,8 @@ class RuntimeConfigMiddleware(AgentMiddleware):
         unique_mcp_names = list(dict.fromkeys(all_mcp_names))
 
         async def load_mcp_tools(server_name: str) -> list:
-            token = mcp_auth_context_var.set(AuthContext.from_runtime_context(context))
+            auth_context = AuthContext.from_runtime_context_or_none(context)
+            token = mcp_auth_context_var.set(auth_context)
             try:
                 mcp_tools = await get_enabled_mcp_tools(server_name)
                 if not mcp_tools:
