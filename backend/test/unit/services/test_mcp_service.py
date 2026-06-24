@@ -114,6 +114,43 @@ async def test_get_tools_from_all_servers_loads_names_from_db_once(monkeypatch):
     ]
 
 
+async def test_get_tools_from_all_servers_skips_runtime_credential_servers(monkeypatch):
+    server_configs = {
+        "public": {"transport": "stdio", "command": "cmd-public", "disabled_tools": []},
+        "billing": {
+            "transport": "streamable_http",
+            "url": "http://billing.local/mcp",
+            "auth_config": {
+                "version": 1,
+                "provider": "bound_secret",
+                "binding_scope": "user",
+                "inject": {
+                    "target": "headers",
+                    "entries": [{"name": "Authorization", "value_template": "Bearer ${secret.access_token}"}],
+                },
+            },
+        },
+    }
+    calls: list[str] = []
+
+    async def fake_load_enabled_mcp_server_configs(*, names=None, db=None):
+        del names, db
+        return server_configs
+
+    async def fake_get_mcp_tools(server_name: str, additional_servers=None, **kwargs):
+        del additional_servers, kwargs
+        calls.append(server_name)
+        return [server_name]
+
+    monkeypatch.setattr(mcp_service, "_load_enabled_mcp_server_configs", fake_load_enabled_mcp_server_configs)
+    monkeypatch.setattr(mcp_service, "get_mcp_tools", fake_get_mcp_tools)
+
+    tools = await mcp_service.get_tools_from_all_servers()
+
+    assert tools == ["public"]
+    assert calls == ["public"]
+
+
 async def test_get_mcp_tools_sets_handle_tool_error(monkeypatch):
     mcp_service.clear_mcp_cache()
 

@@ -9,6 +9,7 @@ from langchain_core.messages import SystemMessage
 from yuxi.agents import load_chat_model
 from yuxi.agents.toolkits import get_all_tool_instances
 from yuxi.services.mcp.tool_registry_service import get_enabled_mcp_tools
+from yuxi.services.mcp_auth.orchestrator import AuthContext, RuntimeMCPAuthError, mcp_auth_context_var
 from yuxi.utils.datetime_utils import shanghai_now
 from yuxi.utils.logging_config import logger
 
@@ -150,12 +151,17 @@ class RuntimeConfigMiddleware(AgentMiddleware):
             if server_name in selected_mcp_servers:
                 continue
             selected_mcp_servers.add(server_name)
+            token = mcp_auth_context_var.set(AuthContext.from_runtime_context(context))
             try:
                 mcp_tools = await get_enabled_mcp_tools(server_name)
                 if not mcp_tools:
                     logger.warning(f"RuntimeConfigMiddleware: mcp dependency unavailable, skip: {server_name}")
                 selected_tools.extend(mcp_tools)
+            except RuntimeMCPAuthError:
+                raise
             except Exception as e:
                 logger.warning(f"RuntimeConfigMiddleware: failed to load mcp dependency '{server_name}': {e}")
+            finally:
+                mcp_auth_context_var.reset(token)
 
         return selected_tools
