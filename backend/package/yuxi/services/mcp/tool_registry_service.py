@@ -9,12 +9,16 @@ import asyncio
 import hashlib
 import json
 import re
-import traceback
 from collections.abc import Callable
 from typing import Any, cast
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from yuxi.services.mcp.server_service import _load_enabled_mcp_server_configs, get_enabled_mcp_server_config
+from yuxi.services.mcp_auth.orchestrator import (
+    mcp_auth_context_var,
+    mcp_config_requires_runtime_credentials,
+    resolve_runtime_mcp_config,
+)
 from yuxi.utils import logger
 
 # =============================================================================
@@ -24,11 +28,13 @@ from yuxi.utils import logger
 # Per-server locks to prevent concurrent duplicate initialization (Cache Stampede protection)
 _server_locks: dict[str, asyncio.Lock] = {}
 
+
 def _get_server_lock(server_name: str) -> asyncio.Lock:
     """Get or create a lock for the given server name."""
     if server_name not in _server_locks:
         _server_locks[server_name] = asyncio.Lock()
     return _server_locks[server_name]
+
 
 # 本地仅缓存工具对象。配置始终以数据库为准，每次按 server_name 现查。
 # cache key 使用 server_name:config_hash，当配置变化时会自然失效。
@@ -51,7 +57,8 @@ async def get_mcp_client(
         logger.info(f"Initialized MCP client with servers: {list(server_configs.keys())}")
         return client
     except Exception as e:
-        logger.error("Failed to initialize MCP client: {}", e)
+        server_names = list((server_configs or {}).keys())
+        logger.error("Failed to initialize MCP client for servers {}: {}", server_names, type(e).__name__)
         return None
 
 
@@ -96,6 +103,14 @@ async def get_mcp_tools(
         logger.warning(f"MCP server '{server_name}' not found in database or disabled")
         return []
 
+    runtime_credentials_required = mcp_config_requires_runtime_credentials(server_config)
+    server_config = await resolve_runtime_mcp_config(
+        server_name,
+        server_config,
+        auth_context=mcp_auth_context_var.get(),
+    )
+    effective_cache = cache and not runtime_credentials_required
+
     # 配置 hash 直接基于完整配置生成。只要数据库中的配置发生变化，
     # 本地工具缓存 key 就会变化，从而自然触发重建。
     config_payload = json.dumps(server_config, sort_keys=True, ensure_ascii=True, separators=(",", ":"))
@@ -107,7 +122,7 @@ async def get_mcp_tools(
     # 使用 per-server lock + double-check 模式，仅阻塞同一 server 的并发请求
     server_lock = _get_server_lock(server_name)
     async with server_lock:
-        if not force_refresh and cache and cache_key in _mcp_tools_cache:
+        if not force_refresh and effective_cache and cache_key in _mcp_tools_cache:
             all_processed_tools = _mcp_tools_cache[cache_key]
 
         if not all_processed_tools:
@@ -134,7 +149,7 @@ async def get_mcp_tools(
                     tool.handle_tool_error = True
                     all_processed_tools.append(tool)
 
-                if cache:
+                if effective_cache:
                     stale_keys = [
                         key for key in _mcp_tools_cache if key.startswith(f"{server_name}:") and key != cache_key
                     ]
@@ -156,9 +171,7 @@ async def get_mcp_tools(
                     )
 
             except Exception as e:
-                logger.error(
-                    f"Failed to load tools from MCP server '{server_name}': {e}, traceback: {traceback.format_exc()}"
-                )
+                logger.error("Failed to load tools from MCP server '{}': {}", server_name, type(e).__name__)
                 return []
 
     # 3. Filtering (Apply to Return Value Only)
@@ -177,7 +190,10 @@ async def get_tools_from_all_servers() -> list[Callable[..., Any]]:
     """Get all tools from all configured MCP servers."""
     server_configs = await _load_enabled_mcp_server_configs()
     all_tools = []
-    for server_name in server_configs:
+    for server_name, server_config in server_configs.items():
+        if mcp_config_requires_runtime_credentials(server_config):
+            logger.info(f"Skip global MCP preload for runtime credential server '{server_name}'")
+            continue
         tools = await get_mcp_tools(server_name, additional_servers=server_configs)
         all_tools.extend(tools)
     return all_tools
