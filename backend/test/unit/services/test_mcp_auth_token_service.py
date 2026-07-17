@@ -96,6 +96,41 @@ async def test_resolve_dynamic_token_reuses_fresh_cached_token():
     assert calls == 0
 
 
+async def test_token_without_expiry_is_not_reused_or_cached():
+    redis = FakeRedis()
+    cache = RedisTokenCache(redis_client_factory=lambda: asyncio.sleep(0, result=redis))
+    calls = 0
+
+    async def fetcher(**kwargs):
+        nonlocal calls
+        calls += 1
+        return {"access_token": f"token-{calls}"}
+
+    first = await resolve_dynamic_token(
+        8,
+        dynamic_config(),
+        context={"user_id": "1"},
+        secrets={},
+        credential_token={},
+        cache=cache,
+        fetcher=fetcher,
+    )
+    second = await resolve_dynamic_token(
+        8,
+        dynamic_config(),
+        context={"user_id": "1"},
+        secrets={},
+        credential_token={},
+        cache=cache,
+        fetcher=fetcher,
+    )
+
+    assert first["access_token"] == "token-1"
+    assert second["access_token"] == "token-2"
+    assert calls == 2
+    assert not any(key.startswith("yuxi:mcp:token:v1:connection:8") for key in redis.data)
+
+
 async def test_concurrent_refresh_is_singleflight_per_connection():
     redis = FakeRedis()
     cache = RedisTokenCache(redis_client_factory=lambda: asyncio.sleep(0, result=redis))

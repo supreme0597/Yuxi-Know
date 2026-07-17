@@ -57,7 +57,7 @@ def token_is_expiring(token: Mapping[str, Any], *, pre_refresh_seconds: int) -> 
         return True
     expires_at = _parse_expiry(token.get("expires_at"))
     if expires_at is None:
-        return False
+        return True
     return expires_at <= datetime.now(tz=UTC) + timedelta(seconds=pre_refresh_seconds)
 
 
@@ -87,7 +87,9 @@ class RedisTokenCache:
     async def set(self, connection_id: int, payload: Mapping[str, Any]) -> dict[str, Any]:
         token = normalize_token_payload(payload)
         expires_at = _parse_expiry(token.get("expires_at"))
-        ttl = max(1, int((expires_at - datetime.now(tz=UTC)).total_seconds())) if expires_at else 300
+        if expires_at is None:
+            return token
+        ttl = max(1, int((expires_at - datetime.now(tz=UTC)).total_seconds()))
         await (await self._redis()).set(
             self._token_key(connection_id),
             json.dumps(token, ensure_ascii=False, separators=(",", ":")),

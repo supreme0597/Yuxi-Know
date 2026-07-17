@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 from copy import deepcopy
 from types import SimpleNamespace
 
@@ -386,8 +387,9 @@ async def test_resolve_runtime_mcp_injects_dynamic_token_and_returns_connection_
     assert resolved.config["headers"]["Authorization"] == "Bearer fresh"
     assert resolved.cache_policy.partition == f"connection:{connection.id}"
     assert resolved.cache_policy.cache_tool_objects is False
-    assert "fresh" not in str(resolved.cache_identity)
-    assert "stale" not in str(resolved.cache_identity)
+    serialized_identity = json.dumps(resolved.cache_identity, sort_keys=True)
+    assert '"fresh"' not in serialized_identity
+    assert '"stale"' not in serialized_identity
 
 
 async def test_authorization_code_without_refresh_token_marks_connection_reauth_required(conn_session):

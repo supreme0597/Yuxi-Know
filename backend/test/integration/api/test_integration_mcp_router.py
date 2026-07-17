@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import uuid
 
+import httpx
 import pytest
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
@@ -159,7 +160,12 @@ class TestMcpConnectionCrudRealDb:
         yield
         await _cleanup_mcp_connections(test_client, self.headers, MCP_SERVER_NAME)
         for user_id in self.user_scope_ids:
-            await test_client.delete(f"/api/auth/users/{user_id}", headers=self.headers)
+            try:
+                response = await test_client.delete(f"/api/auth/users/{user_id}", headers=self.headers)
+                if response.status_code not in (200, 404):
+                    print(f"Warning: Failed to cleanup MCP integration user {user_id}: {response.text}")
+            except httpx.HTTPError as exc:
+                print(f"Warning: Failed to cleanup MCP integration user {user_id}: {exc}")
 
     async def _create_connection(self, test_client, **overrides) -> dict:
         body = {
