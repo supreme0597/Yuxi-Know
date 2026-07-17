@@ -147,29 +147,10 @@ def _load_connection_secret_payload(
 
 
 def _build_cache_identity(server_config: dict[str, Any], auth_config: MCPAuthConfig | None) -> dict[str, Any]:
-    if auth_config is None or auth_config.provider == "legacy_static":
-        return {key: value for key, value in server_config.items() if key not in {"disabled_tools", "auth_config"}}
-    return {
-        key: value
-        for key, value in server_config.items()
-        if key
-        in {
-            "transport",
-            "url",
-            "command",
-            "args",
-            "timeout",
-            "sse_read_timeout",
-        }
-    } | {
-        "auth": {
-            "provider": auth_config.provider,
-            "binding_scope": auth_config.binding_scope,
-            "manifest_scope": auth_config.manifest_scope,
-            "inject_target": auth_config.inject.target,
-            "inject_entries": [entry.name for entry in auth_config.inject.entries],
-        }
-    }
+    identity = {key: value for key, value in server_config.items() if key not in {"disabled_tools", "auth_config"}}
+    if auth_config is not None:
+        identity["auth_config"] = auth_config.model_dump(mode="json")
+    return identity
 
 
 def _apply_inject_config(

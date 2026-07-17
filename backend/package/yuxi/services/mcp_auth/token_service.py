@@ -16,7 +16,7 @@ from yuxi.utils import logger
 TOKEN_KEY_PREFIX = "yuxi:mcp:token:v1:connection"
 LOCK_KEY_PREFIX = "yuxi:mcp:token-refresh-lock:v1:connection"
 LOCK_TTL_SECONDS = 30
-LOCK_WAIT_SECONDS = 5.0
+LOCK_WAIT_SECONDS = LOCK_TTL_SECONDS + 1.0
 LOCK_POLL_SECONDS = 0.02
 
 _LOCK_RELEASE_SCRIPT = """
@@ -230,9 +230,17 @@ async def resolve_dynamic_token(
             try:
                 refreshed = await cache.get(connection_id)
             except Exception:
+                cache = None
                 break
             if refreshed and not token_is_expiring(refreshed, pre_refresh_seconds=pre_refresh):
                 return refreshed
+            try:
+                lock_value = await cache.acquire_lock(connection_id)
+            except Exception:
+                cache = None
+                break
+            if lock_value is not None:
+                break
 
     try:
         token = normalize_token_payload(

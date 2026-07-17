@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
@@ -409,3 +410,37 @@ async def test_authorization_code_without_refresh_token_marks_connection_reauth_
 
     await conn_session.refresh(connection)
     assert connection.status == "reauth_required"
+
+
+async def test_dynamic_cache_identity_changes_with_token_request_config(conn_session):
+    server = await _add_server(conn_session, "identity", _dynamic_header_auth_config())
+    await _create_active_connection(
+        conn_session,
+        "identity",
+        scope_type="user",
+        scope_id="42",
+        token="stale",
+    )
+
+    async def token_fetcher(**kwargs):
+        return {"access_token": "fresh", "expires_in": 300}
+
+    first_config = server.to_mcp_config()
+    second_config = deepcopy(server.to_mcp_config())
+    second_config["auth_config"]["token_request"] = {"url": "https://other.example/token"}
+    first = await resolve_runtime_mcp(
+        "identity",
+        first_config,
+        auth_context=AuthContext(user_id="42"),
+        db=conn_session,
+        token_resolver=token_fetcher,
+    )
+    second = await resolve_runtime_mcp(
+        "identity",
+        second_config,
+        auth_context=AuthContext(user_id="42"),
+        db=conn_session,
+        token_resolver=token_fetcher,
+    )
+
+    assert first.cache_identity != second.cache_identity
