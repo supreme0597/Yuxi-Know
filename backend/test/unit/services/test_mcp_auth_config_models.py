@@ -81,3 +81,19 @@ def test_mcp_auth_config_inline_scope_does_not_require_connection():
     config = _auth_config(value_template="${secret.access_token}", binding_scope="inline")
 
     assert config.requires_bound_connection() is False
+
+
+def test_mcp_auth_config_rejects_negative_pre_refresh_window():
+    with pytest.raises(ValidationError, match="pre_refresh_seconds"):
+        MCPAuthConfig.model_validate(
+            {
+                "provider": "client_credentials",
+                "binding_scope": "system",
+                "inject": {
+                    "target": "headers",
+                    "entries": [{"name": "Authorization", "value_template": "Bearer ${access_token}"}],
+                },
+                "refresh_policy": {"pre_refresh_seconds": -1},
+                "token_request": {"url": "https://auth.example/token"},
+            }
+        )

@@ -8,7 +8,12 @@ import pytest
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
 from yuxi.services.mcp import tool_registry_service
-from yuxi.services.mcp_auth.orchestrator import AuthContext, mcp_auth_context_var
+from yuxi.services.mcp.cache_policy import MCPCachePolicy
+from yuxi.services.mcp_auth.orchestrator import (
+    AuthContext,
+    ResolvedMCPRuntime,
+    mcp_auth_context_var,
+)
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.unit]
 
@@ -26,17 +31,20 @@ async def test_get_mcp_tools_bypasses_global_cache_for_runtime_credentials(monke
         captured_configs.append(server_configs["billing"])
         return FakeClient()
 
-    async def fake_resolve_runtime_mcp_config(server_name, server_config, *, auth_context=None, db=None):
+    async def fake_resolve_runtime_mcp(server_name, server_config, *, auth_context=None, db=None):
+        del db
         assert server_name == "billing"
         assert auth_context is not None
         resolved = {key: value for key, value in server_config.items() if key != "auth_config"}
         resolved["headers"] = {"Authorization": f"Bearer user-{auth_context.user_id}"}
-        return resolved
+        return ResolvedMCPRuntime(
+            config=resolved,
+            cache_policy=MCPCachePolicy(f"context:user:{auth_context.user_id}", True, True, False),
+            cache_identity={"transport": "streamable_http", "user": auth_context.user_id},
+        )
 
     monkeypatch.setattr(tool_registry_service, "get_mcp_client", fake_get_mcp_client)
-    monkeypatch.setattr(
-        tool_registry_service, "resolve_runtime_mcp_config", fake_resolve_runtime_mcp_config, raising=False
-    )
+    monkeypatch.setattr(tool_registry_service, "resolve_runtime_mcp", fake_resolve_runtime_mcp, raising=False)
 
     server_config = {
         "transport": "streamable_http",
@@ -129,3 +137,157 @@ async def test_get_mcp_tools_uses_sanitized_error_log(monkeypatch):
     assert tools == []
     assert logged_messages
     assert "secret-token" not in "\n".join(logged_messages)
+
+
+class FakeManifestCache:
+    def __init__(self):
+        self.manifests: dict[str, dict] = {}
+
+    async def get_revisions(self, server_name, partition):
+        return (0, 0)
+
+    def build_cache_key(self, server_name, partition, revisions, config_hash):
+        return f"{server_name}:{partition}:s{revisions[0]}:p{revisions[1]}:{config_hash}"
+
+    async def get_manifest(self, cache_key):
+        return self.manifests.get(cache_key)
+
+    async def set_manifest(self, cache_key, manifest):
+        self.manifests[cache_key] = manifest
+
+
+async def test_dynamic_provider_uses_manifest_without_caching_tool_object(monkeypatch):
+    tool_registry_service.clear_mcp_cache()
+    manifest_cache = FakeManifestCache()
+    discovery_calls = 0
+
+    async def fake_resolve_runtime_mcp(server_name, server_config, **kwargs):
+        del server_name, server_config, kwargs
+        return ResolvedMCPRuntime(
+            config={
+                "transport": "streamable_http",
+                "url": "http://billing.local/mcp",
+                "headers": {"Authorization": "Bearer short"},
+            },
+            cache_policy=MCPCachePolicy("connection:31", False, True, False),
+            cache_identity={
+                "transport": "streamable_http",
+                "url": "http://billing.local/mcp",
+                "auth": {"provider": "client_credentials"},
+            },
+            connection_id=31,
+        )
+
+    class DiscoveryClient:
+        async def get_tools(self):
+            nonlocal discovery_calls
+            discovery_calls += 1
+
+            async def ainvoke(payload):
+                return payload
+
+            return [
+                SimpleNamespace(
+                    name="lookup",
+                    description="Lookup",
+                    metadata=None,
+                    args_schema={"type": "object", "properties": {"q": {"type": "string"}}},
+                    ainvoke=ainvoke,
+                )
+            ]
+
+    monkeypatch.setattr(tool_registry_service, "resolve_runtime_mcp", fake_resolve_runtime_mcp, raising=False)
+    monkeypatch.setattr(
+        tool_registry_service,
+        "get_mcp_client",
+        lambda configs: __import__("asyncio").sleep(0, result=DiscoveryClient()),
+    )
+    monkeypatch.setattr(tool_registry_service, "_manifest_cache", manifest_cache, raising=False)
+
+    server_config = {
+        "transport": "streamable_http",
+        "url": "http://billing.local/mcp",
+        "auth_config": {
+            "provider": "client_credentials",
+            "binding_scope": "user",
+            "inject": {"target": "headers", "entries": []},
+            "token_request": {"url": "http://auth.local/token"},
+        },
+    }
+    first = await tool_registry_service.get_mcp_tools("billing", additional_servers={"billing": server_config})
+    second = await tool_registry_service.get_mcp_tools("billing", additional_servers={"billing": server_config})
+
+    assert [tool.name for tool in first] == ["lookup"]
+    assert [tool.name for tool in second] == ["lookup"]
+    assert discovery_calls == 1
+    assert tool_registry_service._mcp_tools_cache == {}
+    assert manifest_cache.manifests
+
+
+async def test_manifest_backed_tool_resolves_current_runtime_before_invocation(monkeypatch):
+    tool_registry_service.clear_mcp_cache()
+    manifest_cache = FakeManifestCache()
+    resolve_calls = 0
+    client_calls = 0
+
+    async def fake_resolve_runtime_mcp(server_name, server_config, **kwargs):
+        nonlocal resolve_calls
+        del server_name, server_config, kwargs
+        resolve_calls += 1
+        return ResolvedMCPRuntime(
+            config={
+                "transport": "streamable_http",
+                "url": "http://billing.local/mcp",
+                "headers": {"Authorization": f"Bearer token-{resolve_calls}"},
+            },
+            cache_policy=MCPCachePolicy("connection:31", False, True, False),
+            cache_identity={
+                "transport": "streamable_http",
+                "url": "http://billing.local/mcp",
+                "auth": {"provider": "client_credentials"},
+            },
+            connection_id=31,
+        )
+
+    class InvokeClient:
+        async def get_tools(self):
+            nonlocal client_calls
+            client_calls += 1
+
+            class UpstreamTool:
+                name = "lookup"
+                description = "Lookup"
+                metadata = None
+                args_schema = {"type": "object", "properties": {"q": {"type": "string"}}}
+
+                async def ainvoke(self, payload):
+                    return {"query": payload["q"], "auth": f"token-{resolve_calls}"}
+
+            return [UpstreamTool()]
+
+    async def fake_get_mcp_client(configs):
+        del configs
+        return InvokeClient()
+
+    monkeypatch.setattr(tool_registry_service, "resolve_runtime_mcp", fake_resolve_runtime_mcp, raising=False)
+    monkeypatch.setattr(tool_registry_service, "get_mcp_client", fake_get_mcp_client)
+    monkeypatch.setattr(tool_registry_service, "_manifest_cache", manifest_cache, raising=False)
+
+    server_config = {
+        "transport": "streamable_http",
+        "url": "http://billing.local/mcp",
+        "auth_config": {
+            "provider": "client_credentials",
+            "binding_scope": "user",
+            "inject": {"target": "headers", "entries": []},
+            "token_request": {"url": "http://auth.local/token"},
+        },
+    }
+    await tool_registry_service.get_mcp_tools("billing", additional_servers={"billing": server_config})
+    client_calls = 0
+    tools = await tool_registry_service.get_mcp_tools("billing", additional_servers={"billing": server_config})
+    result = await tools[0].ainvoke({"q": "invoice"})
+
+    assert client_calls == 1
+    assert resolve_calls == 3
+    assert result == {"query": "invoice", "auth": "token-3"}

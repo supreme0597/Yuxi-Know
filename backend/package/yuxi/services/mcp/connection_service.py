@@ -22,6 +22,12 @@ _MCP_CONNECTION_SCOPE_LABELS = {
 _MCP_CONNECTION_HEALTH_FILTERS = {"all", "active", "attention", "disabled"}
 
 
+async def _invalidate_mcp_connection_caches(server_name: str, connection_id: int) -> None:
+    from yuxi.services.mcp.tool_registry_service import invalidate_mcp_connection_caches
+
+    await invalidate_mcp_connection_caches(server_name, connection_id)
+
+
 def requires_bound_mcp_connection(auth_config: MCPAuthConfig) -> bool:
     """Check if the auth config requires a bound MCP connection with credentials."""
     return auth_config.requires_bound_connection()
@@ -408,6 +414,7 @@ async def update_mcp_connection(
 
     await db.commit()
     await db.refresh(connection)
+    await _invalidate_mcp_connection_caches(connection.server_name, connection.id)
     return connection
 
 
@@ -416,8 +423,11 @@ async def delete_mcp_connection(db: AsyncSession, connection_id: int) -> bool:
     connection = await get_mcp_connection(db, connection_id)
     if connection is None:
         return False
+    server_name = connection.server_name
+    resolved_connection_id = connection.id
     await db.delete(connection)
     await db.commit()
+    await _invalidate_mcp_connection_caches(server_name, resolved_connection_id)
     return True
 
 
@@ -447,4 +457,5 @@ async def set_mcp_connection_status(
         connection.updated_by = updated_by
     await db.commit()
     await db.refresh(connection)
+    await _invalidate_mcp_connection_caches(connection.server_name, connection.id)
     return connection

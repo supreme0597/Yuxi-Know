@@ -23,6 +23,8 @@ from yuxi.services.mcp.tool_registry_service import (
     get_mcp_tools,
     get_mcp_tools_stats,
     get_tools_from_all_servers,
+    invalidate_mcp_connection_caches,
+    invalidate_mcp_server_caches,
     to_camel_case,
 )
 
@@ -43,6 +45,8 @@ __all__ = [
     "get_mcp_tools_stats",
     "get_servers_config",
     "get_tools_from_all_servers",
+    "invalidate_mcp_connection_caches",
+    "invalidate_mcp_server_caches",
     "server_service",
     "set_server_enabled",
     "to_camel_case",

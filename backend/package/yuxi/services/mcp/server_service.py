@@ -10,7 +10,7 @@ from typing import Any
 
 from sqlalchemy import String, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from yuxi.storage.postgres.models_business import MCPServer
+from yuxi.storage.postgres.models_business import MCPConnection, MCPServer
 from yuxi.utils import logger
 
 # =============================================================================
@@ -178,6 +178,18 @@ def _clear_mcp_server_tools_cache(server_name: str) -> None:
     clear_mcp_server_tools_cache(server_name)
 
 
+async def _invalidate_mcp_server_caches(server_name: str) -> None:
+    from yuxi.services.mcp.tool_registry_service import invalidate_mcp_server_caches
+
+    await invalidate_mcp_server_caches(server_name)
+
+
+async def _invalidate_mcp_connection_caches(server_name: str, connection_id: int) -> None:
+    from yuxi.services.mcp.tool_registry_service import invalidate_mcp_connection_caches
+
+    await invalidate_mcp_connection_caches(server_name, connection_id)
+
+
 # =============================================================================
 # === Server Config CRUD (Existing in mcp_service.py) ===
 # =============================================================================
@@ -273,7 +285,7 @@ async def create_mcp_server(
     await db.commit()
     await db.refresh(server)
 
-    _clear_mcp_server_tools_cache(name)
+    await _invalidate_mcp_server_caches(name)
 
     logger.info(f"Created MCP server '{name}'")
     return server
@@ -331,7 +343,7 @@ async def update_mcp_server(
     await db.commit()
     await db.refresh(server)
 
-    _clear_mcp_server_tools_cache(name)
+    await _invalidate_mcp_server_caches(name)
 
     logger.info(f"Updated MCP server '{name}'")
     return server
@@ -343,10 +355,16 @@ async def delete_mcp_server(db: AsyncSession, name: str) -> bool:
     if not server:
         return False
 
+    connection_ids = list(
+        (await db.execute(select(MCPConnection.id).where(MCPConnection.server_name == name))).scalars().all()
+    )
+
     await db.delete(server)
     await db.commit()
 
-    _clear_mcp_server_tools_cache(name)
+    for connection_id in connection_ids:
+        await _invalidate_mcp_connection_caches(name, connection_id)
+    await _invalidate_mcp_server_caches(name)
 
     logger.info(f"Deleted MCP server '{name}'")
     return True
@@ -371,7 +389,7 @@ async def set_server_enabled(
     await db.commit()
 
     is_enabled = bool(server.enabled)
-    _clear_mcp_server_tools_cache(name)
+    await _invalidate_mcp_server_caches(name)
 
     logger.info(f"Set MCP server '{name}' enabled={is_enabled}")
     return is_enabled, server

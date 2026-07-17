@@ -38,7 +38,7 @@
 
 - 修复 DeepAgent 未绑定 `DeepContext`，导致深度分析专用系统提示词和子智能体默认模型配置未生效的问题；同时避免运行时重复注入默认提示词。
 - 增加 MCP 连接凭据管理基础能力，覆盖连接作用域、凭据加密、CRUD 接口与权限测试；运行时凭据注入链路留待后续能力承接。
-- 补齐 MCP 绑定凭据运行时注入链路，支持基于后端用户上下文解析 `bound_secret` / `stdio_env`，并避免用户/部门凭据污染全局 MCP 工具缓存；完善静态 MCP 无用户上下文兼容、用户连接 ID 规范化和管理端工具发现鉴权上下文，user scope 运行时仅按数据库用户 ID 查找连接，并对 MCP 加载异常日志与外部错误进行敏感信息脱敏。
+- 补齐 MCP 运行时鉴权链路：支持基于后端用户上下文解析 `bound_secret` / `stdio_env`，以及 `custom_http_token`、`client_credentials` 和已有 refresh token 的 `authorization_code` 后台刷新；access token 按 connection ID 进入 Redis 缓存并使用刷新单飞，Tool/manifest 按 connection、revision 与配置摘要隔离，动态 token 不进入长期 Tool 对象缓存；同时完善静态 MCP 无用户上下文兼容、用户连接 ID 规范化、管理端工具发现鉴权上下文和敏感日志脱敏。
 
 ---
 

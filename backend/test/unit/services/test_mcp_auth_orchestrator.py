@@ -12,7 +12,12 @@ os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
 from yuxi.services.mcp import connection_service
 from yuxi.services.mcp_auth.crypto import encrypt_credential_blob
-from yuxi.services.mcp_auth.orchestrator import AuthContext, RuntimeMCPAuthError, resolve_runtime_mcp_config
+from yuxi.services.mcp_auth.orchestrator import (
+    AuthContext,
+    RuntimeMCPAuthError,
+    resolve_runtime_mcp,
+    resolve_runtime_mcp_config,
+)
 from yuxi.storage.postgres.models_business import Department, MCPConnection, MCPServer, User
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.unit]
@@ -211,9 +216,7 @@ async def test_resolve_runtime_mcp_config_raises_when_auth_context_missing(conn_
 
 async def test_resolve_runtime_mcp_config_does_not_fall_back_to_work_id_connection(conn_session):
     server = await _add_server(conn_session, "work-id-user", _bound_header_auth_config("user"))
-    conn_session.add(
-        User(id=42, username="user-42", user_id="W-7", password_hash="x", role="user")
-    )
+    conn_session.add(User(id=42, username="user-42", user_id="W-7", password_hash="x", role="user"))
     conn_session.add(
         MCPConnection(
             server_name="work-id-user",
@@ -241,9 +244,7 @@ async def test_resolve_runtime_mcp_config_does_not_fall_back_to_work_id_connecti
 
 async def test_resolve_runtime_mcp_config_prefers_database_user_id_connection(conn_session):
     server = await _add_server(conn_session, "dual-user", _bound_header_auth_config("user"))
-    conn_session.add(
-        User(id=42, username="user-42", user_id="W-7", password_hash="x", role="user")
-    )
+    conn_session.add(User(id=42, username="user-42", user_id="W-7", password_hash="x", role="user"))
     conn_session.add_all(
         [
             MCPConnection(
@@ -251,9 +252,7 @@ async def test_resolve_runtime_mcp_config_prefers_database_user_id_connection(co
                 scope_type="user",
                 scope_id="W-7",
                 status="active",
-                credential_blob=encrypt_credential_blob(
-                    '{"secrets":{"access_token":"legacy-token"}}'
-                ),
+                credential_blob=encrypt_credential_blob('{"secrets":{"access_token":"legacy-token"}}'),
                 created_by="tester",
                 updated_by="tester",
             ),
@@ -262,9 +261,7 @@ async def test_resolve_runtime_mcp_config_prefers_database_user_id_connection(co
                 scope_type="user",
                 scope_id="42",
                 status="active",
-                credential_blob=encrypt_credential_blob(
-                    '{"secrets":{"access_token":"canonical-token"}}'
-                ),
+                credential_blob=encrypt_credential_blob('{"secrets":{"access_token":"canonical-token"}}'),
                 created_by="tester",
                 updated_by="tester",
             ),
@@ -347,3 +344,68 @@ async def test_auth_context_from_runtime_context_uses_backend_owned_fields():
     auth_context = AuthContext.from_runtime_context(runtime_context)
 
     assert auth_context == AuthContext(user_id="42", work_id="W-7", department_id="9")
+
+
+def _dynamic_header_auth_config(provider: str = "custom_http_token") -> dict:
+    return {
+        "version": 1,
+        "provider": provider,
+        "binding_scope": "user",
+        "inject": {
+            "target": "headers",
+            "entries": [{"name": "Authorization", "value_template": "Bearer ${access_token}"}],
+        },
+        "refresh_policy": {"pre_refresh_seconds": 30},
+        "token_request": {"url": "https://auth.example/token"},
+    }
+
+
+async def test_resolve_runtime_mcp_injects_dynamic_token_and_returns_connection_partition(conn_session):
+    server = await _add_server(conn_session, "dynamic", _dynamic_header_auth_config())
+    connection = await _create_active_connection(
+        conn_session,
+        "dynamic",
+        scope_type="user",
+        scope_id="42",
+        token="stale",
+    )
+
+    async def token_fetcher(**kwargs):
+        assert kwargs["connection_id"] == connection.id
+        return {"access_token": "fresh", "expires_in": 300}
+
+    resolved = await resolve_runtime_mcp(
+        "dynamic",
+        server.to_mcp_config(),
+        auth_context=AuthContext(user_id="42"),
+        db=conn_session,
+        token_resolver=token_fetcher,
+    )
+
+    assert resolved.config["headers"]["Authorization"] == "Bearer fresh"
+    assert resolved.cache_policy.partition == f"connection:{connection.id}"
+    assert resolved.cache_policy.cache_tool_objects is False
+    assert "fresh" not in str(resolved.cache_identity)
+    assert "stale" not in str(resolved.cache_identity)
+
+
+async def test_authorization_code_without_refresh_token_marks_connection_reauth_required(conn_session):
+    server = await _add_server(conn_session, "oauth", _dynamic_header_auth_config("authorization_code"))
+    connection = await _create_active_connection(
+        conn_session,
+        "oauth",
+        scope_type="user",
+        scope_id="42",
+        token="access-only",
+    )
+
+    with pytest.raises(RuntimeMCPAuthError, match="refresh_token"):
+        await resolve_runtime_mcp_config(
+            "oauth",
+            server.to_mcp_config(),
+            auth_context=AuthContext(user_id="42"),
+            db=conn_session,
+        )
+
+    await conn_session.refresh(connection)
+    assert connection.status == "reauth_required"

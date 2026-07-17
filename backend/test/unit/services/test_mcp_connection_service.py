@@ -222,9 +222,7 @@ async def test_user_scope_requires_existing_user(conn_session):
 
 async def test_user_scope_normalizes_login_id_to_database_id(conn_session):
     await _add_server(conn_session, "srv", auth_config_json=USER_BOUND_AUTH_CONFIG)
-    conn_session.add(
-        User(id=42, username="user-42", user_id="W-7", password_hash="x", role="user")
-    )
+    conn_session.add(User(id=42, username="user-42", user_id="W-7", password_hash="x", role="user"))
     await conn_session.commit()
 
     connection = await connection_service.create_mcp_connection(
@@ -241,9 +239,7 @@ async def test_user_scope_normalizes_login_id_to_database_id(conn_session):
 
 async def test_user_scope_rejects_duplicate_legacy_login_id_alias(conn_session):
     await _add_server(conn_session, "srv", auth_config_json=USER_BOUND_AUTH_CONFIG)
-    conn_session.add(
-        User(id=42, username="user-42", user_id="W-7", password_hash="x", role="user")
-    )
+    conn_session.add(User(id=42, username="user-42", user_id="W-7", password_hash="x", role="user"))
     conn_session.add(
         MCPConnection(
             server_name="srv",
@@ -463,3 +459,20 @@ async def test_to_dict_includes_credentials_when_requested(conn_session):
 
     d = c.to_dict(include_credentials=True)
     assert "credential_blob" in d
+
+
+async def test_connection_mutations_invalidate_partition_and_token_cache(conn_session, monkeypatch):
+    await _add_server(conn_session, "invalidate")
+    connection = await _create_connection(conn_session, "invalidate")
+    calls: list[tuple[str, int]] = []
+
+    async def fake_invalidate(server_name: str, connection_id: int):
+        calls.append((server_name, connection_id))
+
+    monkeypatch.setattr(connection_service, "_invalidate_mcp_connection_caches", fake_invalidate, raising=False)
+
+    await connection_service.update_mcp_connection(conn_session, connection.id, display_name="updated")
+    await connection_service.set_mcp_connection_status(conn_session, connection.id, status="disabled")
+    await connection_service.delete_mcp_connection(conn_session, connection.id)
+
+    assert calls == [("invalidate", connection.id)] * 3

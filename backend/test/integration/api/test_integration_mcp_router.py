@@ -146,7 +146,7 @@ class TestMcpConnectionCrudRealDb:
         self.dept_id = await _ensure_system_department(test_client, self.headers)
         self.user_scope_ids = []
         for _ in range(4):
-            username = f"pytest_mcp_user_{uuid.uuid4().hex[:8]}"
+            username = f"mcp_{uuid.uuid4().hex[:12]}"
             resp = await test_client.post(
                 "/api/auth/users",
                 json={"username": username, "password": f"Pw!{uuid.uuid4().hex[:8]}", "role": "user"},

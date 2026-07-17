@@ -16,7 +16,7 @@ class InjectConfig(BaseModel):
 
 
 class RefreshPolicy(BaseModel):
-    pre_refresh_seconds: int = 0
+    pre_refresh_seconds: int = Field(default=0, ge=0)
     retry_once_on_401: bool = False
 
 
@@ -66,7 +66,5 @@ class MCPAuthConfig(BaseModel):
         """Return whether injection needs values stored in an MCP connection."""
         connection_markers = ("${secret.", "${token.", "${access_token}")
         return self.binding_scope != "inline" and any(
-            marker in entry.value_template
-            for entry in self.inject.entries
-            for marker in connection_markers
+            marker in entry.value_template for entry in self.inject.entries for marker in connection_markers
         )

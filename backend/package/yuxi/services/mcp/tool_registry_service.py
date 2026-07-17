@@ -13,12 +13,14 @@ from collections.abc import Callable
 from typing import Any, cast
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain_core.tools import StructuredTool
+from yuxi.services.mcp.manifest_cache import RedisMCPManifestCache
 from yuxi.services.mcp.server_service import _load_enabled_mcp_server_configs, get_enabled_mcp_server_config
 from yuxi.services.mcp_auth.orchestrator import (
     AuthContext,
     mcp_auth_context_var,
     mcp_config_requires_runtime_credentials,
-    resolve_runtime_mcp_config,
+    resolve_runtime_mcp,
 )
 from yuxi.utils import logger
 
@@ -28,6 +30,7 @@ from yuxi.utils import logger
 
 # Per-server locks to prevent concurrent duplicate initialization (Cache Stampede protection)
 _server_locks: dict[str, asyncio.Lock] = {}
+_manifest_cache = RedisMCPManifestCache()
 
 
 def _get_server_lock(server_name: str) -> asyncio.Lock:
@@ -35,6 +38,74 @@ def _get_server_lock(server_name: str) -> asyncio.Lock:
     if server_name not in _server_locks:
         _server_locks[server_name] = asyncio.Lock()
     return _server_locks[server_name]
+
+
+def _serialize_tools_manifest(tools: list[Callable[..., Any]]) -> dict[str, Any]:
+    entries = []
+    for tool in tools:
+        args_schema = getattr(tool, "args_schema", None)
+        if isinstance(args_schema, dict):
+            schema = args_schema
+        elif hasattr(args_schema, "model_json_schema"):
+            schema = args_schema.model_json_schema()
+        elif hasattr(args_schema, "schema"):
+            schema = args_schema.schema()
+        else:
+            schema = {"type": "object", "properties": {}}
+        metadata = dict(getattr(tool, "metadata", None) or {})
+        entries.append(
+            {
+                "name": tool.name,
+                "description": getattr(tool, "description", "") or "",
+                "id": metadata.get("id") or tool.name,
+                "input_schema": schema,
+            }
+        )
+    return {"tools": entries}
+
+
+def _manifest_tools(
+    server_name: str,
+    server_config: dict[str, Any],
+    manifest: dict[str, Any],
+    auth_context: AuthContext | None,
+) -> list[Callable[..., Any]]:
+    tools: list[Callable[..., Any]] = []
+    for entry in manifest.get("tools", []):
+        tool_name = str(entry.get("name") or "")
+
+        async def invoke_manifest_tool(_tool_name=tool_name, **kwargs):
+            runtime = await resolve_runtime_mcp(
+                server_name,
+                server_config,
+                auth_context=auth_context or mcp_auth_context_var.get(),
+            )
+            client_config = {key: value for key, value in runtime.config.items() if key != "disabled_tools"}
+            client = await get_mcp_client({server_name: client_config})
+            if client is None:
+                raise RuntimeError(f'MCP "{server_name}" client initialization failed')
+            upstream_tools = cast(list[Any], await client.get_tools())
+            upstream = next((tool for tool in upstream_tools if tool.name == _tool_name), None)
+            if upstream is None:
+                raise RuntimeError(f'MCP "{server_name}" tool "{_tool_name}" is no longer available')
+            if hasattr(upstream, "ainvoke"):
+                return await upstream.ainvoke(kwargs)
+            coroutine = getattr(upstream, "coroutine", None)
+            if coroutine is not None:
+                return await coroutine(**kwargs)
+            raise RuntimeError(f'MCP "{server_name}" tool "{_tool_name}" is not async callable')
+
+        tool = StructuredTool.from_function(
+            coroutine=invoke_manifest_tool,
+            name=tool_name,
+            description=str(entry.get("description") or tool_name),
+            args_schema=entry.get("input_schema") or {"type": "object", "properties": {}},
+            infer_schema=False,
+            metadata={"id": entry.get("id") or tool_name},
+        )
+        tool.handle_tool_error = True
+        tools.append(tool)
+    return tools
 
 
 # 本地仅缓存工具对象。配置始终以数据库为准，每次按 server_name 现查。
@@ -107,27 +178,39 @@ async def get_mcp_tools(
         logger.warning(f"MCP server '{server_name}' not found in database or disabled")
         return []
 
-    runtime_credentials_required = mcp_config_requires_runtime_credentials(server_config)
-    server_config = await resolve_runtime_mcp_config(
+    source_server_config = server_config
+    effective_auth_context = auth_context or mcp_auth_context_var.get()
+    runtime = await resolve_runtime_mcp(
         server_name,
-        server_config,
-        auth_context=auth_context or mcp_auth_context_var.get(),
+        source_server_config,
+        auth_context=effective_auth_context,
     )
-    effective_cache = cache and not runtime_credentials_required
+    server_config = runtime.config
+    policy = runtime.cache_policy
 
-    # 配置 hash 直接基于完整配置生成。只要数据库中的配置发生变化，
-    # 本地工具缓存 key 就会变化，从而自然触发重建。
-    config_payload = json.dumps(server_config, sort_keys=True, ensure_ascii=True, separators=(",", ":"))
+    config_payload = json.dumps(runtime.cache_identity, sort_keys=True, ensure_ascii=True, separators=(",", ":"))
     config_hash = hashlib.sha256(config_payload.encode("utf-8")).hexdigest()[:16]
-    cache_key = f"{server_name}:{config_hash}"
+    revisions = await _manifest_cache.get_revisions(server_name, policy.partition)
+    cache_key = _manifest_cache.build_cache_key(server_name, policy.partition, revisions, config_hash)
+    cache_prefix = f"{server_name}:{policy.partition}:"
+    effective_tool_cache = cache and policy.cache_tool_objects
 
     all_processed_tools: list[Callable[..., Any]] = []
 
-    # 使用 per-server lock + double-check 模式，仅阻塞同一 server 的并发请求
-    server_lock = _get_server_lock(server_name)
+    server_lock = _get_server_lock(cache_key)
     async with server_lock:
-        if not force_refresh and effective_cache and cache_key in _mcp_tools_cache:
+        if not force_refresh and effective_tool_cache and cache_key in _mcp_tools_cache:
             all_processed_tools = _mcp_tools_cache[cache_key]
+
+        if not all_processed_tools and not force_refresh and cache and policy.cache_manifest:
+            manifest = await _manifest_cache.get_manifest(cache_key)
+            if manifest is not None and not policy.cache_tool_objects:
+                all_processed_tools = _manifest_tools(
+                    server_name,
+                    source_server_config,
+                    manifest,
+                    effective_auth_context,
+                )
 
         if not all_processed_tools:
             try:
@@ -153,14 +236,16 @@ async def get_mcp_tools(
                     tool.handle_tool_error = True
                     all_processed_tools.append(tool)
 
-                if effective_cache:
-                    stale_keys = [
-                        key for key in _mcp_tools_cache if key.startswith(f"{server_name}:") and key != cache_key
-                    ]
+                if effective_tool_cache:
+                    stale_keys = [key for key in _mcp_tools_cache if key.startswith(cache_prefix) and key != cache_key]
                     for stale_key in stale_keys:
                         _mcp_tools_cache.pop(stale_key, None)
                     _mcp_tools_cache[cache_key] = all_processed_tools
 
+                if cache and policy.cache_manifest:
+                    await _manifest_cache.set_manifest(cache_key, _serialize_tools_manifest(all_processed_tools))
+
+                if cache:
                     global_config_disabled = server_config.get("disabled_tools") or []
                     enabled_count = len([t for t in all_processed_tools if t.name not in global_config_disabled])
                     _mcp_tools_stats[server_name] = {
@@ -219,8 +304,38 @@ def clear_mcp_server_tools_cache(server_name: str) -> None:
     for stale_key in stale_keys:
         _mcp_tools_cache.pop(stale_key, None)
     _mcp_tools_stats.pop(server_name, None)
-    _server_locks.pop(server_name, None)
+    stale_locks = [key for key in _server_locks if key.startswith(server_prefix)]
+    for stale_lock in stale_locks:
+        _server_locks.pop(stale_lock, None)
     logger.info(f"Cleared tools cache for MCP server '{server_name}'")
+
+
+async def invalidate_mcp_server_caches(server_name: str) -> None:
+    clear_mcp_server_tools_cache(server_name)
+    await _manifest_cache.bump_server_revision(server_name)
+
+
+async def invalidate_mcp_connection_caches(server_name: str, connection_id: int) -> None:
+    partition = f"connection:{connection_id}"
+    cache_prefix = f"{server_name}:{partition}:"
+    stale_keys = [key for key in _mcp_tools_cache if key.startswith(cache_prefix)]
+    for stale_key in stale_keys:
+        _mcp_tools_cache.pop(stale_key, None)
+    stale_locks = [key for key in _server_locks if key.startswith(cache_prefix)]
+    for stale_lock in stale_locks:
+        _server_locks.pop(stale_lock, None)
+
+    from yuxi.services.mcp_auth.token_service import RedisTokenCache
+
+    try:
+        await RedisTokenCache().delete(connection_id)
+    except Exception as exc:
+        logger.warning(
+            "MCP token cache invalidation failed for connection {}: {}",
+            connection_id,
+            type(exc).__name__,
+        )
+    await _manifest_cache.bump_partition_revision(server_name, partition)
 
 
 def get_mcp_tools_stats(server_name: str) -> dict[str, int] | None:
