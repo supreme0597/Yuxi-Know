@@ -30,7 +30,7 @@ from yuxi.agents.mcp.connection_service import (
     test_mcp_connection,
     update_mcp_connection,
 )
-from yuxi.agents.mcp import (
+from yuxi.agents.mcp.tool_registry_service import (
     get_all_mcp_tools,
     get_mcp_tools_stats,
     toggle_tool_enabled,

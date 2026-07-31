@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from server.routers import router as application_router
 from server.routers.mcp_router import mcp
 from server.utils.auth_middleware import get_admin_user, get_db, get_required_user
 from yuxi.storage.postgres.models_business import User
@@ -53,6 +54,13 @@ def _auth_config(binding_scope: str = "user") -> dict:
             "entries": [{"name": "Authorization", "value_template": "Bearer ${secret.access_token}"}],
         },
     }
+
+
+def test_internal_mcp_proxy_route_is_not_registered():
+    app = FastAPI()
+    app.include_router(application_router, prefix="/api")
+
+    assert all(not route.path.startswith("/api/internal/mcp-proxy") for route in app.routes)
 
 
 def test_update_mcp_server_status(monkeypatch):

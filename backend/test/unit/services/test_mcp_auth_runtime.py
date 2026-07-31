@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 
+import httpx
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -119,20 +120,31 @@ async def test_get_enabled_mcp_tools_does_not_reuse_user_connection_for_other_us
 
     monkeypatch.setattr(tool_registry_service, "get_mcp_tools", fake_get_mcp_tools)
 
+    async def fake_load_connection_required_placeholder_tools(server_name, exc, **kwargs):
+        del exc, kwargs
+        assert server_name == "personal-gateway"
+        return ["connection-required"]
+
+    monkeypatch.setattr(
+        tool_registry_service,
+        "_load_connection_required_placeholder_tools",
+        fake_load_connection_required_placeholder_tools,
+    )
+
     user_1_tools = await tool_registry_service.get_enabled_mcp_tools(
         "personal-gateway",
         auth_context=AuthContext(user_id="user-1"),
         db=runtime_session,
     )
 
-    with pytest.raises(ValueError, match="Active MCP connection not found"):
-        await tool_registry_service.get_enabled_mcp_tools(
-            "personal-gateway",
-            auth_context=AuthContext(user_id="user-2"),
-            db=runtime_session,
-        )
+    user_2_tools = await tool_registry_service.get_enabled_mcp_tools(
+        "personal-gateway",
+        auth_context=AuthContext(user_id="user-2"),
+        db=runtime_session,
+    )
 
     assert user_1_tools == ["private-tool"]
+    assert user_2_tools == ["connection-required"]
     assert len(captured_configs) == 1
     assert captured_configs[0]["headers"]["Authorization"] == "Bearer user-1-token"
 
@@ -225,13 +237,15 @@ async def test_get_all_mcp_tools_uses_runtime_mcp_config_when_auth_context_is_pr
     ]
 
 
-async def test_get_runtime_mcp_server_config_returns_internal_proxy_for_dynamic_http_provider(
-    runtime_session, monkeypatch
-):
-    monkeypatch.setenv("YUXI_INTERNAL_MCP_PROXY_BASE_URL", "http://internal-api:5050")
+async def test_get_runtime_mcp_server_config_resolves_dynamic_http_provider_directly(runtime_session):
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert str(request.url) == "http://gateway.local/auth/token"
+        return httpx.Response(200, json={"access_token": "fresh-token", "expires_in": 3600})
+
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
 
     server = MCPServer(
-        name="finance-proxy",
+        name="finance-direct",
         transport="streamable_http",
         url="http://finance.local/mcp",
         headers={"X-App": "yuxi"},
@@ -261,7 +275,7 @@ async def test_get_runtime_mcp_server_config_returns_internal_proxy_for_dynamic_
     runtime_session.add(
         MCPConnection(
             id=31,
-            server_name="finance-proxy",
+            server_name="finance-direct",
             scope_type="department",
             scope_id="dep-88",
             status="active",
@@ -273,19 +287,19 @@ async def test_get_runtime_mcp_server_config_returns_internal_proxy_for_dynamic_
     await runtime_session.commit()
 
     config = await server_service.get_runtime_mcp_server_config(
-        "finance-proxy",
+        "finance-direct",
         auth_context=AuthContext(user_id="user-1", department_id="dep-88"),
         db=runtime_session,
+        http_client=http_client,
     )
+    await http_client.aclose()
 
     assert config is not None
-    assert config["url"] == "http://internal-api:5050/api/internal/mcp-proxy/finance-proxy"
+    assert config["url"] == "http://finance.local/mcp"
     assert config["headers"]["X-App"] == "yuxi"
-    assert "X-Yuxi-MCP-Proxy-Token" in config["headers"]
-    assert "Authorization" not in config["headers"]
+    assert config["headers"]["Authorization"] == "Bearer fresh-token"
     assert config["__yuxi_cache_partition"] == "connection:31"
     assert config["__yuxi_allow_global_cache"] is False
-    assert config["__yuxi_disable_tool_object_cache"] is True
 
 
 async def test_update_mcp_server_auth_config_clears_runtime_auth_cache(runtime_session, monkeypatch):

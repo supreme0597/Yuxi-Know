@@ -67,7 +67,7 @@ async def _mark_mcp_connection_reauth_required(server_name: str) -> None:
 
         async with pg_manager.get_async_session_context() as session:
             # 查 server 获取 auth_config 以确定 binding_scope
-            server_stmt = select(MCPServer).where(MCPServer.slug == server_name)
+            server_stmt = select(MCPServer).where(MCPServer.name == server_name)
             server_result = await session.execute(server_stmt)
             server = server_result.scalar_one_or_none()
             if server is None or not server.auth_config_json:
@@ -338,7 +338,7 @@ class LongLivedSession:
                 try:
                     await asyncio.wait_for(self._stop_event.wait(), timeout=reconnect_delay)
                     break
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     pass
                 reconnect_delay = min(reconnect_delay * 2, self._RECONNECT_MAX_DELAY)
 
@@ -360,7 +360,7 @@ class LongLivedSession:
             try:
                 await asyncio.wait_for(self._stop_event.wait(), timeout=_SESSION_PING_INTERVAL)
                 return  # stop 请求，正常退出
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
 
             try:
@@ -534,14 +534,25 @@ class MCPClientPool:
             await ll_session.start()
 
             result = (ll_session, config_hash)
+            published = False
             async with self._dict_lock:
-                # 检查 init_future 是否仍为当前 entry，防止并发 remove_session 已将其替换
-                if self._sessions.get(cache_key) is init_future:
+                # 清缓存或移除连接可能已取消/移除本次初始化，不能再发布该 session。
+                if self._sessions.get(cache_key) is init_future and not init_future.done():
                     init_future.set_result(result)
                     self._sessions[cache_key] = result
-                else:
-                    # 并发 remove_session 已移除该 future，仅设置结果让等待者继续
+                    published = True
+                elif not init_future.done():
+                    # 并发 remove_session 已移除该 future，唤醒等待者后由其重新获取。
                     init_future.set_result(result)
+
+                pool_closed = self._closed
+
+            if not published:
+                await ll_session.stop()
+                if pool_closed:
+                    raise RuntimeError("MCPClientPool is shut down")
+                return await self.get_session(server_name, partition_key, runtime_config)
+
             return ll_session.session
 
         except BaseException as exc:
@@ -607,10 +618,9 @@ class MCPClientPool:
         except Exception as exc:
             logger.warning(f"Failed to pre-warm MCP server '{server_name}': {exc}")
 
-    async def shutdown(self):
-        """关闭并回收连接池中的所有连接"""
+    async def clear_sessions(self) -> None:
+        """关闭并清空现有连接，连接池保持可用。"""
         async with self._dict_lock:
-            self._closed = True
             sessions_to_stop = []
             for cache_key, val in list(self._sessions.items()):
                 if isinstance(val, asyncio.Future):
@@ -621,8 +631,14 @@ class MCPClientPool:
             self._sessions.clear()
 
         for cache_key, ll_session in sessions_to_stop:
-            logger.info(f"Stopping MCP session for {cache_key} during shutdown")
+            logger.info(f"Stopping MCP session for {cache_key} during pool cleanup")
             await ll_session.stop()
+
+    async def shutdown(self) -> None:
+        """永久关闭连接池并回收全部连接。"""
+        async with self._dict_lock:
+            self._closed = True
+        await self.clear_sessions()
 
 
 # 全局单例连接池

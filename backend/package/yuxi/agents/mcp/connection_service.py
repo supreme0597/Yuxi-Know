@@ -501,23 +501,23 @@ async def test_mcp_connection(
     auth_context = _auth_context_from_connection(connection)
 
     # 对于 user scope，scope_id 存的是 User.id（数据库主键），
-    # 但 SSO 鉴权需要的 work_id 是 User.uid（登录工号），
+    # 但 SSO 鉴权需要的 work_id 是 User.user_id（登录工号），
     # 必须从 User 表查出真实工号，否则 template 中 ${context.work_id} 会解析为主键值
     if connection.scope_type == "user":
         try:
             user_result = await db.execute(select(User).where(User.id == int(connection.scope_id)))
             user_row = user_result.scalar_one_or_none()
-            if user_row and user_row.uid:
-                auth_context = AuthContext(user_id=connection.scope_id, work_id=str(user_row.uid))
+            if user_row and user_row.user_id:
+                auth_context = AuthContext(user_id=connection.scope_id, work_id=str(user_row.user_id))
         except (ValueError, TypeError):
             pass
 
     from yuxi.agents.mcp.server_service import get_runtime_mcp_server_config
     from yuxi.agents.mcp.tool_registry_service import get_mcp_tools
 
-    config = await get_runtime_mcp_server_config(server.slug, auth_context=auth_context, db=db)
+    config = await get_runtime_mcp_server_config(server.name, auth_context=auth_context, db=db)
     if config is None:
-        raise ValueError(f"MCP server '{server.slug}' runtime config unavailable")
+        raise ValueError(f"MCP server '{server.name}' runtime config unavailable")
 
     # 直连模式下 DynamicMCPTokenAuth 依赖 mcp_auth_context_var 注入鉴权 headers
     from yuxi.agents.mcp.mcp_auth.orchestrator import mcp_auth_context_var
@@ -525,8 +525,8 @@ async def test_mcp_connection(
     _auth_token = mcp_auth_context_var.set(auth_context)
     try:
         tools = await get_mcp_tools(
-            server.slug,
-            additional_servers={server.slug: config},
+            server.name,
+            additional_servers={server.name: config},
             disabled_tools=[],
             cache=False,
             force_refresh=True,

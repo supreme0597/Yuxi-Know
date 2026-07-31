@@ -133,9 +133,9 @@ class MCPConnectionRepository:
                 .where(
                     or_(
                         cast(User.id, String) == MCPConnection.scope_id,
-                        User.uid == MCPConnection.scope_id,
+                        User.user_id == MCPConnection.scope_id,
                     ),
-                    or_(User.username.ilike(like_keyword), User.uid.ilike(like_keyword)),
+                    or_(User.username.ilike(like_keyword), User.user_id.ilike(like_keyword)),
                 )
                 .exists(),
             ),

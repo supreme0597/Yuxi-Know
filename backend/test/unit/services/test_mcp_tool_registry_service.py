@@ -6,7 +6,6 @@ from yuxi.agents.mcp import server_service
 from yuxi.agents.mcp import tool_registry_service
 from yuxi.agents.mcp.client_pool import mcp_client_pool
 from yuxi.agents.mcp.mcp_tool_cache import RedisMcpToolCache
-from yuxi.agents.mcp.mcp_auth.proxy_service import INTERNAL_PROXY_TOKEN_HEADER
 
 
 class _FakeClient:
@@ -190,7 +189,7 @@ async def test_get_mcp_tools_sets_handle_tool_error(monkeypatch):
     await tool_registry_service.clear_mcp_cache()
 
 
-async def test_get_mcp_tools_suppresses_retries_during_failure_cooldown(monkeypatch):
+async def test_get_mcp_tools_retries_connection_errors_without_cooldown(monkeypatch):
     await tool_registry_service.clear_mcp_cache()
 
     config = {"transport": "stdio", "command": "offline-demo", "disabled_tools": []}
@@ -213,7 +212,7 @@ async def test_get_mcp_tools_suppresses_retries_during_failure_cooldown(monkeypa
     assert tools_first == []
     assert tools_second == []
     assert tools_forced == []
-    assert len(build_calls) == 2
+    assert len(build_calls) == 3
 
     await tool_registry_service.clear_mcp_cache()
 
@@ -224,29 +223,26 @@ async def test_get_mcp_tools_keeps_connection_partitions_separate(monkeypatch):
     configs = [
         {
             "transport": "streamable_http",
-            "url": "http://internal-api:5050/api/internal/mcp-proxy/demo",
-            "headers": {
-                INTERNAL_PROXY_TOKEN_HEADER: "proxy-token-user-a",
-            },
+            "url": "http://finance.local/mcp",
+            "headers": {"X-App": "yuxi"},
             "__yuxi_cache_partition": "connection:101",
             "__yuxi_allow_global_cache": False,
         },
         {
             "transport": "streamable_http",
-            "url": "http://internal-api:5050/api/internal/mcp-proxy/demo",
-            "headers": {
-                INTERNAL_PROXY_TOKEN_HEADER: "proxy-token-user-b",
-            },
+            "url": "http://finance.local/mcp",
+            "headers": {"X-App": "yuxi"},
             "__yuxi_cache_partition": "connection:202",
             "__yuxi_allow_global_cache": False,
         },
     ]
-    build_calls: list[str] = []
+    build_count = 0
 
     async def fake_get_mcp_client(server_configs):
-        token = server_configs["demo"]["headers"][INTERNAL_PROXY_TOKEN_HEADER]
-        build_calls.append(token)
-        tool = SimpleNamespace(name=f"tool_for_{token}", metadata={})
+        nonlocal build_count
+        assert server_configs["demo"]["url"] == "http://finance.local/mcp"
+        build_count += 1
+        tool = SimpleNamespace(name=f"tool_for_connection_{build_count}", metadata={})
         return _FakeClient([tool])
 
     monkeypatch.setattr(mcp_client_pool, "_get_mcp_client", fake_get_mcp_client)
@@ -254,61 +250,53 @@ async def test_get_mcp_tools_keeps_connection_partitions_separate(monkeypatch):
     tools_a = await tool_registry_service.get_mcp_tools("demo", additional_servers={"demo": configs[0]})
     tools_b = await tool_registry_service.get_mcp_tools("demo", additional_servers={"demo": configs[1]})
 
-    assert [tool.name for tool in tools_a] == ["tool_for_proxy-token-user-a"]
-    assert [tool.name for tool in tools_b] == ["tool_for_proxy-token-user-b"]
-    assert build_calls == ["proxy-token-user-a", "proxy-token-user-b"]
+    assert [tool.name for tool in tools_a] == ["tool_for_connection_1"]
+    assert [tool.name for tool in tools_b] == ["tool_for_connection_2"]
+    assert build_count == 2
 
     await tool_registry_service.clear_mcp_cache()
 
 
-async def test_get_mcp_tools_does_not_cache_internal_proxy_tool_objects(monkeypatch):
+async def test_get_mcp_tools_caches_dynamic_token_tool_objects(monkeypatch):
     await tool_registry_service.clear_mcp_cache()
 
-    configs = [
-        {
-            "transport": "streamable_http",
-            "url": "http://internal-api:5050/api/internal/mcp-proxy/demo",
-            "headers": {
-                INTERNAL_PROXY_TOKEN_HEADER: "proxy-token-v1",
+    config = {
+        "transport": "streamable_http",
+        "url": "http://finance.local/mcp",
+        "headers": {"X-App": "yuxi"},
+        "auth_config": {
+            "version": 1,
+            "provider": "custom_http_token",
+            "binding_scope": "user",
+            "inject": {
+                "target": "headers",
+                "entries": [{"name": "Authorization", "value_template": "Bearer ${access_token}"}],
             },
-            "__yuxi_cache_partition": "connection:101",
-            "__yuxi_allow_global_cache": False,
-            "__yuxi_disable_tool_object_cache": True,
-        },
-        {
-            "transport": "streamable_http",
-            "url": "http://internal-api:5050/api/internal/mcp-proxy/demo",
-            "headers": {
-                INTERNAL_PROXY_TOKEN_HEADER: "proxy-token-v2",
+            "token_request": {
+                "url": "http://gateway.local/auth/token",
+                "method": "POST",
+                "response_map": {"access_token": "access_token"},
             },
-            "__yuxi_cache_partition": "connection:101",
-            "__yuxi_allow_global_cache": False,
-            "__yuxi_disable_tool_object_cache": True,
         },
-    ]
-    build_calls: list[str] = []
-    tool_load_count = 0
-
-    class RefreshingFakeClient:
-        async def get_tools(self):
-            nonlocal tool_load_count
-            tool_load_count += 1
-            tool = SimpleNamespace(name=f"tool_for_load_{tool_load_count}", metadata={})
-            return [tool]
+        "__yuxi_cache_partition": "connection:101",
+        "__yuxi_allow_global_cache": False,
+    }
+    build_count = 0
 
     async def fake_get_mcp_client(server_configs):
-        token = server_configs["demo"]["headers"][INTERNAL_PROXY_TOKEN_HEADER]
-        build_calls.append(token)
-        return RefreshingFakeClient()
+        nonlocal build_count
+        assert server_configs["demo"]["url"] == "http://finance.local/mcp"
+        build_count += 1
+        return _FakeClient([SimpleNamespace(name="finance_tool", metadata={})])
 
     monkeypatch.setattr(mcp_client_pool, "_get_mcp_client", fake_get_mcp_client)
 
-    tools_first = await tool_registry_service.get_mcp_tools("demo", additional_servers={"demo": configs[0]})
-    tools_second = await tool_registry_service.get_mcp_tools("demo", additional_servers={"demo": configs[1]})
+    tools_first = await tool_registry_service.get_mcp_tools("demo", additional_servers={"demo": config})
+    tools_second = await tool_registry_service.get_mcp_tools("demo", additional_servers={"demo": config})
 
-    assert [tool.name for tool in tools_first] == ["tool_for_load_1"]
-    assert [tool.name for tool in tools_second] == ["tool_for_load_2"]
-    assert build_calls == ["proxy-token-v1"]
+    assert [tool.name for tool in tools_first] == ["finance_tool"]
+    assert tools_second is tools_first
+    assert build_count == 1
 
     await tool_registry_service.clear_mcp_cache()
 

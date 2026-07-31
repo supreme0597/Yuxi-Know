@@ -14,13 +14,13 @@ class MCPServerRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_by_slug(self, slug: str) -> MCPServer | None:
-        result = await self.db.execute(select(MCPServer).filter(MCPServer.slug == slug))
+    async def get_by_name(self, name: str) -> MCPServer | None:
+        result = await self.db.execute(select(MCPServer).filter(MCPServer.name == name))
         return result.scalar_one_or_none()
 
-    async def get_enabled_by_slug(self, slug: str) -> MCPServer | None:
+    async def get_enabled_by_name(self, name: str) -> MCPServer | None:
         result = await self.db.execute(
-            select(MCPServer).where(MCPServer.enabled == 1, MCPServer.slug == slug)
+            select(MCPServer).where(MCPServer.enabled == 1, MCPServer.name == name)
         )
         return result.scalar_one_or_none()
 
@@ -28,19 +28,19 @@ class MCPServerRepository:
         result = await self.db.execute(select(MCPServer))
         return list(result.scalars().all())
 
-    async def list_enabled(self, slugs: list[str] | None = None) -> list[MCPServer]:
+    async def list_enabled(self, names: list[str] | None = None) -> list[MCPServer]:
         stmt = select(MCPServer).where(MCPServer.enabled == 1)
-        if slugs:
-            stmt = stmt.where(MCPServer.slug.in_(slugs))
+        if names:
+            stmt = stmt.where(MCPServer.name.in_(names))
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
     async def count(self) -> int:
-        result = await self.db.execute(select(func.count(MCPServer.slug)))
+        result = await self.db.execute(select(func.count(MCPServer.name)))
         return int(result.scalar() or 0)
 
-    async def exists_by_slug(self, slug: str) -> bool:
-        result = await self.db.execute(select(MCPServer.id).where(MCPServer.slug == slug))
+    async def exists_by_name(self, name: str) -> bool:
+        result = await self.db.execute(select(MCPServer.name).where(MCPServer.name == name))
         return result.scalar_one_or_none() is not None
 
     async def add(self, server: MCPServer) -> MCPServer:

@@ -403,7 +403,7 @@ async def get_tools_from_all_servers(server_names: list[str] | None = None) -> l
         if not names:
             return []
 
-    server_configs = await _load_enabled_mcp_server_configs(slugs=names)
+    server_configs = await _load_enabled_mcp_server_configs(names=names)
 
     preload_items = [
         (name, config)
@@ -435,7 +435,7 @@ async def clear_mcp_cache() -> None:
     try:
         from yuxi.agents.mcp.client_pool import clear_resolved_headers_cache, mcp_client_pool
 
-        await mcp_client_pool.shutdown()
+        await mcp_client_pool.clear_sessions()
         clear_resolved_headers_cache()
     except Exception:
         pass
@@ -803,7 +803,7 @@ async def toggle_tool_enabled(
     from yuxi.agents.mcp.server_repository import MCPServerRepository
 
     repo = MCPServerRepository(db)
-    server = await repo.get_by_slug(server_name)
+    server = await repo.get_by_name(server_name)
     if not server:
         raise ValueError(f"Server '{server_name}' does not exist")
 
