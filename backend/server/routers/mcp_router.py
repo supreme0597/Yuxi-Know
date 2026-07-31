@@ -6,9 +6,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from yuxi.services.mcp_auth.orchestrator import AuthContext
-from yuxi.services.mcp_auth.config_models import MCPAuthConfig
-from yuxi.services.mcp.server_service import (
+from yuxi.agents.mcp.mcp_auth.orchestrator import AuthContext
+from yuxi.agents.mcp.mcp_auth.config_models import MCPAuthConfig
+from yuxi.agents.mcp.server_service import (
     create_mcp_server,
     delete_mcp_server,
     get_all_mcp_servers,
@@ -17,7 +17,7 @@ from yuxi.services.mcp.server_service import (
     set_server_enabled,
     update_mcp_server,
 )
-from yuxi.services.mcp.connection_service import (
+from yuxi.agents.mcp.connection_service import (
     count_mcp_connections,
     create_mcp_connection,
     delete_mcp_connection,
@@ -30,7 +30,7 @@ from yuxi.services.mcp.connection_service import (
     test_mcp_connection,
     update_mcp_connection,
 )
-from yuxi.services.mcp.tool_registry_service import (
+from yuxi.agents.mcp import (
     get_all_mcp_tools,
     get_mcp_tools_stats,
     toggle_tool_enabled,

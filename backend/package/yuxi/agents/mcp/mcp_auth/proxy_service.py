@@ -9,8 +9,8 @@ from fastapi import HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from yuxi.services.mcp_auth.config_models import MCPAuthConfig
-from yuxi.services.mcp_auth.orchestrator import AuthContext, resolve_runtime_mcp_config
+from yuxi.agents.mcp.mcp_auth.config_models import MCPAuthConfig
+from yuxi.agents.mcp.mcp_auth.orchestrator import AuthContext, resolve_runtime_mcp_config
 from yuxi.storage.postgres.models_business import MCPConnection, MCPServer
 
 from server.utils.auth_utils import AuthUtils
@@ -163,7 +163,7 @@ async def handle_mcp_proxy_request(
     db: AsyncSession,
 ) -> Response:
     """内部网关主入口：鉴权解析、查库拦截与流式代理"""
-    from yuxi.services.mcp.server_service import get_mcp_server
+    from yuxi.agents.mcp.server_service import get_mcp_server
 
     try:
         auth_context = decode_proxy_access_token(internal_token, server_name=server_name)
@@ -178,7 +178,7 @@ async def handle_mcp_proxy_request(
 
     auth_config = MCPAuthConfig.model_validate(server.auth_config_json or {})
 
-    from yuxi.services.mcp.connection_service import _resolve_scope_id, requires_bound_mcp_connection
+    from yuxi.agents.mcp.connection_service import _resolve_scope_id, requires_bound_mcp_connection
 
     scope_id = _resolve_scope_id(auth_config.binding_scope, auth_context)
     connection = None
@@ -242,7 +242,7 @@ async def _proxy_mcp_request_stream(
     if _token_cache is not None:
         token_cache = _token_cache
     else:
-        from yuxi.services.mcp_auth.redis_token_cache import RedisTokenCache
+        from yuxi.agents.mcp.mcp_auth.redis_token_cache import RedisTokenCache
 
         token_cache = RedisTokenCache()
 
@@ -307,7 +307,7 @@ async def _proxy_mcp_request_stream(
         await response.aclose()
         if attempt + 1 >= max_attempts:
             break
-        from yuxi.services.mcp.client_pool import clear_server_resolved_headers_cache
+        from yuxi.agents.mcp.client_pool import clear_server_resolved_headers_cache
 
         clear_server_resolved_headers_cache(server.name)
         if connection is not None and getattr(connection, "id", None) is not None:

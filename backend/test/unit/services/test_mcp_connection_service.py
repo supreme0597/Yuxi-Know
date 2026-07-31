@@ -8,8 +8,9 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
-from yuxi.services.mcp import connection_service, server_service, tool_registry_service
-from yuxi.services.mcp_auth.crypto import decrypt_credential_blob
+from yuxi.agents.mcp import connection_service, server_service
+from yuxi.agents.mcp import tool_registry_service
+from yuxi.agents.mcp.mcp_auth import decrypt_credential_blob
 from yuxi.storage.postgres.models_business import AgentConfig, Department, MCPConnection, MCPServer, Skill, User
 
 

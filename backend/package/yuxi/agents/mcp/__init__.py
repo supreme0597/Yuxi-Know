@@ -1,17 +1,17 @@
 from __future__ import annotations
 
-from yuxi.services.mcp.cache_policy import (
+from yuxi.agents.mcp.cache_policy import (
     CachePolicyFactory,
     DynamicProxyCachePolicy,
     MCPCachePolicy,
     StaticCachePolicy,
     TokenInjectedCachePolicy,
 )
-from yuxi.services.mcp.client_pool import (
+from yuxi.agents.mcp.client_pool import (
     MCPClientPool,
     mcp_client_pool,
 )
-from yuxi.services.mcp.connection_service import (
+from yuxi.agents.mcp.connection_service import (
     create_mcp_connection,
     delete_mcp_connection,
     get_mcp_connection,
@@ -21,7 +21,7 @@ from yuxi.services.mcp.connection_service import (
     test_mcp_connection,
     update_mcp_connection,
 )
-from yuxi.services.mcp.server_service import (
+from yuxi.agents.mcp.server_service import (
     create_mcp_server,
     delete_mcp_server,
     ensure_builtin_mcp_servers_in_db,
@@ -35,7 +35,7 @@ from yuxi.services.mcp.server_service import (
     set_server_enabled,
     update_mcp_server,
 )
-from yuxi.services.mcp.tool_registry_service import (
+from yuxi.agents.mcp.tool_registry_service import (
     clear_mcp_cache,
     clear_mcp_connection_tools_cache,
     clear_mcp_server_tools_cache,

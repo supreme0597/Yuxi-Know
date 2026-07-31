@@ -8,9 +8,9 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
-from yuxi.services.mcp_auth.config_models import MCPAuthConfig
-from yuxi.services.mcp_auth.crypto import decrypt_credential_blob
-from yuxi.services.mcp_auth.template_resolver import resolve_template_value
+from yuxi.agents.mcp.mcp_auth.config_models import MCPAuthConfig
+from yuxi.agents.mcp.mcp_auth.crypto import decrypt_credential_blob
+from yuxi.agents.mcp.mcp_auth.template_resolver import resolve_template_value
 from yuxi.storage.postgres.models_business import MCPConnection, MCPServer
 from yuxi.utils import logger
 
@@ -246,7 +246,7 @@ async def _request_dynamic_token_values(
     token_cache: Any | None,
     token_values: dict[str, Any],
 ) -> dict[str, Any]:
-    from yuxi.services.mcp_auth.fetchers.factory import TokenFetcherFactory
+    from yuxi.agents.mcp.mcp_auth.fetchers.factory import TokenFetcherFactory
 
     fetcher = TokenFetcherFactory.get_fetcher(auth_config.provider)
     resolved = await fetcher.fetch_token(
@@ -281,7 +281,7 @@ async def _resolve_dynamic_token_values(
     token_cache: Any | None,
 ) -> dict[str, Any]:
     if token_cache is None and connection is not None:
-        from yuxi.services.mcp_auth.redis_token_cache import RedisTokenCache
+        from yuxi.agents.mcp.mcp_auth.redis_token_cache import RedisTokenCache
 
         token_cache = RedisTokenCache()
 

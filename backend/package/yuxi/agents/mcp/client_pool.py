@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 import httpx
 from langchain_mcp_adapters.client import MultiServerMCPClient
-from yuxi.services.mcp_auth.orchestrator import mcp_auth_context_var
+from yuxi.agents.mcp.mcp_auth.orchestrator import mcp_auth_context_var
 
 if TYPE_CHECKING:
     from mcp import ClientSession
@@ -53,7 +53,7 @@ class DynamicMCPTokenAuth(httpx.Auth):
                     yield request
                     return
 
-                from yuxi.services.mcp_auth.proxy_service import INTERNAL_PROXY_TOKEN_HEADER, create_proxy_access_token
+                from yuxi.agents.mcp.mcp_auth.proxy_service import INTERNAL_PROXY_TOKEN_HEADER, create_proxy_access_token
 
                 if INTERNAL_PROXY_TOKEN_HEADER.lower() in request.headers:
                     # NOTE: 代理模式下，直接在本地生成新的代理 JWT，跳过 DB 事务
@@ -67,7 +67,7 @@ class DynamicMCPTokenAuth(httpx.Auth):
                 from yuxi.storage.postgres.manager import pg_manager
 
                 async with pg_manager.get_async_session_context() as session:
-                    from yuxi.services.mcp.server_service import get_runtime_mcp_server_config
+                    from yuxi.agents.mcp.server_service import get_runtime_mcp_server_config
 
                     # NOTE: 读取当前上下文对应的最新运行时配置（含 Token 自动刷新逻辑）
                     runtime_config = await get_runtime_mcp_server_config(
@@ -168,7 +168,7 @@ class MCPClientPool:
             }
         }
         # 剔除 header 中可能随时变化的 token，以便准确比对静态配置
-        from yuxi.services.mcp_auth.proxy_service import INTERNAL_PROXY_TOKEN_HEADER
+        from yuxi.agents.mcp.mcp_auth.proxy_service import INTERNAL_PROXY_TOKEN_HEADER
 
         transient_header_names = {"authorization", INTERNAL_PROXY_TOKEN_HEADER.lower()}
         headers = dict(clean_config.get("headers") or {})

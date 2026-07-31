@@ -7,7 +7,7 @@ from pydantic import ValidationError
 
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
-from yuxi.services.mcp_auth.config_models import MCPAuthConfig
+from yuxi.agents.mcp.mcp_auth.config_models import MCPAuthConfig
 
 
 def test_mcp_auth_config_applies_legacy_static_defaults():

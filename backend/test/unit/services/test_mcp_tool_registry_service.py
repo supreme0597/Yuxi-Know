@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from yuxi.services.mcp import server_service, tool_registry_service
-from yuxi.services.mcp.client_pool import mcp_client_pool
-from yuxi.services.mcp_tool_cache import RedisMcpToolCache
-from yuxi.services.mcp_auth.proxy_service import INTERNAL_PROXY_TOKEN_HEADER
+from yuxi.agents.mcp import server_service
+from yuxi.agents.mcp import tool_registry_service
+from yuxi.agents.mcp.client_pool import mcp_client_pool
+from yuxi.agents.mcp.mcp_tool_cache import RedisMcpToolCache
+from yuxi.agents.mcp.mcp_auth.proxy_service import INTERNAL_PROXY_TOKEN_HEADER
 
 
 class _FakeClient:
@@ -366,8 +367,8 @@ async def test_get_mcp_tools_rebuilds_when_redis_server_revision_changes(monkeyp
         return fake_redis
 
     monkeypatch.setattr(tool_registry_service, "_mcp_tool_cache_store",
-        RedisMcpToolCache(redis_client_factory=fake_redis_factory),
-    )
+                        RedisMcpToolCache(redis_client_factory=fake_redis_factory),
+                        )
 
     config = {"transport": "stdio", "command": "demo-tool", "disabled_tools": []}
     build_calls: list[str] = []
@@ -401,8 +402,8 @@ async def test_get_all_mcp_tools_uses_redis_manifest_when_local_cache_is_empty(m
         return fake_redis
 
     monkeypatch.setattr(tool_registry_service, "_mcp_tool_cache_store",
-        RedisMcpToolCache(redis_client_factory=fake_redis_factory),
-    )
+                        RedisMcpToolCache(redis_client_factory=fake_redis_factory),
+                        )
 
     config = {"transport": "stdio", "command": "demo-tool", "disabled_tools": []}
 

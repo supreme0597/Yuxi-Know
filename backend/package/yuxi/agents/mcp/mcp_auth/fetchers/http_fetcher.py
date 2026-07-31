@@ -3,8 +3,8 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
-from yuxi.services.mcp_auth.config_models import MCPAuthConfig
-from yuxi.services.mcp_auth.fetchers.base import BaseTokenFetcher, fetch_custom_http_token
+from yuxi.agents.mcp.mcp_auth.config_models import MCPAuthConfig
+from yuxi.agents.mcp.mcp_auth.fetchers.base import BaseTokenFetcher, fetch_custom_http_token
 
 
 class CustomHttpTokenFetcher(BaseTokenFetcher):

@@ -6,7 +6,7 @@ import pytest
 
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
-from yuxi.services.mcp_auth.template_resolver import TemplateResolutionError, resolve_template_value
+from yuxi.agents.mcp.mcp_auth.template_resolver import TemplateResolutionError, resolve_template_value
 
 
 def test_resolve_template_value_supports_nested_structures():

@@ -9,8 +9,8 @@ import pytest
 
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
-from yuxi.services.mcp_auth.crypto import encrypt_credential_blob
-from yuxi.services.mcp_auth.orchestrator import AuthContext, resolve_runtime_mcp_config
+from yuxi.agents.mcp.mcp_auth import encrypt_credential_blob
+from yuxi.agents.mcp.mcp_auth.orchestrator import AuthContext, resolve_runtime_mcp_config
 from yuxi.storage.postgres.models_business import MCPConnection, MCPServer
 
 
@@ -673,7 +673,7 @@ async def test_resolve_runtime_mcp_config_refreshes_authorization_code_token():
 
 async def test_normalize_token_payload_naive_datetime():
     """测试 _normalize_token_payload 对 naive datetime 默认填充 UTC 时区"""
-    from yuxi.services.mcp_auth.orchestrator import _normalize_token_payload
+    from yuxi.agents.mcp.mcp_auth.orchestrator import _normalize_token_payload
     from datetime import datetime, UTC
     
     # 构造 naive datetime (无 tzinfo)
@@ -688,7 +688,7 @@ async def test_normalize_token_payload_naive_datetime():
 
 async def test_normalize_token_payload_aware_datetime():
     """测试 _normalize_token_payload 对于带时区的 datetime 维持原时区对应 UTC 时间"""
-    from yuxi.services.mcp_auth.orchestrator import _normalize_token_payload
+    from yuxi.agents.mcp.mcp_auth.orchestrator import _normalize_token_payload
     from datetime import datetime, timezone, timedelta
     
     # 构造带时区的 datetime (比如东八区)

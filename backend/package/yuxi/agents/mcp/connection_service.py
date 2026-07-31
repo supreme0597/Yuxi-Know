@@ -6,9 +6,9 @@ from typing import Any
 
 from sqlalchemy import String, and_, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from yuxi.services.mcp_auth.config_models import MCPAuthConfig
-from yuxi.services.mcp_auth.crypto import encrypt_credential_blob
-from yuxi.services.mcp_auth.orchestrator import AuthContext
+from yuxi.agents.mcp.mcp_auth.config_models import MCPAuthConfig
+from yuxi.agents.mcp.mcp_auth.crypto import encrypt_credential_blob
+from yuxi.agents.mcp.mcp_auth.orchestrator import AuthContext
 from yuxi.storage.postgres.models_business import Department, MCPConnection, User
 
 logger = logging.getLogger("yuxi.mcp.connection_service")
@@ -320,7 +320,7 @@ async def create_mcp_connection(
     created_by: str | None = None,
 ) -> MCPConnection:
     """创建 MCP 绑定连接"""
-    from yuxi.services.mcp.server_service import get_mcp_server
+    from yuxi.agents.mcp.server_service import get_mcp_server
 
     server = await get_mcp_server(db, server_name)
     if server is None:
@@ -391,7 +391,7 @@ async def update_mcp_connection(
     if status is not None:
         normalized_status = _normalize_mcp_connection_status(status)
         if normalized_status == "active":
-            from yuxi.services.mcp.server_service import get_mcp_server
+            from yuxi.agents.mcp.server_service import get_mcp_server
 
             server = await get_mcp_server(db, connection.server_name)
             if server is None:
@@ -405,7 +405,7 @@ async def update_mcp_connection(
     await db.commit()
     await db.refresh(connection)
 
-    from yuxi.services.mcp.tool_registry_service import (
+    from yuxi.agents.mcp.tool_registry_service import (
         _clear_mcp_connection_runtime_auth_cache,
         _invalidate_mcp_tools_cache_for_connection,
     )
@@ -427,7 +427,7 @@ async def delete_mcp_connection(db: AsyncSession, connection_id: int) -> bool:
     await db.delete(connection)
     await db.commit()
 
-    from yuxi.services.mcp.tool_registry_service import (
+    from yuxi.agents.mcp.tool_registry_service import (
         _clear_mcp_connection_runtime_auth_cache,
         invalidate_mcp_connection_tools_cache,
         invalidate_mcp_server_tools_cache,
@@ -455,7 +455,7 @@ async def set_mcp_connection_status(
 
     normalized_status = _normalize_mcp_connection_status(status)
     if normalized_status == "active":
-        from yuxi.services.mcp.server_service import get_mcp_server
+        from yuxi.agents.mcp.server_service import get_mcp_server
 
         server = await get_mcp_server(db, connection.server_name)
         if server is None:
@@ -468,7 +468,7 @@ async def set_mcp_connection_status(
     await db.commit()
     await db.refresh(connection)
 
-    from yuxi.services.mcp.tool_registry_service import (
+    from yuxi.agents.mcp.tool_registry_service import (
         _clear_mcp_connection_runtime_auth_cache,
         _invalidate_mcp_tools_cache_for_connection,
     )
@@ -489,14 +489,14 @@ async def reauthorize_mcp_connection(
     if connection is None:
         raise ValueError(f"MCP connection '{connection_id}' does not exist")
 
-    from yuxi.services.mcp.server_service import get_mcp_server
+    from yuxi.agents.mcp.server_service import get_mcp_server
 
     server = await get_mcp_server(db, connection.server_name)
     if server is None:
         raise ValueError(f"Server '{connection.server_name}' does not exist")
     _ensure_connection_scope_matches_server(server, connection.scope_type)
 
-    from yuxi.services.mcp_auth.redis_token_cache import RedisTokenCache
+    from yuxi.agents.mcp.mcp_auth.redis_token_cache import RedisTokenCache
 
     cache = RedisTokenCache()
     if getattr(connection, "id", None) is not None:
@@ -509,7 +509,7 @@ async def reauthorize_mcp_connection(
         except Exception as exc:
             logger.warning(f"Failed to clear MCP refresh lock for connection {connection.id}: {exc}")
 
-    from yuxi.services.mcp.tool_registry_service import _invalidate_mcp_tools_cache_for_connection
+    from yuxi.agents.mcp.tool_registry_service import _invalidate_mcp_tools_cache_for_connection
 
     await _invalidate_mcp_tools_cache_for_connection(connection)
 
@@ -535,7 +535,7 @@ async def test_mcp_connection(
     if connection is None:
         raise ValueError(f"MCP connection '{connection_id}' does not exist")
 
-    from yuxi.services.mcp.server_service import get_mcp_server
+    from yuxi.agents.mcp.server_service import get_mcp_server
 
     server = await get_mcp_server(db, connection.server_name)
     if server is None:
@@ -543,8 +543,8 @@ async def test_mcp_connection(
     _ensure_connection_scope_matches_server(server, connection.scope_type)
 
     auth_context = _auth_context_from_connection(connection)
-    from yuxi.services.mcp.server_service import get_runtime_mcp_server_config
-    from yuxi.services.mcp.tool_registry_service import get_mcp_tools
+    from yuxi.agents.mcp.server_service import get_runtime_mcp_server_config
+    from yuxi.agents.mcp.tool_registry_service import get_mcp_tools
 
     config = await get_runtime_mcp_server_config(server.name, auth_context=auth_context, db=db)
     if config is None:

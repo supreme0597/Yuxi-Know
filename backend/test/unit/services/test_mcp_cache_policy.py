@@ -2,13 +2,13 @@ from __future__ import annotations
 import pytest
 from unittest.mock import MagicMock
 
-from yuxi.services.mcp.cache_policy import (
+from yuxi.agents.mcp.cache_policy import (
     CachePolicyFactory,
     StaticCachePolicy,
     TokenInjectedCachePolicy,
     DynamicProxyCachePolicy,
 )
-from yuxi.services.mcp_auth.orchestrator import AuthContext
+from yuxi.agents.mcp.mcp_auth.orchestrator import AuthContext
 from yuxi.storage.postgres.models_business import MCPConnection
 
 

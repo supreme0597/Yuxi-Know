@@ -4,8 +4,8 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 import httpx
-from yuxi.services.mcp_auth.config_models import MCPAuthConfig
-from yuxi.services.mcp_auth.template_resolver import resolve_template_value
+from yuxi.agents.mcp.mcp_auth.config_models import MCPAuthConfig
+from yuxi.agents.mcp.mcp_auth.template_resolver import resolve_template_value
 
 # 注释必须使用简体中文，符合 RULE[user_global]
 # NOTE: 所有获取 Token 的具体策略需要继承 ITokenFetcher 并实现 fetch_token 方法。
@@ -41,7 +41,7 @@ async def fetch_custom_http_token(
     http_client: httpx.AsyncClient | None,
 ) -> dict[str, Any]:
     """执行自定义 HTTP 请求获取 Token"""
-    from yuxi.services.mcp_auth.orchestrator import _normalize_token_payload
+    from yuxi.agents.mcp.mcp_auth.orchestrator import _normalize_token_payload
 
     response_map = response_map or dict(_DEFAULT_TOKEN_RESPONSE_MAP)
     if http_client is None:

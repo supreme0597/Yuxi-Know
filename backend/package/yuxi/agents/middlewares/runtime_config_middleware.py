@@ -9,8 +9,8 @@ from langchain_core.messages import SystemMessage
 
 from yuxi.agents import load_chat_model
 from yuxi.agents.toolkits import get_all_tool_instances
-from yuxi.services.mcp.tool_registry_service import get_enabled_mcp_tools
-from yuxi.services.mcp_auth.orchestrator import AuthContext
+from yuxi.agents.mcp import get_enabled_mcp_tools
+from yuxi.agents.mcp.mcp_auth.orchestrator import AuthContext
 from yuxi.utils.datetime_utils import shanghai_now
 from yuxi.utils.logging_config import logger
 
@@ -142,7 +142,7 @@ class RuntimeConfigMiddleware(AgentMiddleware):
             dept_id = getattr(runtime_context, "department_id", None)
             auth_context = AuthContext(user_id=user_id, department_id=dept_id, work_id=work_id)
 
-            from yuxi.services.mcp_auth.orchestrator import mcp_auth_context_var
+            from yuxi.agents.mcp.mcp_auth.orchestrator import mcp_auth_context_var
 
             token = mcp_auth_context_var.set(auth_context)
             try:

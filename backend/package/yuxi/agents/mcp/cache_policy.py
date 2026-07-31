@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from yuxi.services.mcp_auth.orchestrator import AuthContext
+    from yuxi.agents.mcp.mcp_auth.orchestrator import AuthContext
     from yuxi.storage.postgres.models_business import MCPConnection
 
 

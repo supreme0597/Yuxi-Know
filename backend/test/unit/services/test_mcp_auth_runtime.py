@@ -9,10 +9,9 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
-from yuxi.services.mcp import connection_service, server_service, tool_registry_service
-from yuxi.services.mcp.client_pool import mcp_client_pool
-from yuxi.services.mcp_auth.redis_token_cache import RedisTokenCache
-from yuxi.services.mcp_auth.orchestrator import AuthContext
+from yuxi.agents.mcp import server_service
+from yuxi.agents.mcp import tool_registry_service
+from yuxi.agents.mcp.mcp_auth.orchestrator import AuthContext
 from yuxi.storage.postgres.models_business import MCPConnection, MCPServer
 
 

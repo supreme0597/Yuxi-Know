@@ -13,7 +13,7 @@ from yuxi.agents.middlewares import (
 )
 from yuxi.agents.middlewares.knowledge_base_middleware import KnowledgeBaseMiddleware
 from yuxi.agents.middlewares.skills_middleware import SkillsMiddleware, collect_context_mcp_names_for_preload
-from yuxi.services.mcp.tool_registry_service import get_tools_from_all_servers
+from yuxi.agents.mcp import get_tools_from_all_servers
 from yuxi.services.subagent_service import get_subagents_from_names
 from yuxi.utils.logging_config import logger
 

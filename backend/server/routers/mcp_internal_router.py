@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Header, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.utils.auth_middleware import get_db
-from yuxi.services.mcp_auth.proxy_service import (
+from yuxi.agents.mcp.mcp_auth.proxy_service import (
     INTERNAL_PROXY_TOKEN_HEADER,
     handle_mcp_proxy_request,
 )

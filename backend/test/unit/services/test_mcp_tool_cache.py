@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from yuxi.services.mcp_tool_cache import RedisMcpToolCache
+from yuxi.agents.mcp.mcp_tool_cache import RedisMcpToolCache
 
 
 class _FakeRedis:

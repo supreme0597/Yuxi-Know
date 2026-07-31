@@ -3,7 +3,7 @@ import asyncio
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from yuxi.services.mcp.client_pool import MCPClientPool, LongLivedSession
+from yuxi.agents.mcp.client_pool import MCPClientPool, LongLivedSession
 
 
 @pytest.mark.asyncio
@@ -120,7 +120,7 @@ async def test_calculate_config_hash_with_non_serializable():
 
 def test_calculate_config_hash_ignores_internal_proxy_token_header():
     """代理模式下短期 JWT 变化不应触发长连接重建"""
-    from yuxi.services.mcp_auth.proxy_service import INTERNAL_PROXY_TOKEN_HEADER
+    from yuxi.agents.mcp.mcp_auth.proxy_service import INTERNAL_PROXY_TOKEN_HEADER
 
     pool = MCPClientPool()
     config_a = {
@@ -148,13 +148,13 @@ def test_calculate_config_hash_ignores_internal_proxy_token_header():
 @pytest.mark.asyncio
 async def test_dynamic_mcp_token_auth_cache():
     """测试 DynamicMCPTokenAuth 的 in-memory 缓存及联动清除逻辑"""
-    from yuxi.services.mcp.client_pool import (
+    from yuxi.agents.mcp.client_pool import (
         DynamicMCPTokenAuth,
         clear_resolved_headers_cache,
         clear_server_resolved_headers_cache,
         _resolved_headers_cache,
     )
-    from yuxi.services.mcp_auth.orchestrator import mcp_auth_context_var, AuthContext
+    from yuxi.agents.mcp.mcp_auth.orchestrator import mcp_auth_context_var, AuthContext
     
     # 清空可能存在的全局缓存
     clear_resolved_headers_cache()
@@ -205,7 +205,7 @@ async def test_dynamic_mcp_token_auth_cache():
             assert len(results_3) == 1
             assert mock_get_config.call_count == 2
             # 4. 测试 clear_mcp_cache / clear_mcp_server_tools_cache 联动清除所有 resolved_headers 缓存
-            from yuxi.services.mcp.tool_registry_service import clear_mcp_cache, invalidate_mcp_server_tools_cache
+            from yuxi.agents.mcp import clear_mcp_cache, invalidate_mcp_server_tools_cache
             # 确保当前有缓存项
             _resolved_headers_cache[cache_key] = {"Auth": "Bearer test"}
             await invalidate_mcp_server_tools_cache("test_server")

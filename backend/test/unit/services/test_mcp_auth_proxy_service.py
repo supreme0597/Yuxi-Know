@@ -8,10 +8,10 @@ import httpx
 import pytest
 from fastapi import Response
 from starlette.requests import Request
-from yuxi.services.mcp import server_service
-from yuxi.services.mcp_auth import proxy_service
-from yuxi.services.mcp_auth.orchestrator import AuthContext
-from yuxi.services.mcp_auth.proxy_service import (
+from yuxi.agents.mcp import server_service
+from yuxi.agents.mcp.mcp_auth import proxy_service
+from yuxi.agents.mcp.mcp_auth.orchestrator import AuthContext
+from yuxi.agents.mcp.mcp_auth.proxy_service import (
     _proxy_mcp_request_stream,
     create_proxy_access_token,
     handle_mcp_proxy_request,
@@ -64,7 +64,7 @@ class DummyTokenCache:
 
 async def test_proxy_mcp_request_retries_once_after_401_with_refreshed_token():
     observed_authorizations: list[str | None] = []
-    from yuxi.services.mcp.client_pool import clear_resolved_headers_cache, _resolved_headers_cache
+    from yuxi.agents.mcp.client_pool import clear_resolved_headers_cache, _resolved_headers_cache
 
     clear_resolved_headers_cache()
     _resolved_headers_cache[("proxy-retry", "user-1", "dep-1")] = {"Authorization": "Bearer stale-token"}

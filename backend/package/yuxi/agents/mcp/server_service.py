@@ -8,9 +8,9 @@ from typing import Any
 import httpx
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from yuxi.services.mcp_auth.config_models import MCPAuthConfig
-from yuxi.services.mcp_auth.orchestrator import AuthContext, resolve_runtime_mcp_config
-from yuxi.services.mcp_auth.proxy_service import (
+from yuxi.agents.mcp.mcp_auth.config_models import MCPAuthConfig
+from yuxi.agents.mcp.mcp_auth.orchestrator import AuthContext, resolve_runtime_mcp_config
+from yuxi.agents.mcp.mcp_auth.proxy_service import (
     build_proxy_runtime_config,
     should_use_internal_proxy,
 )
@@ -177,7 +177,7 @@ def _apply_runtime_tool_cache_policy(
     connection: MCPConnection | None,
 ) -> dict[str, Any]:
     """利用 CachePolicy 模式获取缓存 key 的隔离区划并应用"""
-    from yuxi.services.mcp.cache_policy import CachePolicyFactory
+    from yuxi.agents.mcp.cache_policy import CachePolicyFactory
 
     policy = CachePolicyFactory.get_policy(auth_config.provider)
     partition, is_shared = policy.resolve_cache_partition(
@@ -208,7 +208,7 @@ async def get_runtime_mcp_server_config(
             return server.to_mcp_config()
 
         auth_config = MCPAuthConfig.model_validate(server.auth_config_json)
-        from yuxi.services.mcp.connection_service import _resolve_scope_id, requires_bound_mcp_connection
+        from yuxi.agents.mcp.connection_service import _resolve_scope_id, requires_bound_mcp_connection
 
         scope_id = _resolve_scope_id(auth_config.binding_scope, auth_context)
         if scope_id is None:
@@ -324,7 +324,7 @@ async def create_mcp_server(
     await db.commit()
     await db.refresh(server)
 
-    from yuxi.services.mcp.tool_registry_service import (
+    from yuxi.agents.mcp.tool_registry_service import (
         _clear_mcp_server_runtime_auth_cache,
         invalidate_mcp_server_tools_cache,
     )
@@ -388,7 +388,7 @@ async def update_mcp_server(
     await db.commit()
     await db.refresh(server)
 
-    from yuxi.services.mcp.tool_registry_service import (
+    from yuxi.agents.mcp.tool_registry_service import (
         _clear_mcp_server_runtime_auth_cache,
         invalidate_mcp_server_tools_cache,
     )
@@ -407,7 +407,7 @@ async def delete_mcp_server(db: AsyncSession, name: str) -> bool:
     if not server:
         return False
 
-    from yuxi.services.mcp.tool_registry_service import (
+    from yuxi.agents.mcp.tool_registry_service import (
         _clear_mcp_server_runtime_auth_cache,
         invalidate_mcp_server_tools_cache,
     )
@@ -426,7 +426,7 @@ async def delete_mcp_server(db: AsyncSession, name: str) -> bool:
 
 async def get_mcp_server_dependency_summary(db: AsyncSession, name: str) -> dict[str, Any]:
     """获取依赖于该 MCP 服务器的智能体、技能和连接概要"""
-    from yuxi.services.mcp.connection_service import list_mcp_connections
+    from yuxi.agents.mcp.connection_service import list_mcp_connections
 
     connections = await list_mcp_connections(db, server_name=name)
 
@@ -468,7 +468,7 @@ async def set_server_enabled(
     await db.commit()
 
     is_enabled = bool(server.enabled)
-    from yuxi.services.mcp.tool_registry_service import (
+    from yuxi.agents.mcp.tool_registry_service import (
         _clear_mcp_server_runtime_auth_cache,
         invalidate_mcp_server_tools_cache,
     )

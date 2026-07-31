@@ -7,7 +7,7 @@ import pytest
 
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
-from yuxi.services.mcp_auth.crypto import decrypt_credential_blob, encrypt_credential_blob
+from yuxi.agents.mcp.mcp_auth import decrypt_credential_blob, encrypt_credential_blob
 
 
 pytestmark = [pytest.mark.unit]
@@ -33,7 +33,7 @@ def test_decrypt_legacy_v1_envelope(monkeypatch):
     
     import hashlib
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-    from yuxi.services.mcp_auth.crypto import _b64encode
+    from yuxi.agents.mcp.mcp_auth import _b64encode
     
     key = hashlib.sha256(b"local-test-master-key").digest()
     aesgcm = AESGCM(key)
