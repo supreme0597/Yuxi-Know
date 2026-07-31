@@ -4,12 +4,13 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import String, and_, cast, func, or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from yuxi.agents.mcp.connection_repository import MCPConnectionRepository
 from yuxi.agents.mcp.mcp_auth.config_models import MCPAuthConfig
 from yuxi.agents.mcp.mcp_auth.crypto import encrypt_credential_blob
 from yuxi.agents.mcp.mcp_auth.orchestrator import AuthContext
-from yuxi.storage.postgres.models_business import Department, MCPConnection, User
+from yuxi.storage.postgres.models_business import MCPConnection, User
 
 logger = logging.getLogger("yuxi.mcp.connection_service")
 
@@ -97,8 +98,8 @@ def _ensure_connection_scope_matches_server(server, scope_type: str) -> None:
 
 async def get_mcp_connection(db: AsyncSession, connection_id: int) -> MCPConnection | None:
     """获取单个 Connection 记录"""
-    result = await db.execute(select(MCPConnection).where(MCPConnection.id == connection_id))
-    return result.scalar_one_or_none()
+    repo = MCPConnectionRepository(db)
+    return await repo.get_by_id(connection_id)
 
 
 def _auth_context_from_connection(connection: MCPConnection) -> AuthContext:
@@ -118,16 +119,8 @@ async def list_mcp_connections(
     scope_id: str | None = None,
 ) -> list[MCPConnection]:
     """多条件列表查询 Connection"""
-    stmt = select(MCPConnection)
-    if server_name is not None:
-        stmt = stmt.where(MCPConnection.server_name == server_name)
-    if scope_type is not None:
-        stmt = stmt.where(MCPConnection.scope_type == scope_type)
-    if scope_id is not None:
-        stmt = stmt.where(MCPConnection.scope_id == scope_id)
-    stmt = stmt.order_by(MCPConnection.id.asc())
-    result = await db.execute(stmt)
-    return list(result.scalars().all())
+    repo = MCPConnectionRepository(db)
+    return await repo.list(server_name=server_name, scope_type=scope_type, scope_id=scope_id)
 
 
 def _connection_has_credential_condition():
@@ -139,44 +132,8 @@ def _connection_missing_credential_condition():
 
 
 def _connection_search_condition(search: str):
-    keyword = str(search or "").strip()
-    like_keyword = f"%{keyword}%"
-    lowered_keyword = keyword.lower()
-    conditions = [
-        MCPConnection.display_name.ilike(like_keyword),
-        MCPConnection.external_subject.ilike(like_keyword),
-        MCPConnection.scope_id.ilike(like_keyword),
-        MCPConnection.created_by.ilike(like_keyword),
-        MCPConnection.updated_by.ilike(like_keyword),
-        and_(
-            MCPConnection.scope_type == "department",
-            select(Department.id)
-            .where(
-                cast(Department.id, String) == MCPConnection.scope_id,
-                Department.name.ilike(like_keyword),
-            )
-            .exists(),
-        ),
-        and_(
-            MCPConnection.scope_type == "user",
-            select(User.id)
-            .where(
-                or_(
-                    cast(User.id, String) == MCPConnection.scope_id,
-                    User.user_id == MCPConnection.scope_id,
-                ),
-                or_(User.username.ilike(like_keyword), User.user_id.ilike(like_keyword)),
-            )
-            .exists(),
-        ),
-    ]
-    if any(token in lowered_keyword for token in ("system", "global", "全局", "共享", "全部")):
-        conditions.append(MCPConnection.scope_type == "system")
-    if any(token in lowered_keyword for token in ("department", "dept", "部门")):
-        conditions.append(MCPConnection.scope_type == "department")
-    if any(token in lowered_keyword for token in ("user", "个人", "用户")):
-        conditions.append(MCPConnection.scope_type == "user")
-    return or_(*conditions)
+    """委托给 MCPConnectionRepository.build_search_conditions 构建搜索条件。"""
+    return or_(*MCPConnectionRepository.build_search_conditions(search))
 
 
 def _connection_health_condition(
@@ -254,8 +211,8 @@ async def count_mcp_connections(
     search: str | None = None,
 ) -> int:
     """统计符合筛选条件的连接数量。"""
-    stmt = select(func.count()).select_from(MCPConnection)
-    for condition in _build_mcp_connections_query(
+    repo = MCPConnectionRepository(db)
+    conditions = _build_mcp_connections_query(
         server_name=server_name,
         scope_type=scope_type,
         scope_id=scope_id,
@@ -263,10 +220,8 @@ async def count_mcp_connections(
         effective_scope_type=effective_scope_type,
         credentials_required=credentials_required,
         search=search,
-    ):
-        stmt = stmt.where(condition)
-    result = await db.execute(stmt)
-    return int(result.scalar_one() or 0)
+    )
+    return await repo.count(conditions=conditions)
 
 
 async def list_mcp_connections_page(
@@ -283,8 +238,7 @@ async def list_mcp_connections_page(
     page_size: int = 12,
 ) -> tuple[list[MCPConnection], int]:
     """分页查询连接列表，供管理员连接页使用。"""
-    normalized_page = max(1, int(page or 1))
-    normalized_page_size = min(max(1, int(page_size or 12)), 100)
+    repo = MCPConnectionRepository(db)
     conditions = _build_mcp_connections_query(
         server_name=server_name,
         scope_type=scope_type,
@@ -294,16 +248,11 @@ async def list_mcp_connections_page(
         credentials_required=credentials_required,
         search=search,
     )
-    stmt = select(MCPConnection).order_by(MCPConnection.id.asc())
-    count_stmt = select(func.count()).select_from(MCPConnection)
-    for condition in conditions:
-        stmt = stmt.where(condition)
-        count_stmt = count_stmt.where(condition)
-    stmt = stmt.limit(normalized_page_size).offset((normalized_page - 1) * normalized_page_size)
-
-    total_result = await db.execute(count_stmt)
-    result = await db.execute(stmt)
-    return list(result.scalars().all()), int(total_result.scalar_one() or 0)
+    return await repo.list_page(
+        conditions=conditions,
+        page=page,
+        page_size=page_size,
+    )
 
 
 async def create_mcp_connection(
@@ -347,15 +296,14 @@ async def create_mcp_connection(
         created_by=created_by,
         updated_by=created_by,
     )
-    db.add(connection)
+    repo = MCPConnectionRepository(db)
     from sqlalchemy.exc import IntegrityError
 
     try:
-        await db.commit()
+        await repo.add(connection)
     except IntegrityError:
         await db.rollback()
         raise ValueError(_format_duplicate_connection_message(server_name, normalized_scope_type))
-    await db.refresh(connection)
     return connection
 
 
@@ -402,8 +350,8 @@ async def update_mcp_connection(
     if updated_by is not None:
         connection.updated_by = updated_by
 
-    await db.commit()
-    await db.refresh(connection)
+    repo = MCPConnectionRepository(db)
+    await repo.commit_refresh(connection)
 
     from yuxi.agents.mcp.tool_registry_service import (
         _clear_mcp_connection_runtime_auth_cache,
@@ -424,8 +372,9 @@ async def delete_mcp_connection(db: AsyncSession, connection_id: int) -> bool:
     deleted_connection_id = connection.id
     deleted_server_name = connection.server_name
     deleted_scope_type = connection.scope_type
-    await db.delete(connection)
-    await db.commit()
+
+    repo = MCPConnectionRepository(db)
+    await repo.delete(connection)
 
     from yuxi.agents.mcp.tool_registry_service import (
         _clear_mcp_connection_runtime_auth_cache,
@@ -465,8 +414,9 @@ async def set_mcp_connection_status(
     connection.status = normalized_status
     if updated_by is not None:
         connection.updated_by = updated_by
-    await db.commit()
-    await db.refresh(connection)
+
+    repo = MCPConnectionRepository(db)
+    await repo.commit_refresh(connection)
 
     from yuxi.agents.mcp.tool_registry_service import (
         _clear_mcp_connection_runtime_auth_cache,
@@ -513,15 +463,21 @@ async def reauthorize_mcp_connection(
 
     await _invalidate_mcp_tools_cache_for_connection(connection)
 
+    # 清除 agent 端 DynamicMCPTokenAuth 缓存的 headers，
+    # 否则重授权后 agent 仍会使用缓存的旧 token 发请求，导致 401 循环
+    from yuxi.agents.mcp.client_pool import clear_server_resolved_headers_cache
+
+    clear_server_resolved_headers_cache(connection.server_name)
+
     connection.status = "active"
     meta_json = dict(connection.meta_json or {})
     meta_json.pop("last_error", None)
     connection.meta_json = meta_json
     if updated_by is not None:
         connection.updated_by = updated_by
-    await db.commit()
-    await db.refresh(connection)
-    return connection
+
+    repo = MCPConnectionRepository(db)
+    return await repo.commit_refresh(connection)
 
 
 async def test_mcp_connection(
@@ -543,28 +499,49 @@ async def test_mcp_connection(
     _ensure_connection_scope_matches_server(server, connection.scope_type)
 
     auth_context = _auth_context_from_connection(connection)
+
+    # 对于 user scope，scope_id 存的是 User.id（数据库主键），
+    # 但 SSO 鉴权需要的 work_id 是 User.uid（登录工号），
+    # 必须从 User 表查出真实工号，否则 template 中 ${context.work_id} 会解析为主键值
+    if connection.scope_type == "user":
+        try:
+            user_result = await db.execute(select(User).where(User.id == int(connection.scope_id)))
+            user_row = user_result.scalar_one_or_none()
+            if user_row and user_row.uid:
+                auth_context = AuthContext(user_id=connection.scope_id, work_id=str(user_row.uid))
+        except (ValueError, TypeError):
+            pass
+
     from yuxi.agents.mcp.server_service import get_runtime_mcp_server_config
     from yuxi.agents.mcp.tool_registry_service import get_mcp_tools
 
-    config = await get_runtime_mcp_server_config(server.name, auth_context=auth_context, db=db)
+    config = await get_runtime_mcp_server_config(server.slug, auth_context=auth_context, db=db)
     if config is None:
-        raise ValueError(f"MCP server '{server.name}' runtime config unavailable")
+        raise ValueError(f"MCP server '{server.slug}' runtime config unavailable")
 
-    tools = await get_mcp_tools(
-        server.name,
-        additional_servers={server.name: config},
-        disabled_tools=[],
-        cache=False,
-        force_refresh=True,
-    )
+    # 直连模式下 DynamicMCPTokenAuth 依赖 mcp_auth_context_var 注入鉴权 headers
+    from yuxi.agents.mcp.mcp_auth.orchestrator import mcp_auth_context_var
 
-    meta_json = dict(connection.meta_json or {})
-    meta_json["last_success_at"] = datetime.now(tz=UTC).isoformat()
-    meta_json.pop("last_error", None)
-    connection.meta_json = meta_json
-    connection.status = "active"
-    if updated_by is not None:
-        connection.updated_by = updated_by
-    await db.commit()
-    await db.refresh(connection)
-    return {"tool_count": len(tools), "connection": connection}
+    _auth_token = mcp_auth_context_var.set(auth_context)
+    try:
+        tools = await get_mcp_tools(
+            server.slug,
+            additional_servers={server.slug: config},
+            disabled_tools=[],
+            cache=False,
+            force_refresh=True,
+        )
+
+        meta_json = dict(connection.meta_json or {})
+        meta_json["last_success_at"] = datetime.now(tz=UTC).isoformat()
+        meta_json.pop("last_error", None)
+        connection.meta_json = meta_json
+        connection.status = "active"
+        if updated_by is not None:
+            connection.updated_by = updated_by
+
+        repo = MCPConnectionRepository(db)
+        await repo.commit_refresh(connection)
+        return {"tool_count": len(tools), "connection": connection}
+    finally:
+        mcp_auth_context_var.reset(_auth_token)

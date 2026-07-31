@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from yuxi.agents.mcp.cache_policy import (
     CachePolicyFactory,
-    DynamicProxyCachePolicy,
+    DynamicTokenCachePolicy,
     MCPCachePolicy,
     StaticCachePolicy,
     TokenInjectedCachePolicy,
@@ -11,6 +11,7 @@ from yuxi.agents.mcp.client_pool import (
     MCPClientPool,
     mcp_client_pool,
 )
+from yuxi.agents.mcp.connection_repository import MCPConnectionRepository
 from yuxi.agents.mcp.connection_service import (
     create_mcp_connection,
     delete_mcp_connection,
@@ -21,13 +22,15 @@ from yuxi.agents.mcp.connection_service import (
     test_mcp_connection,
     update_mcp_connection,
 )
+from yuxi.agents.mcp.server_repository import MCPServerRepository
 from yuxi.agents.mcp.server_service import (
+    MCPConnectionRequiredError,
     create_mcp_server,
     delete_mcp_server,
     ensure_builtin_mcp_servers_in_db,
     get_all_mcp_servers,
     get_enabled_mcp_server_config,
-    get_enabled_mcp_server_names,
+    get_enabled_mcp_server_slugs,
     get_mcp_server,
     get_mcp_server_dependency_summary,
     get_runtime_mcp_server_config,
@@ -54,15 +57,19 @@ __all__ = [
     "MCPCachePolicy",
     "StaticCachePolicy",
     "TokenInjectedCachePolicy",
-    "DynamicProxyCachePolicy",
+    "DynamicTokenCachePolicy",
     "CachePolicyFactory",
     "mcp_client_pool",
     "MCPClientPool",
+    # Repository
+    "MCPServerRepository",
+    "MCPConnectionRepository",
     # Server CRUD
+    "MCPConnectionRequiredError",
     "ensure_builtin_mcp_servers_in_db",
     "get_enabled_mcp_server_config",
     "get_runtime_mcp_server_config",
-    "get_enabled_mcp_server_names",
+    "get_enabled_mcp_server_slugs",
     "get_mcp_server",
     "get_all_mcp_servers",
     "create_mcp_server",

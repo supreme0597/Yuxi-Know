@@ -69,12 +69,17 @@ class TokenInjectedCachePolicy(MCPCachePolicy):
         return f"connection:{connection.id}", is_shared
 
 
-class DynamicProxyCachePolicy(MCPCachePolicy):
-    """动态 Token 鉴权代理缓存策略（例如 custom_http_token, authorization_code）"""
+class DynamicTokenCachePolicy(MCPCachePolicy):
+    """动态 Token 鉴权缓存策略（例如 custom_http_token, authorization_code）
+
+    直连模式下 token 会随用户/租户动态变化，Token 通过 DynamicMCPTokenAuth.async_auth_flow 从
+    mcp_auth_context_var 逐请求注入到 HTTP 请求头，Tool 对象仅持有
+    _SessionProxy 引用，不含 Token，因此跨请求复用是安全的。
+    缓存 Tool 对象可避免每次 graph 构建都重新建立 MCP 连接和列举工具列表。
+    """
 
     def should_cache_tool_object(self) -> bool:
-        # NOTE: 动态 Token 具有时效性且可能因用户身份变化，为了安全性，禁止在内存中缓存带有具体 Token 的 Tool 实例
-        return False
+        return True
 
     def resolve_cache_partition(
         self,
@@ -99,5 +104,5 @@ class CachePolicyFactory:
         elif provider in ("bound_secret", "stdio_env"):
             return TokenInjectedCachePolicy()
         else:
-            # 默认为动态代理鉴权策略（支持 custom_http_token, client_credentials, authorization_code 等）
-            return DynamicProxyCachePolicy()
+            # 默认为动态 Token 鉴权策略（支持 custom_http_token, client_credentials, authorization_code 等）
+            return DynamicTokenCachePolicy()

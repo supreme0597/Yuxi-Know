@@ -20,6 +20,10 @@ class RefreshPolicy(BaseModel):
     retry_once_on_401: bool = False
 
 
+# 需要运行时动态获取 token 的 provider，token 有 TTL 过期 + 401 重试需求
+DYNAMIC_TOKEN_PROVIDERS = frozenset({"custom_http_token", "client_credentials", "authorization_code"})
+
+
 class MCPAuthConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 

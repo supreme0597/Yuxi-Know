@@ -45,7 +45,9 @@ async def fetch_custom_http_token(
 
     response_map = response_map or dict(_DEFAULT_TOKEN_RESPONSE_MAP)
     if http_client is None:
-        http_client = httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=10.0))
+        http_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=10.0), verify=False
+        )
         should_close = True
     else:
         should_close = False
@@ -77,6 +79,19 @@ async def fetch_custom_http_token(
             request_kwargs["data"] = body
 
         request_kwargs["timeout"] = httpx.Timeout(10.0, read=30.0)
+
+        # DEBUG: 记录请求详情用于排查 SSO 400 问题（不记录 body 值，避免凭据泄露到日志）
+        from yuxi.utils import logger as _dbg_logger
+
+        _dbg_logger.info(
+            f"fetch_custom_http_token request: "
+            f"url={request_config['url']}, method={request_kwargs['method']}, "
+            f"context_payload_keys={list(context_payload.keys())}, "
+            f"secret_values_keys={list(secret_values.keys())}, "
+            f"token_values_keys={list(token_values.keys())}, "
+            f"body_type={body_type}, "
+            f"body_keys={list(body.keys()) if isinstance(body, dict) else 'non-dict'}"
+        )
 
         response = await http_client.request(**request_kwargs)
         response.raise_for_status()
@@ -145,17 +160,25 @@ class BaseTokenFetcher(ITokenFetcher, ABC):
             if not refresh_token_values.get("refresh_token") and credential_payload.get("refresh_token"):
                 refresh_token_values["refresh_token"] = credential_payload["refresh_token"]
 
-            refreshed = await fetch_custom_http_token(
-                refresh_request,
-                response_map=(refresh_request.get("response_map") or token_request.get("response_map")),
-                context_payload=context_payload,
-                secret_values=secret_values,
-                token_values=refresh_token_values,
-                http_client=http_client,
-            )
-            if not refreshed.get("refresh_token") and refresh_token_values.get("refresh_token"):
-                refreshed["refresh_token"] = refresh_token_values["refresh_token"]
-            return refreshed
+            try:
+                refreshed = await fetch_custom_http_token(
+                    refresh_request,
+                    response_map=(refresh_request.get("response_map") or token_request.get("response_map")),
+                    context_payload=context_payload,
+                    secret_values=secret_values,
+                    token_values=refresh_token_values,
+                    http_client=http_client,
+                )
+                if not refreshed.get("refresh_token") and refresh_token_values.get("refresh_token"):
+                    refreshed["refresh_token"] = refresh_token_values["refresh_token"]
+                return refreshed
+            except Exception as exc:
+                # refresh 失败（如 refresh_token 过期、SSO 返回 400），fallback 到全新获取
+                from yuxi.utils import logger
+
+                logger.warning(
+                    f"MCP token refresh failed for '{auth_config.provider}', falling back to new token request: {exc}"
+                )
 
         # NOTE: 如果不满足刷新条件，则获取全新 Token
         return await self._fetch_new_token(
