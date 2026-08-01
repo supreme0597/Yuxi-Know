@@ -52,7 +52,7 @@
             <span class="menu-text">调试面板（非生产环境）</span>
           </a-menu-item>
           <a-menu-item
-            v-if="userStore.isAdmin"
+            v-if="userStore.isLoggedIn"
             key="setting"
             @click="goToSetting"
             :icon="SettingsIcon"

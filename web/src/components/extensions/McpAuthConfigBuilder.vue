@@ -390,6 +390,12 @@ const providerOptions = computed(() => {
       label: '接口换 Token',
       description: '调用内部网关或 IAM 动态获取 token。',
       icon: Shuffle
+    },
+    {
+      value: 'client_credentials',
+      label: 'OAuth2 客户端凭证',
+      description: '使用 client_id 与 client_secret 换取 token。',
+      icon: KeyRound
     }
   ]
 
