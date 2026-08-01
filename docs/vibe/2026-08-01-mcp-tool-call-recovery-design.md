@@ -325,6 +325,66 @@ chat_service 记录 Error streaming messages
 
 ## 5. 推荐架构
 
+### 5.1 组件架构图
+
+```mermaid
+flowchart LR
+    subgraph Load["工具加载期"]
+        Registry["tool_registry_service<br/>组装工具"]
+        Pool["MCPClientPool<br/>获取稳定连接条目"]
+        AdapterLoad["load_mcp_tools<br/>session=proxy<br/>tool_interceptors=[recovery]"]
+        Tool["LangChain StructuredTool<br/>捕获 Proxy 与 Interceptor"]
+        Recovery["MCPToolCallRecoveryInterceptor<br/>调用级恢复"]
+
+        Registry --> Pool
+        Pool --> Proxy
+        Registry --> Recovery
+        Registry -->|"公开参数 tool_interceptors=[recovery]"| AdapterLoad
+        AdapterLoad -->|"构造并捕获 Proxy + Interceptor"| Tool
+        Registry -. "bind_retryable_tools(frozenset)" .-> Recovery
+    end
+
+    subgraph AgentRuntime["LangGraph 工具执行期"]
+        ToolNode["LangGraph ToolNode"]
+        AgentMW["Agent Middleware 链<br/>RuntimeConfig / Skills"]
+        AdapterChain["MCP Adapter interceptor chain"]
+        Handler["Adapter execute_tool handler"]
+
+        ToolNode --> AgentMW
+        AgentMW --> Tool
+        Tool --> AdapterChain
+        AdapterChain --> Recovery
+        Recovery --> Handler
+    end
+
+    subgraph SessionLifecycle["Yuxi Session 生命周期"]
+        Proxy["_SessionProxy<br/>当前 Session + generation"]
+        Owner["LongLivedSession._run_loop<br/>唯一建连所有者"]
+        ClientSession["当前 ClientSession"]
+        Server["MCP Server"]
+
+        Handler --> Proxy
+        Proxy --> ClientSession
+        ClientSession --> Server
+        Recovery -. "request_reconnect(expected_generation)" .-> Proxy
+        Proxy -. "owner callback / reconnect event" .-> Owner
+        Owner -->|"client.session() + initialize()"| ClientSession
+        Owner -->|"publish generation + 1"| Proxy
+    end
+
+    AgentMW -. "AuthContext 覆盖原调用与内部重试" .-> Handler
+```
+
+架构边界固定为：
+
+- `tool_registry_service` 只负责组装，不实现重试状态机。
+- `MCPToolCallRecoveryInterceptor` 只负责一次 MCP Tool 调用的恢复决策，不创建 Session。
+- `_SessionProxy` 只负责转发、generation 和向所有者提交重连请求。
+- `LongLivedSession._run_loop()` 是唯一调用 `client.session()` 并发布新 Session 的组件。
+- `RuntimeConfigMiddleware.awrap_tool_call()` 位于 Adapter interceptor 外层，只维持动态 Tool 与 `AuthContext` 生命周期。
+
+### 5.2 断线恢复时序图
+
 ```mermaid
 sequenceDiagram
     autonumber
@@ -333,6 +393,7 @@ sequenceDiagram
     participant AWrap as RuntimeConfigMiddleware.awrap_tool_call
     participant Tool as StructuredTool / BaseTool
     participant Interceptor as MCPToolCallRecoveryInterceptor
+    participant Execute as Adapter execute_tool handler
     participant Proxy as _SessionProxy
     participant Owner as LongLivedSession._run_loop
     participant Session as ClientSession / MCP transport
@@ -340,10 +401,12 @@ sequenceDiagram
     Agent->>ToolNode: 模型输出 tool_call
     ToolNode->>AWrap: 进入 Agent Middleware handler
     AWrap->>Tool: handler(request)，外层只调用一次
-    Tool->>Interceptor: Adapter handler
-    Interceptor->>Proxy: 记录 generation 并调用 call_tool
+    Tool->>Interceptor: MCPToolCallRequest + 内层 handler
+    Interceptor->>Execute: handler(request)，第一次调用
+    Execute->>Proxy: session.call_tool(...)
     Proxy->>Session: 使用旧 ClientSession
-    Session--x Interceptor: ClosedResourceError 等连接异常
+    Session--x Execute: ClosedResourceError 等连接异常
+    Execute--x Interceptor: handler 向外抛出连接异常
     Interceptor->>Proxy: request_reconnect(expected_generation)
     Proxy->>Owner: 幂等设置 reconnect event
 
@@ -355,9 +418,11 @@ sequenceDiagram
         Session-->>Owner: 新 ClientSession
         Owner->>Proxy: set_session()，generation 加一
         Proxy-->>Interceptor: 唤醒 generation 等待者
-        Interceptor->>Proxy: Adapter handler 只重试一次
+        Interceptor->>Execute: 同一 handler(request)，只重试一次
+        Execute->>Proxy: 再次执行 session.call_tool(...)
         Proxy->>Session: 使用新 ClientSession.call_tool
-        Session-->>Interceptor: 工具结果
+        Session-->>Execute: 工具结果
+        Execute-->>Interceptor: MCPToolCallResult
     else 未声明安全语义
         Interceptor-->>Tool: CallToolResult(isError=True)，不重试
         Note over Owner,Session: 后台仍由同一 reconnect event 驱动重建，不阻塞本次 Tool 返回
@@ -371,7 +436,7 @@ sequenceDiagram
 
 恢复拦截器不直接调用 `client.session()`。它通过 `_SessionProxy.request_reconnect(expected_generation)` 主动唤醒唯一的 Session 所有者；只有 `LongLivedSession._run_loop()` 可以关闭旧 Session，并重新进入 `MultiServerMCPClient.session(server_name)`。该上下文管理器默认使用 `auto_initialize=True`，内部创建传输与 `ClientSession` 后自动执行 `initialize()`。这样既不是纯被动等待，也不会从工具调用任务并行创建第二条连接。
 
-### 5.1 组件职责
+### 5.3 组件职责
 
 #### `_SessionProxy`
 
@@ -453,13 +518,15 @@ sequenceDiagram
 
 #### `MCPToolCallRecoveryInterceptor`
 
-放在 MCP 连接池模块内，与 Session 生命周期和传输异常保持同一职责边界。
+放在新增的 `backend/package/yuxi/agents/mcp/tool_call_recovery.py`，与 Adapter 接入、连接异常分类和 Tool 错误结果构造保持同一职责边界。不要继续塞入已经同时承担动态鉴权和连接生命周期的 `client_pool.py`，也不要把调用恢复状态机放进 `tool_registry_service.py`。
 
 拦截器持有：
 
 - 绑定了所属 `LongLivedSession` 重连回调的 `_SessionProxy`。
-- 工具名称到安全重试标记的映射。
+- 允许安全重试的工具名称不可变集合。
 - 最大重连等待秒数。
+
+该模块只依赖 `_SessionProxy` 暴露的稳定接口，不读取连接池内部字典，也不反向调用工具注册服务。`MCPConnectionRecoveringError` 仍定义在 `client_pool.py`，因为它表达的是连接池获取状态。
 
 执行流程：
 
@@ -491,13 +558,13 @@ Adapter interceptor 的原始调用和一次安全重试都发生在同一个外
 
 加载工具时：
 
-1. 创建共享的工具安全策略映射。
-2. 创建绑定当前 `_SessionProxy` 的恢复拦截器；该代理已经持有所属 `LongLivedSession` 的重连回调。
-3. 调用 `load_mcp_tools(..., tool_interceptors=[interceptor])`。
-4. 根据返回 LangChain Tool 的 metadata 填充安全策略映射。
+1. 创建绑定当前 `_SessionProxy` 的恢复拦截器；该代理已经持有所属 `LongLivedSession` 的重连回调。
+2. 调用 `load_mcp_tools(session, tool_interceptors=[interceptor])`。
+3. 根据返回 LangChain Tool 的 metadata 计算只读/幂等工具名的 `frozenset`。
+4. 调用拦截器的一次性 `bind_retryable_tools()` 完成策略绑定。
 5. 继续添加现有 `id`、`mcp_server_name` 和 `handle_tool_error=True`。
 
-工具只会在加载完成并返回 Agent 后执行，因此在工具调用发生前，安全策略映射已经完整。
+不使用全局策略字典，也不让 interceptor 反查 LangChain Tool 注册表。工具只会在 `get_mcp_tools()` 加载、绑定策略并返回 Agent 后执行，因此不存在“工具已执行但策略尚未绑定”的正常并发窗口。每批缓存 Tool 都捕获自己的 interceptor 与不可变 `frozenset`，配置 revision 改变时随 Tool 缓存一起重建，不跨 server、partition 或配置版本共享状态。
 
 工具加载异常处理也必须服从“单一 Session 所有者”原则：
 
@@ -508,52 +575,241 @@ Adapter interceptor 的原始调用和一次安全重试都发生在同一个外
 
 这一步不是额外的工具加载重试。当前模型调用最多等待一次已有后台重连；超时后本轮不加载该 MCP Tool，下一轮模型调用再按正常流程获取。这样可以避免 Agent 返回错误 ToolMessage 后的下一次 `awrap_model_call()` 反过来杀死正在恢复的 Session。
 
-### 5.2 精确控制流
+### 5.4 MCP Adapter interceptor 接入与精确控制流
 
-下面的伪代码明确两个 handler 的调用位置：
+#### 5.4.1 只使用 Adapter 公开扩展点
+
+当前 `langchain-mcp-adapters 0.2.2` 的公开接口为：
+
+```python
+async def load_mcp_tools(
+    session: ClientSession | None,
+    *,
+    tool_interceptors: list[ToolCallInterceptor] | None = None,
+    server_name: str | None = None,
+    ...,
+) -> list[BaseTool]: ...
+
+
+class ToolCallInterceptor(Protocol):
+    async def __call__(
+        self,
+        request: MCPToolCallRequest,
+        handler: Callable[
+            [MCPToolCallRequest],
+            Awaitable[MCPToolCallResult],
+        ],
+    ) -> MCPToolCallResult: ...
+```
+
+Yuxi 只实现这个 Protocol 并传入 `load_mcp_tools()`，不导入 Adapter 私有的 `_build_interceptor_chain()`，不复制 `convert_mcp_tool_to_langchain_tool()`，也不 monkey patch Adapter。
+
+接入点位于 Adapter 已公开的“请求已构造、底层 Session 尚未调用”边界：
+
+```mermaid
+flowchart LR
+    Tool["StructuredTool.call_tool"]
+    Request["Adapter 构造 MCPToolCallRequest"]
+    PublicSeam["公开 ToolCallInterceptor.__call__"]
+    Recovery["Yuxi MCPToolCallRecoveryInterceptor"]
+    Execute["Adapter execute_tool handler"]
+    Proxy["Yuxi _SessionProxy.call_tool"]
+    Convert["Adapter _convert_call_tool_result"]
+    ToolResult["正常 LangChain Tool 结果"]
+    ToolMessage["LangChain ToolMessage"]
+
+    Tool --> Request
+    Request --> PublicSeam
+    PublicSeam --> Recovery
+    Recovery -->|"handler(request)，原调用或一次安全重试"| Execute
+    Execute --> Proxy
+    Proxy -->|"MCP 结果或连接异常"| Execute
+    Execute -->|"handler 返回或抛出"| Recovery
+    Recovery -->|"最终 MCPToolCallResult"| Convert
+    Convert -->|"正常结果"| ToolResult
+    Convert -->|"ToolException + handle_tool_error=True"| ToolMessage
+```
+
+Yuxi 不接管 Adapter 的 Tool 转换、请求构造、interceptor 链组装或结果转换，只在公开 seam 内做恢复决策。这是适配方式的核心：第三方包继续拥有协议适配流程，Yuxi 只拥有自己的 Session 生命周期和重试策略。
+
+#### 5.4.2 `tool_registry_service` 的组装伪代码
+
+```python
+from langchain_mcp_adapters.tools import load_mcp_tools
+
+from yuxi.agents.mcp.tool_call_recovery import (
+    MCPToolCallRecoveryInterceptor,
+)
+
+
+session_proxy = await mcp_client_pool.get_session(
+    server_name,
+    partition_key=partition_key,
+    runtime_config=client_config,
+)
+
+recovery = MCPToolCallRecoveryInterceptor(
+    session_proxy=session_proxy,
+    reconnect_wait_seconds=MCP_TOOL_RECONNECT_WAIT_SECONDS,
+)
+
+tools = await load_mcp_tools(
+    session_proxy,
+    server_name=server_name,
+    tool_interceptors=[recovery],
+)
+
+retryable_tool_names = frozenset(
+    tool.name
+    for tool in tools
+    if tool.metadata
+    and (
+        tool.metadata.get("readOnlyHint") is True
+        or tool.metadata.get("idempotentHint") is True
+    )
+)
+recovery.bind_retryable_tools(retryable_tool_names)
+
+for tool in tools:
+    tool.metadata = tool.metadata or {}
+    tool.metadata["id"] = build_unique_tool_id(server_name, tool.name)
+    tool.metadata["mcp_server_name"] = server_name
+    tool.handle_tool_error = True
+
+return tools
+```
+
+这里的先后顺序是刻意的：Adapter 必须在构造 `StructuredTool` 时捕获 interceptor，而安全重试资格只能在 Adapter 返回带 ToolAnnotations metadata 的 LangChain Tool 后计算。`bind_retryable_tools()` 只允许调用一次，并把输入复制成不可变 `frozenset`。工具在整个 `get_mcp_tools()` 返回前不可能进入 ToolNode，因此该两阶段绑定没有正常运行时竞态。
+
+#### 5.4.3 Interceptor 实现伪代码
+
+`ReconnectRequestStatus` 使用 `StrEnum` 定义在 `client_pool.py`，避免在多个模块传播字符串字面量：
+
+```python
+class ReconnectRequestStatus(StrEnum):
+    ACCEPTED = "accepted"
+    MERGED = "merged"
+    STALE_GENERATION = "stale_generation"
+    STOPPED = "stopped"
+```
+
+Adapter interceptor 保持线性控制流，只调用 Adapter 提供的内层 handler：
+
+```python
+from collections.abc import Awaitable, Callable
+from time import monotonic
+
+from langchain_mcp_adapters.interceptors import (
+    MCPToolCallRequest,
+    MCPToolCallResult,
+)
+
+
+class MCPToolCallRecoveryInterceptor:
+    def __init__(self, *, session_proxy, reconnect_wait_seconds):
+        self._session_proxy = session_proxy
+        self._reconnect_wait_seconds = reconnect_wait_seconds
+        self._retryable_tool_names: frozenset[str] | None = None
+
+    def bind_retryable_tools(self, tool_names: frozenset[str]) -> None:
+        if self._retryable_tool_names is not None:
+            raise RuntimeError("MCP retry policy is already bound")
+        self._retryable_tool_names = frozenset(tool_names)
+
+    async def __call__(
+        self,
+        request: MCPToolCallRequest,
+        handler: Callable[
+            [MCPToolCallRequest],
+            Awaitable[MCPToolCallResult],
+        ],
+    ) -> MCPToolCallResult:
+        if self._retryable_tool_names is None:
+            raise RuntimeError("MCP retry policy is not bound")
+
+        reconnect_deadline = monotonic() + self._reconnect_wait_seconds
+        while not self._session_proxy.is_connected:
+            observed_generation = self._session_proxy.generation
+            status = self._session_proxy.request_reconnect(observed_generation)
+            if status is ReconnectRequestStatus.STOPPED:
+                return unavailable_before_send_result(request)
+
+            # STALE_GENERATION 可能表示另一任务刚发布了新 Session；重新检查
+            # is_connected，避免在新一代也已断开的极窄窗口内误判为可调用。
+            if status is ReconnectRequestStatus.STALE_GENERATION:
+                continue
+
+            remaining = max(0.0, reconnect_deadline - monotonic())
+            restored = await self._session_proxy.wait_for_new_session(
+                observed_generation,
+                timeout=remaining,
+            )
+            if not restored:
+                return unavailable_before_send_result(request)
+
+        call_generation = self._session_proxy.generation
+        try:
+            return await handler(request)  # 第一次真正调用 ClientSession.call_tool
+        except BaseException as exc:
+            if not is_mcp_connection_error(exc):
+                raise
+
+            status = self._session_proxy.request_reconnect(call_generation)
+            if status is ReconnectRequestStatus.STOPPED:
+                return connection_unavailable_result(request, exc)
+
+            retryable = request.name in self._retryable_tool_names
+            if not retryable:
+                return unknown_execution_result(request, exc)  # 不重放
+
+            if status is not ReconnectRequestStatus.STALE_GENERATION:
+                restored = await self._session_proxy.wait_for_new_session(
+                    call_generation,
+                    timeout=self._reconnect_wait_seconds,
+                )
+                if not restored:
+                    return reconnect_timeout_result(request, exc)
+
+            retry_generation = self._session_proxy.generation
+            try:
+                return await handler(request)  # 同一 Adapter handler，只重试一次
+            except BaseException as retry_exc:
+                if not is_mcp_connection_error(retry_exc):
+                    raise
+                self._session_proxy.request_reconnect(retry_generation)
+                return retry_failed_result(request, retry_exc)
+```
+
+所有 `*_result()` 都返回 MCP SDK 的标准 `CallToolResult(isError=True)`，内容只包含 server、tool 和是否重试等安全信息，不包含 `request.args`、headers 或 Token。
+
+`while` 只覆盖“调用前明确没有 Session”的阶段，且共享同一个截止时间，不会因 generation 连续变化而重复获得新的 5 秒等待窗口。进入第一次 `handler(request)` 后即按“请求可能已经发送”处理，不再回到调用前分支。
+
+#### 5.4.4 为什么第二次 handler 会使用新 Session
+
+Adapter 为每个 MCP Tool 生成 `StructuredTool.call_tool()`，其内部 `execute_tool()` 闭包保存的是传入 `load_mcp_tools()` 的 `session` 参数。Yuxi 传入的是长期不变的 `_SessionProxy`：
+
+```python
+# langchain-mcp-adapters 内部行为的等价摘要
+async def execute_tool(request):
+    return await session.call_tool(request.name, request.args)
+
+# session 是 _SessionProxy，不是某一代具体 ClientSession
+```
+
+第一次 `handler(request)` 通过代理进入 generation N 的 ClientSession。`LongLivedSession` 发布 generation N+1 后，第二次调用同一个 `handler(request)` 会重新执行 `session.call_tool(...)`，代理此时转发到 N+1。整个过程仍位于一次外层 `RuntimeConfigMiddleware.awrap_tool_call()` 的 `await agent_handler(request)` 内，不会重复进入 Agent Middleware，也不会丢失 `AuthContext`。
+
+外层边界保持如下：
 
 ```python
 async def awrap_tool_call(request, agent_handler):
     token = mcp_auth_context_var.set(current_auth_context)
     try:
-        return await agent_handler(request)  # 一次 Agent 工具调用只执行一次
+        return await agent_handler(request)  # 外层只调用一次
     finally:
         mcp_auth_context_var.reset(token)
-
-
-async def recovery_interceptor(request, mcp_handler):
-    observed_generation = proxy.generation
-
-    if not proxy.is_connected:
-        status = proxy.request_reconnect(observed_generation)
-        if status == "stopped":
-            return unavailable_before_send_result()
-        if status != "stale_generation":
-            restored = await proxy.wait_for_new_session(observed_generation, timeout=5)
-            if not restored:
-                return unavailable_before_send_result()
-
-    call_generation = proxy.generation
-    try:
-        return await mcp_handler(request)  # 本次请求第一次真正发送
-    except SUPPORTED_CONNECTION_ERRORS as exc:
-        status = proxy.request_reconnect(call_generation)
-        if status == "stopped":
-            return connection_error_result(exc)
-        if not tool_is_read_only_or_idempotent(request.name):
-            return unknown_result_error(exc)  # 不重放
-        if status != "stale_generation":
-            await proxy.wait_for_new_session(call_generation, timeout=5)
-
-        retry_generation = proxy.generation
-        try:
-            return await mcp_handler(request)  # 同一闭包经代理访问新 Session
-        except SUPPORTED_CONNECTION_ERRORS as retry_exc:
-            proxy.request_reconnect(retry_generation)
-            return retry_failed_result(retry_exc)  # 不进行第三次调用
 ```
 
-`mcp_handler` 是 Adapter `_build_interceptor_chain()` 传入的内层 handler，最终执行其 `execute_tool()`；其中闭包变量 `session` 就是 `_SessionProxy`。所以第二次 `mcp_handler(request)` 不会重新进入 `RuntimeConfigMiddleware.awrap_tool_call()`，却会重新解析代理当前持有的 `ClientSession`。
+#### 5.4.5 Session 所有者的建连循环
 
 `LongLivedSession` 的唯一建连循环如下：
 
@@ -579,7 +835,31 @@ while not stop_requested:
 
 不论触发源是 Adapter 连接异常、ping 失败还是传输上下文退出，最终都只让这个循环进入下一次 `client.session()`；其他组件只能发请求或等待 generation，不能自行建连。
 
-### 5.3 工具安全重试资格
+#### 5.4.6 Adapter 错误结果转换边界
+
+恢复失败时，interceptor 不直接构造 LangChain `ToolMessage`，而是返回 MCP SDK 标准结果：
+
+```python
+return CallToolResult(
+    isError=True,
+    content=[TextContent(type="text", text=safe_error_message)],
+)
+```
+
+Adapter 随后按其公开工具执行流程完成转换，等价控制流为：
+
+```python
+call_tool_result = await interceptor_chain(request)
+if call_tool_result.isError:
+    raise ToolException(extract_safe_text(call_tool_result))
+
+# Yuxi 已为 MCP StructuredTool 设置 handle_tool_error=True
+# BaseTool 捕获 ToolException，并生成 ToolMessage 返回 ToolNode。
+```
+
+因此，连接恢复模块不依赖 LangGraph `ToolMessage` 构造细节，也不吞掉非连接异常；Adapter 和 LangChain 仍分别负责 MCP 结果转换与 Tool 错误呈现。
+
+### 5.5 工具安全重试资格
 
 只使用 MCP 标准 ToolAnnotations：
 
@@ -598,7 +878,7 @@ while not stop_requested:
 
 MCP ToolAnnotations 是提示信息，管理员应只接入可信 MCP Server。Yuxi 的保守默认值是：没有明确 `True` 就不重试。
 
-### 5.4 等待时间与重试次数
+### 5.6 等待时间与重试次数
 
 新增环境变量：
 
@@ -828,7 +1108,7 @@ Compose 已为 `mcp-demo-server` 配置 `restart: unless-stopped`。进程退出
 17. 当前获取操作等待超时后抛出 `MCPConnectionRecoveringError`，后台重连任务和池条目仍然保留。
 18. 配置 hash 改变、显式 remove 或连接池关闭时，原条目仍按现有行为停止并淘汰。
 
-`_SessionProxy` 和恢复拦截器：
+`_SessionProxy`：
 
 1. `_SessionProxy` 初始 generation 为 0。
 2. 首次绑定 Session 后 generation 为 1。
@@ -838,35 +1118,44 @@ Compose 已为 `mcp-demo-server` 配置 `restart: unless-stopped`。进程退出
 6. `wait_for_new_session()` 不会被同一 generation 或其他连接条目唤醒。
 7. `request_reconnect()` 正确委托给所属 `LongLivedSession`，自身不创建 Session。
 8. 等待超时返回明确失败结果，但不触发第二个连接任务。
-9. 调用前未连接时，无论工具是否有注解，都先请求重连，等待成功后 Adapter handler 只执行一次。
-10. 调用前未连接且等待超时时，Adapter handler 不执行。
-11. `readOnlyHint` 工具收到 `EndOfStream` 后请求重连并重试一次。
-12. `idempotentHint` 工具收到 `ClosedResourceError` 后请求重连并重试一次。
-13. 安全工具收到 `BrokenResourceError` 后请求重连并重试一次。
-14. 未标注工具收到在途连接关闭异常时请求重连，但不等待、不重试。
-15. generation 已经变化时，安全工具直接使用新 Session，未标注工具仍不重放。
-16. 后台所有者返回 `stopped` 时立即返回 Tool 错误，不等待 5 秒。
-17. 重连超时时不进行第二次 Adapter handler 调用。
-18. 第二次调用再次出现连接错误时，对新 generation 请求重连，但不进行第三次工具调用。
-19. 一次 Agent Middleware handler 调用内，Adapter handler 原始调用和安全重试合计最多两次。
-20. 仅由连接异常组成的 `BaseExceptionGroup` 可以识别。
-21. 混有 `ValueError` 或取消异常的异常组继续传播。
-22. 请求超时转换成 Tool 错误但不请求重连、不重试。
-23. 普通 `ValueError` 继续抛出。
-24. 取消异常继续传播。
-25. 日志不包含工具参数、Token 或请求头。
+
+新增 `backend/test/unit/services/test_mcp_tool_call_recovery.py`，单独覆盖 Adapter interceptor：
+
+1. interceptor 符合 `ToolCallInterceptor` 的公开调用协议。
+2. `bind_retryable_tools()` 将输入复制为不可变集合，只允许绑定一次。
+3. 策略未绑定时不静默执行远端 Tool，明确暴露组装错误。
+4. 调用前未连接时，无论工具是否有注解，都先请求重连，等待成功后 Adapter handler 只执行一次。
+5. 调用前未连接且等待超时时，Adapter handler 不执行。
+6. `readOnlyHint` 工具收到 `EndOfStream` 后请求重连并重试一次。
+7. `idempotentHint` 工具收到 `ClosedResourceError` 后请求重连并重试一次。
+8. 安全工具收到 `BrokenResourceError` 后请求重连并重试一次。
+9. 未标注工具收到在途连接关闭异常时请求重连，但不等待、不重试。
+10. generation 已经变化时，安全工具直接使用新 Session，未标注工具仍不重放。
+11. 后台所有者返回 `stopped` 时立即返回 Tool 错误，不等待 5 秒。
+12. 重连超时时不进行第二次 Adapter handler 调用。
+13. 第二次调用再次出现连接错误时，对新 generation 请求重连，但不进行第三次工具调用。
+14. 一次 Agent Middleware handler 调用内，Adapter handler 原始调用和安全重试合计最多两次。
+15. 仅由连接异常组成的 `BaseExceptionGroup` 可以识别。
+16. 混有 `ValueError` 或取消异常的异常组继续传播。
+17. 请求超时转换成 Tool 错误但不请求重连、不重试。
+18. 普通 `ValueError` 继续抛出。
+19. 取消异常继续传播。
+20. 所有错误结果都是 `CallToolResult(isError=True)`，且日志不包含工具参数、Token 或请求头。
+21. 通过 Adapter 公共装配路径执行时，`CallToolResult(isError=True)` 最终被现有 `handle_tool_error=True` 转换为 ToolMessage。
 
 扩充 `backend/test/unit/services/test_mcp_tool_registry_service.py`，覆盖：
 
 1. `load_mcp_tools()` 收到恢复拦截器。
-2. `readOnlyHint=true` 进入安全重试集合。
-3. `idempotentHint=true` 进入安全重试集合。
-4. 未标注工具不进入安全重试集合。
-5. 原有 `id`、`mcp_server_name` 和 `handle_tool_error` 保持不变。
-6. 非 MCP 工具不受影响。
-7. `MCPConnectionRecoveringError` 不进入失败冷却，也不调用 `remove_session()`。
-8. `list_tools` 遇到支持的连接关闭异常时请求原代理重连，只清 Tool 对象缓存，不停止仍在运行的所有者。
-9. 配置、鉴权或普通程序错误仍按现有规则进入冷却和清理。
+2. `load_mcp_tools()` 的第一个参数是原 `_SessionProxy`，没有临时创建 Adapter Session。
+3. `readOnlyHint=true` 进入一次性绑定的安全重试集合。
+4. `idempotentHint=true` 进入一次性绑定的安全重试集合。
+5. 未标注工具不进入安全重试集合。
+6. `bind_retryable_tools()` 在 Tool 返回或写入缓存前完成且只调用一次。
+7. 原有 `id`、`mcp_server_name` 和 `handle_tool_error` 保持不变。
+8. 非 MCP 工具不受影响。
+9. `MCPConnectionRecoveringError` 不进入失败冷却，也不调用 `remove_session()`。
+10. `list_tools` 遇到支持的连接关闭异常时请求原代理重连，只清 Tool 对象缓存，不停止仍在运行的所有者。
+11. 配置、鉴权或普通程序错误仍按现有规则进入冷却和清理。
 
 扩充 `backend/test/unit/middlewares/test_runtime_config_middleware.py`，验证 LangChain 外层边界：
 
@@ -945,6 +1234,7 @@ E2E 不断言底层必须抛出某一个具体 AnyIO 异常，只断言支持的
 ```bash
 docker exec api-dev uv run --group test pytest \
   test/unit/services/test_mcp_client_pool.py \
+  test/unit/services/test_mcp_tool_call_recovery.py \
   test/unit/services/test_mcp_tool_registry_service.py \
   test/unit/middlewares/test_runtime_config_middleware.py -q
 ```
@@ -962,9 +1252,11 @@ docker exec api-dev uv run --group test pytest \
 ```bash
 docker exec api-dev uv run --group dev ruff check \
   package/yuxi/agents/mcp/client_pool.py \
+  package/yuxi/agents/mcp/tool_call_recovery.py \
   package/yuxi/agents/mcp/tool_registry_service.py \
   test/mcp_demo_server.py \
   test/unit/services/test_mcp_client_pool.py \
+  test/unit/services/test_mcp_tool_call_recovery.py \
   test/unit/services/test_mcp_tool_registry_service.py \
   test/unit/middlewares/test_runtime_config_middleware.py \
   test/e2e/test_mcp_reconnect_e2e.py
@@ -982,9 +1274,11 @@ docker exec api-dev uv run --group dev ruff check \
 预计修改：
 
 - `backend/package/yuxi/agents/mcp/client_pool.py`
+- `backend/package/yuxi/agents/mcp/tool_call_recovery.py`
 - `backend/package/yuxi/agents/mcp/tool_registry_service.py`
 - `backend/test/mcp_demo_server.py`
 - `backend/test/unit/services/test_mcp_client_pool.py`
+- `backend/test/unit/services/test_mcp_tool_call_recovery.py`
 - `backend/test/unit/services/test_mcp_tool_registry_service.py`
 - `backend/test/unit/middlewares/test_runtime_config_middleware.py`
 - `backend/test/integration/...` 下一个职责明确的 MCP 重连测试文件
@@ -1033,14 +1327,18 @@ Stdio 子进程退出同样可能表现为 AnyIO stream 关闭异常。恢复拦
 
 如果下一轮 `awrap_model_call()` 加载工具时，MCP Server 在 5 秒内仍未恢复，本轮返回空 MCP 工具列表，不让模型继续选择一个当前无法调用的工具。该行为只影响当前模型调用，不进入失败冷却、不移除连接条目；后台重连成功后，后续模型调用会按现有动态加载流程重新获得工具。
 
+### 12.8 Adapter 升级兼容风险
+
+本方案依赖 `langchain-mcp-adapters` 的公开 `load_mcp_tools(tool_interceptors=...)`、`ToolCallInterceptor` 协议、ToolAnnotations metadata 和 `CallToolResult(isError=True)` 转换行为，不依赖 `_build_interceptor_chain()` 等私有符号。升级 Adapter 时仍可能出现公开契约变化，因此必须保留一条使用真实 Adapter 公共装配路径的契约测试，验证 interceptor 调用次数、metadata 字段和错误 ToolMessage 转换。依赖升级若使该测试失败，应按新公开接口调整 Yuxi 接入层，不能通过复制或调用 Adapter 私有实现规避。
+
 ## 13. 实施顺序
 
 1. 先为“首次重连失败后循环退出”“重连期间连接池淘汰旧代理”“工具加载误停止重连所有者”和“主动重连事件不能立即唤醒 keepalive”编写失败单元测试。
 2. 使用 `first_connect` 修复 `LongLivedSession` 连续重连条件，并增加 `_reconnect_event` 与 `_reconnect_generation`，统一主动请求、ping 失败和传输退出三条重连入口。
 3. 修复 `MCPClientPool.get_session()` 对正在重连条目的复用与等待，增加 `MCPConnectionRecoveringError`，避免替换旧代理。
 4. 为 `_SessionProxy` 实现 generation、`request_reconnect()` 和连接状态等待。
-5. 为恢复拦截器编写失败单元测试并实现 `MCPToolCallRecoveryInterceptor`，验证只重试 Adapter handler。
-6. 在工具加载路径接入 interceptor 和 ToolAnnotations 策略，并修正暂态重连异常的清理边界。
+5. 在独立的 `tool_call_recovery.py` 为恢复拦截器编写失败单元测试并实现 `MCPToolCallRecoveryInterceptor`，验证只重试 Adapter handler。
+6. 在 `tool_registry_service.py` 只完成 interceptor 装配、ToolAnnotations 一次性策略绑定，并修正暂态重连异常的清理边界。
 7. 补充 `RuntimeConfigMiddleware.awrap_tool_call()` 外层只执行一次且 `AuthContext` 覆盖内部重试的回归测试。
 8. 完成目标单元测试和 Ruff。
 9. 扩展 Demo Server 的延迟工具、注解与故障控制接口。
@@ -1061,6 +1359,9 @@ Stdio 子进程退出同样可能表现为 AnyIO stream 关闭异常。恢复拦
 - 下一轮工具加载不会停止仍在重连的 `LongLivedSession`。
 - 5 秒工具等待超时不会停止后台重连。
 - 一次 Agent 工具调用只进入一次外层 `awrap_tool_call` handler；安全恢复最多调用两次 MCP Adapter handler。
+- Yuxi 只通过 `load_mcp_tools(tool_interceptors=...)` 和 `ToolCallInterceptor` 公共契约接入 Adapter，不导入或复制私有链路实现。
+- ToolAnnotations 重试策略在 Tool 返回注册表或进入缓存前完成一次性绑定，不存在可执行但策略未绑定的窗口。
+- Interceptor 返回的 `CallToolResult(isError=True)` 能沿 Adapter 与 LangChain 现有转换链生成 ToolMessage。
 - `RuntimeConfigMiddleware` 不承担连接池或 Session 重建职责，`AuthContext` 覆盖完整的内部恢复过程。
 - 安全工具最多自动重试一次。
 - 未标注工具绝不自动重放。
