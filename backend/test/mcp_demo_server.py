@@ -4,6 +4,7 @@ import asyncio
 import contextvars
 import logging
 import os
+import signal
 import sys
 from typing import Any
 import uvicorn
@@ -27,6 +28,12 @@ current_request_headers_var = contextvars.ContextVar("current_request_headers", 
 
 # 实例化 MCP 核心服务对象
 server = Server("yuxi-mcp-demo-server")
+safe_echo_annotations = types.ToolAnnotations(
+    readOnlyHint=True,
+    destructiveHint=False,
+    idempotentHint=True,
+)
+active_tool_calls: dict[str, int] = {}
 
 @server.list_tools()
 async def handle_list_tools() -> list[types.Tool]:
@@ -52,7 +59,41 @@ async def handle_list_tools() -> list[types.Tool]:
                 },
                 "required": ["message"]
             },
-        )
+            annotations=safe_echo_annotations,
+        ),
+        types.Tool(
+            name="echo_delayed_safe",
+            description="延迟执行的只读幂等回显工具",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "message": {"type": "string", "description": "要回显的内容"},
+                    "delay_seconds": {
+                        "type": "number",
+                        "minimum": 0,
+                        "description": "回显前等待的秒数",
+                    },
+                },
+                "required": ["message", "delay_seconds"],
+            },
+            annotations=safe_echo_annotations,
+        ),
+        types.Tool(
+            name="echo_delayed_unannotated",
+            description="延迟执行且未声明安全性质的回显工具",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "message": {"type": "string", "description": "要回显的内容"},
+                    "delay_seconds": {
+                        "type": "number",
+                        "minimum": 0,
+                        "description": "回显前等待的秒数",
+                    },
+                },
+                "required": ["message", "delay_seconds"],
+            },
+        ),
     ]
     
     # 部门级别权限工具
@@ -68,6 +109,7 @@ async def handle_list_tools() -> list[types.Tool]:
                     },
                     "required": ["query"]
                 },
+                annotations=safe_echo_annotations,
             )
         )
         
@@ -83,6 +125,7 @@ async def handle_list_tools() -> list[types.Tool]:
                         "dummy": {"type": "string", "description": "占位参数"}
                     }
                 },
+                annotations=safe_echo_annotations,
             )
         )
         
@@ -105,6 +148,19 @@ async def handle_call_tool(name: str, arguments: dict[str, Any] | None) -> list[
         
     elif name == "echo_user_profile":
         return [types.TextContent(type="text", text="[User Output] 成功获取用户专有敏感配置与画像数据")]
+
+    elif name in {"echo_delayed_safe", "echo_delayed_unannotated"}:
+        active_tool_calls[name] = active_tool_calls.get(name, 0) + 1
+        try:
+            await asyncio.sleep(float(args.get("delay_seconds", 0)))
+            message = args.get("message", "")
+            return [types.TextContent(type="text", text=f"[Delayed Output] 回显内容: {message}")]
+        finally:
+            remaining = active_tool_calls[name] - 1
+            if remaining:
+                active_tool_calls[name] = remaining
+            else:
+                del active_tool_calls[name]
         
     else:
         raise ValueError(f"Unknown tool: {name}")
@@ -128,6 +184,22 @@ app = FastAPI(title="MCP Demo Server", lifespan=lifespan)
 app.mount("/mcp", StreamableHTTPASGIApp(session_manager))
 
 sse_transport = SseServerTransport("/messages")
+
+
+@app.get("/test/faults/state")
+async def get_fault_state():
+    return {"active_tools": dict(active_tool_calls)}
+
+
+async def restart_process():
+    await asyncio.sleep(0.1)
+    os.kill(os.getpid(), signal.SIGTERM)
+
+
+@app.post("/test/faults/restart")
+async def restart_fault_server():
+    app.state.restart_task = asyncio.create_task(restart_process())
+    return {"restarting": True}
 
 @app.post("/oauth/token")
 async def oauth_token(request: Request):

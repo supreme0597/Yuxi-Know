@@ -8,6 +8,7 @@ from langchain.tools.tool_node import ToolCallRequest
 from langchain_core.messages import ToolMessage
 
 import yuxi.agents.middlewares.runtime_config_middleware as runtime_config_middleware
+from yuxi.agents.mcp.mcp_auth.orchestrator import mcp_auth_context_var
 from yuxi.agents.middlewares.runtime_config_middleware import RuntimeConfigMiddleware
 
 
@@ -133,6 +134,48 @@ async def test_runtime_loaded_mcp_tool_can_be_executed_when_tool_node_did_not_pr
 
     assert result.content == "ok"
     assert captured["tool"] is runtime_tool
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_awrap_tool_call_keeps_auth_context_across_adapter_retry():
+    middleware = RuntimeConfigMiddleware()
+    context = SimpleNamespace(
+        user_id="2",
+        work_id="test_common",
+        department_id="1",
+    )
+    request = ToolCallRequest(
+        tool_call={"name": "safe_echo", "args": {}, "id": "call-1"},
+        tool=SimpleNamespace(name="safe_echo"),
+        state={},
+        runtime=SimpleNamespace(context=context),
+    )
+    observed_user_ids: list[str | None] = []
+    outer_handler_calls = 0
+    previous_context = mcp_auth_context_var.get()
+
+    async def adapter_handler():
+        auth_context = mcp_auth_context_var.get()
+        observed_user_ids.append(auth_context.user_id if auth_context else None)
+
+    async def agent_handler(next_request):
+        nonlocal outer_handler_calls
+        outer_handler_calls += 1
+        await adapter_handler()
+        await adapter_handler()
+        return ToolMessage(
+            content="ok",
+            name=next_request.tool_call["name"],
+            tool_call_id=next_request.tool_call["id"],
+        )
+
+    result = await middleware.awrap_tool_call(request, agent_handler)
+
+    assert result.content == "ok"
+    assert outer_handler_calls == 1
+    assert observed_user_ids == ["2", "2"]
+    assert mcp_auth_context_var.get() is previous_context
 
 
 @pytest.mark.asyncio

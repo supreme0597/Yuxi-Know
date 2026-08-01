@@ -13,9 +13,18 @@ from typing import Any, cast
 import httpx
 from cachetools import LRUCache
 from sqlalchemy.ext.asyncio import AsyncSession
+from yuxi.agents.mcp.client_pool import (
+    MCP_TOOL_RECONNECT_WAIT_SECONDS,
+    MCPConnectionRecoveringError,
+    ReconnectRequestStatus,
+)
 from yuxi.agents.mcp.mcp_auth.config_models import MCPAuthConfig
 from yuxi.agents.mcp.mcp_auth.orchestrator import AuthContext
 from yuxi.agents.mcp.mcp_tool_cache import RedisMcpToolCache
+from yuxi.agents.mcp.tool_call_recovery import (
+    MCPToolCallRecoveryInterceptor,
+    is_mcp_connection_error,
+)
 from yuxi.storage.postgres.models_business import MCPConnection, MCPServer
 
 logger = logging.getLogger("yuxi.mcp.tool_registry_service")
@@ -261,6 +270,12 @@ async def get_mcp_tools(
                 )
                 return []
 
+        partition_key = (
+            f"{cache_partition}:s{cache_descriptor['server_revision']}:"
+            f"p{cache_descriptor['partition_revision']}"
+        )
+        session = None
+        list_generation = None
         try:
             # 剥离所有内部字段：__yuxi_ 前缀的内部透传键 + 非 SDK 字段
             _STRIPPED_KEYS = frozenset({
@@ -278,7 +293,7 @@ async def get_mcp_tools(
 
             session = await mcp_client_pool.get_session(
                 server_name,
-                partition_key=f"{cache_partition}:s{cache_descriptor['server_revision']}:p{cache_descriptor['partition_revision']}",
+                partition_key=partition_key,
                 runtime_config=client_config,
             )
 
@@ -289,7 +304,29 @@ async def get_mcp_tools(
                 # 调用 langchain 官方加载工具，直接传入已预备并建立好的 session
                 from langchain_mcp_adapters.tools import load_mcp_tools
 
-                raw_tools = cast(list[Any], await load_mcp_tools(session, server_name=server_name))
+                list_generation = session.generation
+                recovery = MCPToolCallRecoveryInterceptor(
+                    session_proxy=session,
+                    reconnect_wait_seconds=MCP_TOOL_RECONNECT_WAIT_SECONDS,
+                )
+                raw_tools = cast(
+                    list[Any],
+                    await load_mcp_tools(
+                        session,
+                        server_name=server_name,
+                        tool_interceptors=[recovery],
+                    ),
+                )
+                retryable_tool_names = frozenset(
+                    tool.name
+                    for tool in raw_tools
+                    if tool.metadata
+                    and (
+                        tool.metadata.get("readOnlyHint") is True
+                        or tool.metadata.get("idempotentHint") is True
+                    )
+                )
+                recovery.bind_retryable_tools(retryable_tool_names)
 
             server_cc = to_camel_case(server_name)
             for tool in raw_tools:
@@ -339,9 +376,33 @@ async def get_mcp_tools(
 
             _clear_mcp_tool_failure(cache_key)
 
+        except MCPConnectionRecoveringError as e:
+            _mcp_tools_cache.pop(cache_key, None)
+            logger.info(
+                f"MCP server '{server_name}' is still reconnecting; "
+                f"skip loading tools for this model call without evicting the session: {e}"
+            )
+            return []
         except Exception as e:
-            # 连接类错误（session 断开）不进入故障冷却：session 已被移除，下次调用可立即重建
-            is_connection_err = isinstance(e, (ConnectionError, ConnectionResetError, BrokenPipeError, OSError))
+            is_connection_err = is_mcp_connection_error(e) or isinstance(e, ConnectionError)
+            reconnect_status = None
+            if is_connection_err and list_generation is not None and hasattr(session, "request_reconnect"):
+                reconnect_status = session.request_reconnect(list_generation)
+
+            if is_connection_err and reconnect_status in {
+                ReconnectRequestStatus.ACCEPTED,
+                ReconnectRequestStatus.MERGED,
+                ReconnectRequestStatus.STALE_GENERATION,
+            }:
+                _mcp_tools_cache.pop(cache_key, None)
+                logger.info(
+                    f"MCP server '{server_name}' disconnected while listing tools; "
+                    f"reconnect_status={reconnect_status.value}, keep the existing session owner"
+                )
+                logger.debug(f"Failed to load tools from MCP server '{server_name}'", exc_info=True)
+                return []
+
+            # 初次建连错误或已经停止的 owner 不进入故障冷却，下一次调用可立即重建。
             if not is_connection_err:
                 _record_mcp_tool_failure(cache_key, e)
                 logger.warning(
@@ -357,24 +418,11 @@ async def get_mcp_tools(
                 )
             logger.debug(f"Failed to load tools from MCP server '{server_name}'", exc_info=True)
             try:
-                partition_key = (
-                    f"{cache_partition}:s{cache_descriptor['server_revision']}:"
-                    f"p{cache_descriptor['partition_revision']}"
-                )
                 from yuxi.agents.mcp.client_pool import mcp_client_pool
 
                 await mcp_client_pool.remove_session(server_name, partition_key)
             except Exception as pool_err:
                 logger.warning(f"Failed to remove stale session for {server_name}: {pool_err}")
-            # 连接类错误时 partition_key 可能已过期（revision 被 bump），
-            # remove_session 可能未命中，再兜底全量清理该 server 的 session
-            if is_connection_err:
-                try:
-                    from yuxi.agents.mcp.client_pool import mcp_client_pool
-
-                    await mcp_client_pool.remove_sessions_by_server(server_name)
-                except Exception as pool_err:
-                    logger.warning(f"Failed to remove all server sessions for {server_name}: {pool_err}")
             return []
 
     if disabled_tools:

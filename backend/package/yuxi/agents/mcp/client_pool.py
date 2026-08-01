@@ -4,8 +4,10 @@ import asyncio
 import hashlib
 import json
 import logging
+import math
 import os
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -23,6 +25,9 @@ _MCP_HEADERS_CACHE_TTL = float(os.environ.get("YUXI_MCP_HEADERS_CACHE_TTL", "60"
 
 # 长连接心跳间隔（秒）：定期 send_ping 防止远端 idle timeout 断连；0 表示关闭
 _SESSION_PING_INTERVAL = float(os.environ.get("YUXI_MCP_SESSION_PING_INTERVAL", "30"))
+MCP_TOOL_RECONNECT_WAIT_SECONDS = float(os.environ.get("YUXI_MCP_TOOL_RECONNECT_WAIT_SECONDS", "5"))
+if not math.isfinite(MCP_TOOL_RECONNECT_WAIT_SECONDS) or MCP_TOOL_RECONNECT_WAIT_SECONDS < 0:
+    raise ValueError("YUXI_MCP_TOOL_RECONNECT_WAIT_SECONDS must be a finite non-negative float")
 _resolved_headers_cache: TTLCache = TTLCache(maxsize=1024, ttl=_MCP_HEADERS_CACHE_TTL)
 
 # 逐请求变化的 headers，不应缓存——否则 Content-Length / Transfer-Encoding
@@ -43,6 +48,22 @@ def clear_server_resolved_headers_cache(server_name: str) -> None:
 
 
 logger = logging.getLogger("yuxi.mcp.client_pool")
+
+
+class ReconnectRequestStatus(StrEnum):
+    ACCEPTED = "accepted"
+    MERGED = "merged"
+    STALE_GENERATION = "stale_generation"
+    STOPPED = "stopped"
+
+
+class MCPConnectionRecoveringError(RuntimeError):
+    """当前连接池条目仍在后台恢复，但本次等待已超时。"""
+
+    def __init__(self, server_name: str, wait_seconds: float):
+        super().__init__(f"MCP connection for '{server_name}' is still recovering after {wait_seconds:g}s")
+        self.server_name = server_name
+        self.wait_seconds = wait_seconds
 
 
 def _is_auth_error(exc: BaseException) -> bool:
@@ -215,11 +236,27 @@ class _SessionProxy:
     使用新 session。
     """
 
-    def __init__(self):
+    def __init__(
+        self,
+        request_reconnect: Callable[[int], ReconnectRequestStatus] | None = None,
+    ):
         self._session: ClientSession | None = None
+        self._generation = 0
+        self._session_available = asyncio.Event()
+        self._next_generation = asyncio.Event()
+        self._request_reconnect = request_reconnect
 
     def set_session(self, session: ClientSession | None) -> None:
         self._session = session
+        if session is None:
+            self._session_available.clear()
+            return
+
+        self._generation += 1
+        generation_event = self._next_generation
+        self._next_generation = asyncio.Event()
+        self._session_available.set()
+        generation_event.set()
 
     async def disconnect(self) -> None:
         """断开当前 session，关闭 pending response streams 使 in-flight call_tool 快速失败。
@@ -228,21 +265,62 @@ class _SessionProxy:
         导致 response_stream_reader.receive() 无限阻塞。此方法主动关闭写端，
         让等在 receive() 的 call_tool 立刻收到 ClosedResourceError。
         """
-        if self._session is None:
+        session = self._session
+        if session is None:
             return
+        self._session = None
+        self._session_available.clear()
         try:
-            for stream in list(self._session._response_streams.values()):  # type: ignore[attr-defined]
+            for stream in list(session._response_streams.values()):  # type: ignore[attr-defined]
                 try:
                     await stream.aclose()
                 except Exception:
                     pass
         except Exception:
             pass
-        self._session = None
+
+    @property
+    def generation(self) -> int:
+        return self._generation
 
     @property
     def is_connected(self) -> bool:
         return self._session is not None
+
+    def request_reconnect(self, expected_generation: int) -> ReconnectRequestStatus:
+        if self._request_reconnect is None:
+            return ReconnectRequestStatus.STOPPED
+        return self._request_reconnect(expected_generation)
+
+    async def wait_for_session(self, timeout: float | None = None) -> bool:
+        loop = asyncio.get_running_loop()
+        deadline = None if timeout is None else loop.time() + timeout
+
+        while not self.is_connected:
+            remaining = None if deadline is None else max(0.0, deadline - loop.time())
+            try:
+                await asyncio.wait_for(self._session_available.wait(), timeout=remaining)
+            except TimeoutError:
+                return False
+        return True
+
+    async def wait_for_new_session(self, after_generation: int, timeout: float | None = None) -> bool:
+        loop = asyncio.get_running_loop()
+        deadline = None if timeout is None else loop.time() + timeout
+
+        while True:
+            if self.is_connected and self._generation > after_generation:
+                return True
+
+            generation_event = self._next_generation
+            if self.is_connected and self._generation > after_generation:
+                return True
+
+            remaining = None if deadline is None else max(0.0, deadline - loop.time())
+            try:
+                await asyncio.wait_for(generation_event.wait(), timeout=remaining)
+            except TimeoutError:
+                return False
 
     def __getattr__(self, name: str):
         session = self._session
@@ -266,29 +344,65 @@ class LongLivedSession:
     def __init__(self, client: MultiServerMCPClient, server_name: str):
         self.client = client
         self.server_name = server_name
-        self._session_proxy = _SessionProxy()
+        self._owns_session_loop = hasattr(client, "session")
         self._running = False
         self._loop_task: asyncio.Task | None = None
         self._ready_event = asyncio.Event()
         self._stop_event = asyncio.Event()
+        self._reconnect_event = asyncio.Event()
+        self._reconnect_generation: int | None = None
+        self._session_proxy = _SessionProxy(self.request_reconnect)
 
     @property
     def session(self) -> _SessionProxy:
         return self._session_proxy
 
+    @property
+    def is_running(self) -> bool:
+        return self._running and (self._loop_task is None or not self._loop_task.done())
+
+    def request_reconnect(self, expected_generation: int) -> ReconnectRequestStatus:
+        if not self._owns_session_loop or not self.is_running or self._stop_event.is_set():
+            return ReconnectRequestStatus.STOPPED
+        if expected_generation != self._session_proxy.generation:
+            return ReconnectRequestStatus.STALE_GENERATION
+        if self._reconnect_generation == expected_generation:
+            return ReconnectRequestStatus.MERGED
+
+        self._reconnect_generation = expected_generation
+        self._reconnect_event.set()
+        return ReconnectRequestStatus.ACCEPTED
+
     async def start(self):
         """在后台启动长连接 Session"""
-        if not hasattr(self.client, "session"):
+        if self.is_running:
+            await self._ready_event.wait()
+            if not self._session_proxy.is_connected:
+                raise RuntimeError(f"Failed to startup MCP ClientSession for {self.server_name}")
+            return
+
+        if not self._owns_session_loop:
+            self._running = True
             self._session_proxy.set_session(self.client)
             self._ready_event.set()
             return
 
         self._running = True
         self._stop_event.clear()
+        self._reconnect_event.clear()
+        self._reconnect_generation = None
         self._ready_event.clear()
-        self._loop_task = asyncio.create_task(self._run_loop())
+        loop_task = asyncio.create_task(self._run_loop())
+        self._loop_task = loop_task
         # 等待 Session 成功连接并完成 initialize()
-        await self._ready_event.wait()
+        try:
+            await self._ready_event.wait()
+        except asyncio.CancelledError:
+            loop_task.cancel()
+            await asyncio.gather(loop_task, return_exceptions=True)
+            if self._loop_task is loop_task:
+                self._loop_task = None
+            raise
         if not self._session_proxy.is_connected:
             raise RuntimeError(f"Failed to startup MCP ClientSession for {self.server_name}")
 
@@ -296,72 +410,98 @@ class LongLivedSession:
         reconnect_delay = self._RECONNECT_INITIAL_DELAY
         first_connect = True
 
-        while not self._stop_event.is_set():
-            try:
-                async with self.client.session(self.server_name) as session:
-                    self._session_proxy.set_session(session)
-                    self._ready_event.set()
-                    if not first_connect:
-                        logger.info(f"MCP session reconnected for {self.server_name}")
-                    first_connect = False
-                    reconnect_delay = self._RECONNECT_INITIAL_DELAY
-                    # 等待停止指令，期间定期 send_ping 防止远端 idle timeout 断连
-                    await self._keep_alive_until_stopped(session)
-                    break  # 正常退出（stop 请求）
-            except BaseException as exc:
-                if self._stop_event.is_set():
-                    break
-                if not self._session_proxy.is_connected:
-                    # 首次连接失败，不重试，记录完整异常以辅助排查
-                    logger.warning(f"Failed to start MCP session for {self.server_name}: {exc}", exc_info=True)
-                    break
-                sub_exc = exc
-                # ExceptionGroup 可能包含子异常，展开显示根因
-                if isinstance(exc, BaseExceptionGroup):
-                    sub_exc = exc.exceptions[0] if exc.exceptions else exc
-                    logger.warning(
-                        f"MCP session loop stopped for {self.server_name}: "
-                        f"{type(sub_exc).__name__}: {sub_exc}, "
-                        f"reconnecting in {reconnect_delay:.0f}s"
-                    )
-                    logger.debug(f"MCP session ExceptionGroup details for {self.server_name}", exc_info=True)
-                else:
-                    logger.warning(
-                        f"MCP session loop stopped for {self.server_name}: {exc}, "
-                        f"reconnecting in {reconnect_delay:.0f}s"
-                    )
-                # 检测 401 鉴权错误，标记连接状态
-                if _is_auth_error(sub_exc):
-                    await _mark_mcp_connection_reauth_required(self.server_name)
-                await self._session_proxy.disconnect()
-                # 等待退避时间，期间如果收到 stop 信号则立即退出
+        try:
+            while not self._stop_event.is_set():
+                reconnect = False
+                try:
+                    async with self.client.session(self.server_name) as session:
+                        self._session_proxy.set_session(session)
+                        self._reconnect_generation = None
+                        self._reconnect_event.clear()
+                        self._ready_event.set()
+                        if not first_connect:
+                            logger.info(f"MCP session reconnected for {self.server_name}")
+                        first_connect = False
+                        reconnect_delay = self._RECONNECT_INITIAL_DELAY
+                        reason = await self._keep_alive_until_stopped(session)
+                        if reason == "stop":
+                            break
+                        await self._session_proxy.disconnect()
+                        reconnect = True
+                except asyncio.CancelledError:
+                    raise
+                except BaseException as exc:
+                    if self._stop_event.is_set():
+                        break
+                    if first_connect:
+                        logger.warning(f"Failed to start MCP session for {self.server_name}: {exc}", exc_info=True)
+                        break
+
+                    sub_exc = exc
+                    if isinstance(exc, BaseExceptionGroup):
+                        sub_exc = exc.exceptions[0] if exc.exceptions else exc
+                        logger.warning(
+                            f"MCP session loop stopped for {self.server_name}: "
+                            f"{type(sub_exc).__name__}: {sub_exc}, "
+                            f"reconnecting in {reconnect_delay:.0f}s"
+                        )
+                        logger.debug(f"MCP session ExceptionGroup details for {self.server_name}", exc_info=True)
+                    else:
+                        logger.warning(
+                            f"MCP session loop stopped for {self.server_name}: {exc}, "
+                            f"reconnecting in {reconnect_delay:.0f}s"
+                        )
+                    if _is_auth_error(sub_exc):
+                        await _mark_mcp_connection_reauth_required(self.server_name)
+
+                    generation = self._session_proxy.generation
+                    if self._reconnect_generation is None or self._reconnect_generation < generation:
+                        self._reconnect_generation = generation
+                    self._reconnect_event.clear()
+                    await self._session_proxy.disconnect()
+                    reconnect = True
+
+                if not reconnect or self._stop_event.is_set():
+                    continue
+
                 try:
                     await asyncio.wait_for(self._stop_event.wait(), timeout=reconnect_delay)
                     break
                 except TimeoutError:
-                    pass
-                reconnect_delay = min(reconnect_delay * 2, self._RECONNECT_MAX_DELAY)
+                    reconnect_delay = min(reconnect_delay * 2, self._RECONNECT_MAX_DELAY)
+        finally:
+            await self._session_proxy.disconnect()
+            self._running = False
+            self._ready_event.set()
 
-        self._session_proxy.set_session(None)
-        self._running = False
-        self._ready_event.set()
-
-    async def _keep_alive_until_stopped(self, session: ClientSession) -> None:
+    async def _keep_alive_until_stopped(self, session: ClientSession) -> str:
         """定期发送 ping 保活长连接，直到收到 stop 信号。
 
         解决远端 MCP 服务器（如 Nginx 网关）idle timeout 关闭空闲 SSE 流的问题。
         ping 失败时抛出异常，由 _run_loop 的重连逻辑接管。
         """
-        if _SESSION_PING_INTERVAL <= 0:
-            await self._stop_event.wait()
-            return
-
         while not self._stop_event.is_set():
+            stop_task = asyncio.create_task(self._stop_event.wait())
+            reconnect_task = asyncio.create_task(self._reconnect_event.wait())
             try:
-                await asyncio.wait_for(self._stop_event.wait(), timeout=_SESSION_PING_INTERVAL)
-                return  # stop 请求，正常退出
-            except TimeoutError:
-                pass
+                done, _ = await asyncio.wait(
+                    {stop_task, reconnect_task},
+                    timeout=None if _SESSION_PING_INTERVAL <= 0 else _SESSION_PING_INTERVAL,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+            finally:
+                for task in (stop_task, reconnect_task):
+                    if not task.done():
+                        task.cancel()
+                await asyncio.gather(stop_task, reconnect_task, return_exceptions=True)
+
+            if self._stop_event.is_set():
+                return "stop"
+            if self._reconnect_event.is_set():
+                self._reconnect_event.clear()
+                return "reconnect"
+            if done:
+                continue
 
             try:
                 await session.send_ping()
@@ -370,18 +510,30 @@ class LongLivedSession:
                 logger.warning(f"MCP session ping failed for {self.server_name}: {type(e).__name__}: {e}")
                 raise
 
+        return "stop"
+
     async def stop(self):
         """停止长连接，回收子进程与 TCP 连接资源"""
         self._stop_event.set()
         if self._loop_task:
+            loop_task = self._loop_task
             try:
-                await asyncio.wait_for(self._loop_task, timeout=5.0)
+                await asyncio.wait_for(loop_task, timeout=5.0)
             except TimeoutError:
                 logger.warning(f"Timeout waiting for long-lived session of {self.server_name} to stop.")
-                self._loop_task.cancel()
+                loop_task.cancel()
+                await asyncio.gather(loop_task, return_exceptions=True)
+            except asyncio.CancelledError:
+                if asyncio.current_task().cancelling():
+                    raise
             except Exception as exc:
                 logger.debug(f"Exception during long-lived session cleanup of {self.server_name}: {exc}")
-            self._loop_task = None
+            finally:
+                if self._loop_task is loop_task and loop_task.done():
+                    self._loop_task = None
+        else:
+            await self._session_proxy.disconnect()
+            self._running = False
 
 
 class MCPClientPool:
@@ -437,6 +589,7 @@ class MCPClientPool:
         cache_key = (server_name, partition_key)
 
         while True:
+            recovering_session: tuple[LongLivedSession, _SessionProxy] | None = None
             async with self._dict_lock:
                 if self._closed:
                     raise RuntimeError("MCPClientPool is shut down")
@@ -448,11 +601,14 @@ class MCPClientPool:
                         stale_session = None
                     else:
                         ll_session, cached_hash = existing
-                        if cached_hash == config_hash and ll_session.session.is_connected:
-                            return ll_session.session
-
-                        self._sessions.pop(cache_key, None)
-                        stale_session = ll_session
+                        if cached_hash == config_hash and ll_session.is_running:
+                            if ll_session.session.is_connected:
+                                return ll_session.session
+                            recovering_session = (ll_session, ll_session.session)
+                            stale_session = None
+                        else:
+                            self._sessions.pop(cache_key, None)
+                            stale_session = ll_session
                         future = None
                 else:
                     future = None
@@ -476,7 +632,27 @@ class MCPClientPool:
                     break
 
             if future is not None:
-                await future
+                await asyncio.shield(future)
+                continue
+
+            if recovering_session is not None:
+                ll_session, session_proxy = recovering_session
+                restored = await session_proxy.wait_for_session(timeout=MCP_TOOL_RECONNECT_WAIT_SECONDS)
+                if restored:
+                    continue
+
+                async with self._dict_lock:
+                    if self._closed:
+                        raise RuntimeError("MCPClientPool is shut down")
+                    current = self._sessions.get(cache_key)
+                    if (
+                        current is not None
+                        and not isinstance(current, asyncio.Future)
+                        and current[0] is ll_session
+                        and current[1] == config_hash
+                        and ll_session.is_running
+                    ):
+                        raise MCPConnectionRecoveringError(server_name, MCP_TOOL_RECONNECT_WAIT_SECONDS)
                 continue
 
             if stale_session is not None:
@@ -488,6 +664,7 @@ class MCPClientPool:
             logger.info("Evicting stale MCP session")
             await s_session.stop()
 
+        ll_session: LongLivedSession | None = None
         try:
             client_config = dict(runtime_config)
             # 仅动态 token provider 需要挂载 DynamicMCPTokenAuth
@@ -556,6 +733,11 @@ class MCPClientPool:
             return ll_session.session
 
         except BaseException as exc:
+            if ll_session is not None:
+                try:
+                    await ll_session.stop()
+                except Exception as cleanup_exc:
+                    logger.debug(f"Exception during unpublished session cleanup of {cache_key}: {cleanup_exc}")
             if not init_future.done():
                 init_future.set_exception(exc)
                 init_future.exception()

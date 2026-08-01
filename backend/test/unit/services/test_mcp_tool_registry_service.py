@@ -1,10 +1,17 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
+
+from anyio import ClosedResourceError
 
 from yuxi.agents.mcp import server_service
 from yuxi.agents.mcp import tool_registry_service
-from yuxi.agents.mcp.client_pool import mcp_client_pool
+from yuxi.agents.mcp.client_pool import (
+    MCPConnectionRecoveringError,
+    ReconnectRequestStatus,
+    mcp_client_pool,
+)
 from yuxi.agents.mcp.mcp_tool_cache import RedisMcpToolCache
 
 
@@ -185,6 +192,185 @@ async def test_get_mcp_tools_sets_handle_tool_error(monkeypatch):
     tools = await tool_registry_service.get_mcp_tools("demo")
     assert len(tools) == 1
     assert tools[0].handle_tool_error is True
+
+    await tool_registry_service.clear_mcp_cache()
+
+
+async def test_get_mcp_tools_installs_recovery_interceptor_and_binds_annotations(monkeypatch):
+    await tool_registry_service.clear_mcp_cache()
+
+    config = {"transport": "sse", "url": "http://demo.local/sse", "disabled_tools": []}
+    session_proxy = SimpleNamespace(generation=1, is_connected=True)
+    captured: dict[str, object] = {}
+
+    class FakeRecoveryInterceptor:
+        def __init__(self, *, session_proxy, reconnect_wait_seconds):
+            captured["interceptor_session"] = session_proxy
+            captured["reconnect_wait_seconds"] = reconnect_wait_seconds
+            captured["recovery"] = self
+            self.bound_tool_names = None
+
+        def bind_retryable_tools(self, tool_names):
+            self.bound_tool_names = frozenset(tool_names)
+            captured["bound_tool_names"] = self.bound_tool_names
+
+    async def fake_get_session(server_name, partition_key, runtime_config):
+        assert server_name == "demo"
+        assert partition_key == "server:s0:p0"
+        assert runtime_config == {"transport": "sse", "url": "http://demo.local/sse"}
+        return session_proxy
+
+    async def fake_load_mcp_tools(session, *, server_name, tool_interceptors):
+        captured["adapter_session"] = session
+        captured["server_name"] = server_name
+        captured["tool_interceptors"] = tool_interceptors
+        return [
+            SimpleNamespace(name="read_tool", metadata={"readOnlyHint": True}),
+            SimpleNamespace(name="idempotent_tool", metadata={"idempotentHint": True}),
+            SimpleNamespace(name="write_tool", metadata=None),
+        ]
+
+    monkeypatch.setattr(mcp_client_pool, "get_session", fake_get_session)
+    monkeypatch.setattr(tool_registry_service, "MCPToolCallRecoveryInterceptor", FakeRecoveryInterceptor)
+    monkeypatch.setattr("langchain_mcp_adapters.tools.load_mcp_tools", fake_load_mcp_tools)
+
+    tools = await tool_registry_service.get_mcp_tools(
+        "demo",
+        additional_servers={"demo": config},
+        cache=False,
+    )
+
+    assert captured["interceptor_session"] is session_proxy
+    assert captured["adapter_session"] is session_proxy
+    assert captured["server_name"] == "demo"
+    assert captured["tool_interceptors"] == [captured["recovery"]]
+    assert captured["bound_tool_names"] == frozenset({"read_tool", "idempotent_tool"})
+    assert [tool.metadata["id"] for tool in tools] == [
+        "mcp__demo__readTool",
+        "mcp__demo__idempotentTool",
+        "mcp__demo__writeTool",
+    ]
+    assert all(tool.metadata["mcp_server_name"] == "demo" for tool in tools)
+    assert all(tool.handle_tool_error is True for tool in tools)
+
+    await tool_registry_service.clear_mcp_cache()
+
+
+async def test_get_mcp_tools_keeps_pool_entry_when_connection_is_recovering(monkeypatch):
+    await tool_registry_service.clear_mcp_cache()
+
+    config = {"transport": "sse", "url": "http://demo.local/sse", "disabled_tools": []}
+    record_failure = MagicMock()
+    remove_session = AsyncMock()
+    remove_sessions_by_server = AsyncMock()
+
+    async def recovering_get_session(server_name, partition_key, runtime_config):
+        del partition_key, runtime_config
+        raise MCPConnectionRecoveringError(server_name, 0.01)
+
+    monkeypatch.setattr(mcp_client_pool, "get_session", recovering_get_session)
+    monkeypatch.setattr(mcp_client_pool, "remove_session", remove_session)
+    monkeypatch.setattr(mcp_client_pool, "remove_sessions_by_server", remove_sessions_by_server)
+    monkeypatch.setattr(tool_registry_service, "_record_mcp_tool_failure", record_failure)
+
+    tools = await tool_registry_service.get_mcp_tools(
+        "demo",
+        additional_servers={"demo": config},
+        cache=False,
+    )
+
+    assert tools == []
+    record_failure.assert_not_called()
+    remove_session.assert_not_awaited()
+    remove_sessions_by_server.assert_not_awaited()
+
+    await tool_registry_service.clear_mcp_cache()
+
+
+async def test_get_mcp_tools_requests_reconnect_when_adapter_list_tools_disconnects(monkeypatch):
+    await tool_registry_service.clear_mcp_cache()
+
+    config = {"transport": "sse", "url": "http://demo.local/sse", "disabled_tools": []}
+    reconnect_requests: list[int] = []
+    session_proxy = SimpleNamespace(
+        generation=7,
+        is_connected=True,
+        request_reconnect=lambda generation: (
+            reconnect_requests.append(generation) or ReconnectRequestStatus.ACCEPTED
+        ),
+    )
+    record_failure = MagicMock()
+    remove_session = AsyncMock()
+    remove_sessions_by_server = AsyncMock()
+
+    async def fake_get_session(server_name, partition_key, runtime_config):
+        del server_name, partition_key, runtime_config
+        return session_proxy
+
+    async def disconnected_load_mcp_tools(session, *, server_name, tool_interceptors):
+        del session, server_name, tool_interceptors
+        raise ClosedResourceError
+
+    monkeypatch.setattr(mcp_client_pool, "get_session", fake_get_session)
+    monkeypatch.setattr(mcp_client_pool, "remove_session", remove_session)
+    monkeypatch.setattr(mcp_client_pool, "remove_sessions_by_server", remove_sessions_by_server)
+    monkeypatch.setattr(tool_registry_service, "_record_mcp_tool_failure", record_failure)
+    monkeypatch.setattr("langchain_mcp_adapters.tools.load_mcp_tools", disconnected_load_mcp_tools)
+
+    tools = await tool_registry_service.get_mcp_tools(
+        "demo",
+        additional_servers={"demo": config},
+        cache=False,
+    )
+
+    assert tools == []
+    assert reconnect_requests == [7]
+    record_failure.assert_not_called()
+    remove_session.assert_not_awaited()
+    remove_sessions_by_server.assert_not_awaited()
+
+    await tool_registry_service.clear_mcp_cache()
+
+
+async def test_get_mcp_tools_requests_reconnect_for_list_generation_when_owner_advanced(monkeypatch):
+    await tool_registry_service.clear_mcp_cache()
+
+    config = {"transport": "sse", "url": "http://demo.local/sse", "disabled_tools": []}
+    reconnect_requests: list[int] = []
+    session_proxy = SimpleNamespace(generation=7, is_connected=True)
+
+    def request_reconnect(generation):
+        reconnect_requests.append(generation)
+        return ReconnectRequestStatus.STALE_GENERATION
+
+    session_proxy.request_reconnect = request_reconnect
+    record_failure = MagicMock()
+    remove_session = AsyncMock()
+
+    async def fake_get_session(server_name, partition_key, runtime_config):
+        del server_name, partition_key, runtime_config
+        return session_proxy
+
+    async def disconnected_load_mcp_tools(session, *, server_name, tool_interceptors):
+        del server_name, tool_interceptors
+        session.generation = 8
+        raise ClosedResourceError
+
+    monkeypatch.setattr(mcp_client_pool, "get_session", fake_get_session)
+    monkeypatch.setattr(mcp_client_pool, "remove_session", remove_session)
+    monkeypatch.setattr(tool_registry_service, "_record_mcp_tool_failure", record_failure)
+    monkeypatch.setattr("langchain_mcp_adapters.tools.load_mcp_tools", disconnected_load_mcp_tools)
+
+    tools = await tool_registry_service.get_mcp_tools(
+        "demo",
+        additional_servers={"demo": config},
+        cache=False,
+    )
+
+    assert tools == []
+    assert reconnect_requests == [7]
+    record_failure.assert_not_called()
+    remove_session.assert_not_awaited()
 
     await tool_registry_service.clear_mcp_cache()
 

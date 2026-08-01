@@ -1,9 +1,13 @@
 from __future__ import annotations
+
 import asyncio
-import pytest
+import runpy
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from yuxi.agents.mcp.client_pool import MCPClientPool, LongLivedSession
+import pytest
+
+from yuxi.agents.mcp import client_pool as client_pool_module
+from yuxi.agents.mcp.client_pool import MCPClientPool, LongLivedSession, _SessionProxy
 
 
 @pytest.mark.asyncio
@@ -30,6 +34,269 @@ async def test_long_lived_session_lifecycle():
     await ll_session.stop()
     assert ll_session._running is False
     assert ll_session.session.is_connected is False
+
+
+@pytest.mark.asyncio
+async def test_long_lived_session_start_cancellation_stops_created_run_loop():
+    connect_entered = asyncio.Event()
+
+    class SessionContext:
+        async def __aenter__(self):
+            connect_entered.set()
+            await asyncio.Event().wait()
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            del exc_type, exc, traceback
+
+    client = MagicMock()
+    client.session.return_value = SessionContext()
+    ll_session = LongLivedSession(client, "test_server")
+
+    start_task = asyncio.create_task(ll_session.start())
+    await connect_entered.wait()
+    start_task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await start_task
+
+    assert ll_session._loop_task is None
+    assert ll_session.is_running is False
+    assert ll_session.session.is_connected is False
+
+
+@pytest.mark.asyncio
+async def test_long_lived_session_stop_cleans_up_already_cancelled_run_loop():
+    mock_client = MagicMock()
+    mock_context = AsyncMock()
+    mock_context.__aenter__.return_value = _FakeSession()
+    mock_client.session.return_value = mock_context
+    ll_session = LongLivedSession(mock_client, "test_server")
+    await ll_session.start()
+
+    loop_task = ll_session._loop_task
+    assert loop_task is not None
+    loop_task.cancel()
+    await asyncio.gather(loop_task, return_exceptions=True)
+
+    await ll_session.stop()
+
+    assert ll_session._loop_task is None
+    assert ll_session.is_running is False
+    assert ll_session.session.is_connected is False
+
+
+@pytest.mark.asyncio
+async def test_long_lived_session_stop_preserves_external_cancellation():
+    blocker = asyncio.create_task(asyncio.Event().wait())
+    ll_session = LongLivedSession(MagicMock(), "test_server")
+    ll_session._running = True
+    ll_session._loop_task = blocker
+
+    stop_task = asyncio.create_task(ll_session.stop())
+    await asyncio.sleep(0)
+    stop_task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await stop_task
+
+    await asyncio.gather(blocker, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_pool_shutdown_continues_after_owner_run_loop_was_cancelled():
+    mock_client = MagicMock()
+    mock_context = AsyncMock()
+    mock_context.__aenter__.return_value = _FakeSession()
+    mock_client.session.return_value = mock_context
+    cancelled_owner = LongLivedSession(mock_client, "cancelled")
+    await cancelled_owner.start()
+    assert cancelled_owner._loop_task is not None
+    cancelled_owner._loop_task.cancel()
+    await asyncio.gather(cancelled_owner._loop_task, return_exceptions=True)
+
+    other_owner = MagicMock()
+    other_owner.stop = AsyncMock()
+    pool = MCPClientPool()
+    pool._sessions[("cancelled", "p1")] = (cancelled_owner, "hash-1")
+    pool._sessions[("other", "p1")] = (other_owner, "hash-2")
+
+    await pool.shutdown()
+
+    other_owner.stop.assert_awaited_once()
+
+
+class _FakeSession:
+    def __init__(self):
+        self._response_streams = {}
+
+
+@pytest.mark.asyncio
+async def test_session_proxy_tracks_generation_and_wakes_all_new_session_waiters():
+    proxy = _SessionProxy()
+    first_session = _FakeSession()
+    second_session = _FakeSession()
+
+    assert proxy.generation == 0
+
+    proxy.set_session(first_session)
+    first_generation = proxy.generation
+    assert first_generation == 1
+
+    await proxy.disconnect()
+    assert proxy.is_connected is False
+    assert proxy.generation == first_generation
+
+    waiters = [
+        asyncio.create_task(proxy.wait_for_new_session(first_generation, timeout=0.5))
+        for _ in range(2)
+    ]
+    await asyncio.sleep(0)
+    proxy.set_session(second_session)
+
+    assert await asyncio.gather(*waiters) == [True, True]
+    assert proxy.generation == first_generation + 1
+    assert proxy._session is second_session
+
+
+@pytest.mark.asyncio
+async def test_session_proxy_wait_for_new_session_times_out_without_generation_change():
+    proxy = _SessionProxy()
+    proxy.set_session(_FakeSession())
+
+    generation = proxy.generation
+
+    assert await proxy.wait_for_new_session(generation, timeout=0.01) is False
+    assert proxy.generation == generation
+
+
+@pytest.mark.asyncio
+async def test_session_proxy_wait_for_session_ignores_transient_connection_before_timeout():
+    proxy = _SessionProxy()
+
+    waiter = asyncio.create_task(proxy.wait_for_session(timeout=0.5))
+    await asyncio.sleep(0)
+    proxy.set_session(_FakeSession())
+    await proxy.disconnect()
+    await asyncio.sleep(0)
+
+    assert waiter.done() is False
+
+    proxy.set_session(_FakeSession())
+    assert await waiter is True
+
+
+@pytest.mark.asyncio
+async def test_session_proxy_disconnect_marks_unavailable_before_closing_pending_streams():
+    proxy = _SessionProxy()
+    stream = AsyncMock()
+    stream.aclose.side_effect = lambda: assert_proxy_disconnected(proxy)
+    session = _FakeSession()
+    session._response_streams[1] = stream
+    proxy.set_session(session)
+
+    await proxy.disconnect()
+
+    stream.aclose.assert_awaited_once()
+
+
+def assert_proxy_disconnected(proxy: _SessionProxy) -> None:
+    assert proxy.is_connected is False
+
+
+def test_request_reconnect_distinguishes_accepted_merged_stale_and_stopped():
+    client = MagicMock()
+    ll_session = LongLivedSession(client, "test_server")
+    ll_session._running = True
+    ll_session.session.set_session(_FakeSession())
+    generation = ll_session.session.generation
+
+    assert (
+        ll_session.session.request_reconnect(generation)
+        is client_pool_module.ReconnectRequestStatus.ACCEPTED
+    )
+    assert ll_session._reconnect_event.is_set()
+
+    ll_session._reconnect_event.clear()
+    assert (
+        ll_session.session.request_reconnect(generation)
+        is client_pool_module.ReconnectRequestStatus.MERGED
+    )
+    assert ll_session._reconnect_event.is_set() is False
+
+    ll_session.session.set_session(_FakeSession())
+    assert (
+        ll_session.session.request_reconnect(generation)
+        is client_pool_module.ReconnectRequestStatus.STALE_GENERATION
+    )
+    assert ll_session._reconnect_event.is_set() is False
+
+    ll_session._stop_event.set()
+    assert (
+        ll_session.session.request_reconnect(ll_session.session.generation)
+        is client_pool_module.ReconnectRequestStatus.STOPPED
+    )
+
+    ll_session._stop_event.clear()
+    ll_session._running = False
+    assert (
+        ll_session.session.request_reconnect(ll_session.session.generation)
+        is client_pool_module.ReconnectRequestStatus.STOPPED
+    )
+
+
+@pytest.mark.asyncio
+async def test_request_reconnect_returns_stopped_without_background_session_owner():
+    ll_session = LongLivedSession(object(), "test_server")
+    await ll_session.start()
+
+    assert (
+        ll_session.session.request_reconnect(ll_session.session.generation)
+        is client_pool_module.ReconnectRequestStatus.STOPPED
+    )
+
+    await ll_session.stop()
+
+
+@pytest.mark.asyncio
+async def test_long_lived_session_recovers_after_consecutive_reconnect_failures():
+    sessions = [_FakeSession(), _FakeSession()]
+    attempts = 0
+
+    class SessionContext:
+        async def __aenter__(self):
+            nonlocal attempts
+            attempts += 1
+            if attempts in {2, 3}:
+                raise ConnectionError(f"reconnect attempt {attempts} failed")
+            return sessions[0] if attempts == 1 else sessions[1]
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            del exc_type, exc, traceback
+
+    class FakeClient:
+        def session(self, server_name):
+            assert server_name == "test_server"
+            return SessionContext()
+
+    ll_session = LongLivedSession(FakeClient(), "test_server")
+    ll_session._RECONNECT_INITIAL_DELAY = 0
+    ll_session._RECONNECT_MAX_DELAY = 0
+
+    await ll_session.start()
+    original_proxy = ll_session.session
+    first_generation = original_proxy.generation
+
+    assert (
+        original_proxy.request_reconnect(first_generation)
+        is client_pool_module.ReconnectRequestStatus.ACCEPTED
+    )
+    assert await original_proxy.wait_for_new_session(first_generation, timeout=0.5) is True
+    assert attempts == 4
+    assert ll_session.session is original_proxy
+    assert original_proxy.generation == first_generation + 1
+    assert ll_session.is_running is True
+
+    await ll_session.stop()
 
 
 @pytest.mark.asyncio
@@ -108,6 +375,183 @@ async def test_client_pool_reuse_and_recreate():
 
 
 @pytest.mark.asyncio
+async def test_client_pool_waits_for_same_owner_to_recover_without_replacing_it(monkeypatch):
+    monkeypatch.setattr("yuxi.agents.mcp.client_pool.MCP_TOOL_RECONNECT_WAIT_SECONDS", 0.5)
+    pool = MCPClientPool()
+    config = {"transport": "stdio", "command": "node", "args": ["server.js"]}
+    config_hash = pool._calculate_config_hash(config)
+    proxy = _SessionProxy()
+    owner = MagicMock(session=proxy, is_running=True)
+    owner.stop = AsyncMock()
+    cache_key = ("test_server", "p1")
+    pool._sessions[cache_key] = (owner, config_hash)
+
+    get_session_task = asyncio.create_task(pool.get_session("test_server", "p1", config))
+    await asyncio.sleep(0)
+    assert get_session_task.done() is False
+
+    proxy.set_session(_FakeSession())
+
+    assert await get_session_task is proxy
+    assert pool._sessions[cache_key] == (owner, config_hash)
+    owner.stop.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_client_pool_recovery_timeout_preserves_running_owner(monkeypatch):
+    monkeypatch.setattr("yuxi.agents.mcp.client_pool.MCP_TOOL_RECONNECT_WAIT_SECONDS", 0.01)
+    pool = MCPClientPool()
+    config = {"transport": "stdio", "command": "node", "args": ["server.js"]}
+    config_hash = pool._calculate_config_hash(config)
+    proxy = _SessionProxy()
+    owner = MagicMock(session=proxy, is_running=True)
+    owner.stop = AsyncMock()
+    cache_key = ("test_server", "p1")
+    pool._sessions[cache_key] = (owner, config_hash)
+
+    with pytest.raises(client_pool_module.MCPConnectionRecoveringError, match="test_server"):
+        await pool.get_session("test_server", "p1", config)
+
+    assert pool._sessions[cache_key] == (owner, config_hash)
+    owner.stop.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_client_pool_waits_for_recovery_outside_dictionary_lock(monkeypatch):
+    monkeypatch.setattr("yuxi.agents.mcp.client_pool.MCP_TOOL_RECONNECT_WAIT_SECONDS", 0.5)
+    pool = MCPClientPool()
+    config = {"transport": "stdio", "command": "node", "args": ["server.js"]}
+    config_hash = pool._calculate_config_hash(config)
+    recovering_proxy = _SessionProxy()
+    recovering_owner = MagicMock(session=recovering_proxy, is_running=True)
+    connected_proxy = _SessionProxy()
+    connected_proxy.set_session(_FakeSession())
+    connected_owner = MagicMock(session=connected_proxy, is_running=True)
+    pool._sessions[("recovering", "p1")] = (recovering_owner, config_hash)
+    pool._sessions[("connected", "p1")] = (connected_owner, config_hash)
+
+    recovering_task = asyncio.create_task(pool.get_session("recovering", "p1", config))
+    await asyncio.sleep(0)
+
+    assert await asyncio.wait_for(pool.get_session("connected", "p1", config), timeout=0.1) is connected_proxy
+    assert recovering_task.done() is False
+
+    recovering_proxy.set_session(_FakeSession())
+    assert await recovering_task is recovering_proxy
+
+
+@pytest.mark.asyncio
+async def test_client_pool_waiter_cancellation_does_not_cancel_shared_initialization():
+    pool = MCPClientPool()
+    start_entered = asyncio.Event()
+    release_start = asyncio.Event()
+    created_sessions = []
+
+    class FakeLongLivedSession:
+        def __init__(self, client, server_name):
+            del client, server_name
+            self.session = MagicMock(is_connected=True)
+            self.stop = AsyncMock()
+            created_sessions.append(self)
+
+        async def start(self):
+            start_entered.set()
+            await release_start.wait()
+
+    async def fake_get_mcp_client(server_configs):
+        del server_configs
+        return MagicMock()
+
+    pool._get_mcp_client = fake_get_mcp_client
+    config = {"transport": "stdio", "command": "node", "args": ["server.js"]}
+    cache_key = ("test_server", "p1")
+
+    with patch("yuxi.agents.mcp.client_pool.LongLivedSession", FakeLongLivedSession):
+        owner_task = asyncio.create_task(pool.get_session("test_server", "p1", config))
+        await start_entered.wait()
+        waiter_task = asyncio.create_task(pool.get_session("test_server", "p1", config))
+        await asyncio.sleep(0)
+
+        waiter_task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await waiter_task
+
+        init_future = pool._sessions[cache_key]
+        assert isinstance(init_future, asyncio.Future)
+        assert init_future.cancelled() is False
+
+        release_start.set()
+        session = await owner_task
+
+    assert session is created_sessions[0].session
+    created_sessions[0].stop.assert_not_awaited()
+    await pool.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_client_pool_owner_cancellation_stops_unpublished_session():
+    pool = MCPClientPool()
+    start_entered = asyncio.Event()
+    created_sessions = []
+
+    class FakeLongLivedSession:
+        def __init__(self, client, server_name):
+            del client, server_name
+            self.session = MagicMock(is_connected=True)
+            self.stop = AsyncMock()
+            created_sessions.append(self)
+
+        async def start(self):
+            start_entered.set()
+            await asyncio.Event().wait()
+
+    async def fake_get_mcp_client(server_configs):
+        del server_configs
+        return MagicMock()
+
+    pool._get_mcp_client = fake_get_mcp_client
+    config = {"transport": "stdio", "command": "node", "args": ["server.js"]}
+
+    with patch("yuxi.agents.mcp.client_pool.LongLivedSession", FakeLongLivedSession):
+        owner_task = asyncio.create_task(pool.get_session("test_server", "p1", config))
+        await start_entered.wait()
+        owner_task.cancel()
+
+        with pytest.raises(asyncio.CancelledError):
+            await owner_task
+
+    created_sessions[0].stop.assert_awaited_once()
+    assert pool._sessions == {}
+
+
+@pytest.mark.asyncio
+async def test_client_pool_evicts_stopped_owner_before_recreating_session():
+    pool = MCPClientPool()
+    config = {"transport": "stdio", "command": "node", "args": ["server.js"]}
+    config_hash = pool._calculate_config_hash(config)
+    stopped_owner = MagicMock(is_running=False)
+    stopped_owner.session = _SessionProxy()
+    stopped_owner.stop = AsyncMock()
+    replacement_session = MagicMock(is_connected=True)
+    replacement_owner = MagicMock(session=replacement_session, is_running=True)
+    replacement_owner.start = AsyncMock()
+    replacement_owner.stop = AsyncMock()
+    pool._sessions[("test_server", "p1")] = (stopped_owner, config_hash)
+
+    with (
+        patch.object(pool, "_get_mcp_client", new=AsyncMock(return_value=MagicMock())),
+        patch("yuxi.agents.mcp.client_pool.LongLivedSession", return_value=replacement_owner),
+    ):
+        session = await pool.get_session("test_server", "p1", config)
+
+    assert session is replacement_session
+    stopped_owner.stop.assert_awaited_once()
+    replacement_owner.start.assert_awaited_once()
+
+    await pool.shutdown()
+
+
+@pytest.mark.asyncio
 async def test_clear_sessions_discards_connection_initializing_during_cleanup():
     pool = MCPClientPool()
     start_entered = asyncio.Event()
@@ -147,6 +591,14 @@ async def test_clear_sessions_discards_connection_initializing_during_cleanup():
     assert session is created_sessions[1].session
 
     await pool.shutdown()
+
+
+@pytest.mark.parametrize("invalid_value", ["-0.1", "nan", "inf", "-inf"])
+def test_reconnect_wait_seconds_rejects_invalid_values(monkeypatch, invalid_value):
+    monkeypatch.setenv("YUXI_MCP_TOOL_RECONNECT_WAIT_SECONDS", invalid_value)
+
+    with pytest.raises(ValueError, match="finite non-negative"):
+        runpy.run_path(client_pool_module.__file__, run_name=f"client_pool_invalid_{invalid_value}")
 
 
 @pytest.mark.asyncio
