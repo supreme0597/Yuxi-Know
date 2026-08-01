@@ -83,7 +83,7 @@
 - 使用 `_SessionProxy` 将工具闭包指向当前 Session。
 - 设计上在连接断开后按 1 秒起始、最大 30 秒的指数退避重连。
 - 重连后将代理切换到新 Session。
-- 通过 ping 检测空闲连接是否仍然有效。
+- legacy SSE 通过 Adapter 公开的 `session_kwargs.message_handler` 将后台 reader 断链通知给 Session 所有者；无法产生异常通知的 clean EOF 等场景继续由 ping 兜底。
 
 `MultiServerMCPClient.session(server_name)` 会主动创建连接并执行 `initialize()`；成功返回后，`LongLivedSession` 才通过 `_SessionProxy.set_session()` 发布该 Session。因此，主动创建新 Session 的职责属于 `LongLivedSession._run_loop()`，不是等待中的工具调用。
 
@@ -476,9 +476,10 @@ sequenceDiagram
 作为 ClientSession 创建和重建的唯一所有者，修复现有重连循环并保留退避策略：
 
 - 新增 `_reconnect_event`，由 `_SessionProxy.request_reconnect()` 幂等触发。
+- legacy SSE 新增每个所有者独占的 `_reader_error_event`；SDK 后台 reader 收到明确的 `RemoteProtocolError` 时只设置事件，由唯一 `_run_loop` 关闭旧 Session 并重建连接。
 - 新增 `_reconnect_generation`，统一标识主动请求、ping 失败或传输退出正在恢复的 generation；在 Event 已被消费但新 Session 尚未发布的窗口内继续合并同 generation 请求。
 - `request_reconnect()` 在同一事件循环内完成 generation、运行状态、已请求 generation 和 event 状态判断，中间不执行 await，保证检查与置位之间没有任务切换。
-- 扩展现有 keepalive 等待，使其同时响应 stop、主动 reconnect 和定时 ping，而不是只等待 stop 或最长 30 秒的 ping 周期。
+- 扩展现有 keepalive 等待，使其同时响应 stop、主动 reconnect、legacy SSE reader error 和定时 ping，而不是只等待 stop 或最长 30 秒的 ping 周期。
 - 收到主动 reconnect 后，立即将代理标记为不可用、关闭旧 pending streams、退出旧 Session 上下文，然后进入统一退避重连路径。
 - 使用 `first_connect` 判断是否从未成功建立 Session。
 - 首次启动连接失败时终止 `start()`，保持当前快速暴露配置或鉴权错误的行为。
@@ -498,6 +499,8 @@ sequenceDiagram
 不修改当前 1 秒起始、最大 30 秒的指数退避参数。工具调用的 5 秒等待不会取消或停止这个后台循环。
 
 #### `MCPClientPool`
+
+创建 legacy SSE client 前，连接池复制 `session_kwargs` 并组合已有 `message_handler`，避免覆盖 Adapter 调用方逻辑或修改共享 runtime config。reader error 事件必须在进入每次新 Session 前清除，不能在 `initialize()` 成功后再次清除，以免丢失“初始化响应已到达但 SSE 随即断开”的边界信号；若 Session 上下文返回时事件已经置位，该 generation 不得发布为 ready，必须直接退出并重连，但生命周期应视为已经完成过首次建连，使后续失败继续执行退避重试。streamable HTTP、stdio 和 websocket 不注入该事件，继续使用各自 transport 的原有生命周期。
 
 临时断线期间必须保持连接条目稳定：
 

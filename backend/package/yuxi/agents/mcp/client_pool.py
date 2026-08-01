@@ -11,7 +11,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 import httpx
-from anyio import ClosedResourceError
+from anyio import ClosedResourceError, lowlevel
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from yuxi.agents.mcp.mcp_auth.orchestrator import mcp_auth_context_var
 
@@ -48,6 +48,41 @@ def clear_server_resolved_headers_cache(server_name: str) -> None:
 
 
 logger = logging.getLogger("yuxi.mcp.client_pool")
+
+_MCP_SSE_RESTART_DISCONNECT_MESSAGE = (
+    "peer closed connection without sending complete message body (incomplete chunked read)"
+)
+_MCP_SSE_FILTER_MARKER = "_yuxi_mcp_sse_restart_disconnect_filter"
+
+
+class _MCPSSERestartDisconnectFilter(logging.Filter):
+    """将服务端重启导致的已知 SSE 断流日志降级，保留其他 SDK 异常。"""
+
+    _yuxi_mcp_sse_restart_disconnect_filter = True
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        exc = record.exc_info[1] if record.exc_info else None
+        if (
+            record.name == "mcp.client.sse"
+            and record.levelno == logging.ERROR
+            and record.msg == "Error in sse_reader"
+            and not record.args
+            and type(exc) is httpx.RemoteProtocolError
+            and exc.args == (_MCP_SSE_RESTART_DISCONNECT_MESSAGE,)
+        ):
+            record.levelno = logging.WARNING
+            record.levelname = "WARNING"
+            record.msg = "MCP SSE connection closed by peer; reconnecting"
+            record.args = ()
+            record.exc_info = None
+            record.exc_text = None
+            record.stack_info = None
+        return True
+
+
+_mcp_sse_logger = logging.getLogger("mcp.client.sse")
+if not any(getattr(log_filter, _MCP_SSE_FILTER_MARKER, False) for log_filter in _mcp_sse_logger.filters):
+    _mcp_sse_logger.addFilter(_MCPSSERestartDisconnectFilter())
 
 
 class ReconnectRequestStatus(StrEnum):
@@ -341,10 +376,17 @@ class LongLivedSession:
     _RECONNECT_INITIAL_DELAY = 1.0
     _RECONNECT_MAX_DELAY = 30.0
 
-    def __init__(self, client: MultiServerMCPClient, server_name: str):
+    def __init__(
+        self,
+        client: MultiServerMCPClient,
+        server_name: str,
+        *,
+        reader_error_event: asyncio.Event | None = None,
+    ):
         self.client = client
         self.server_name = server_name
         self._owns_session_loop = hasattr(client, "session")
+        self._reader_error_event = reader_error_event
         self._running = False
         self._loop_task: asyncio.Task | None = None
         self._ready_event = asyncio.Event()
@@ -412,22 +454,28 @@ class LongLivedSession:
 
         try:
             while not self._stop_event.is_set():
+                if self._reader_error_event is not None:
+                    self._reader_error_event.clear()
                 reconnect = False
                 try:
                     async with self.client.session(self.server_name) as session:
-                        self._session_proxy.set_session(session)
-                        self._reconnect_generation = None
-                        self._reconnect_event.clear()
-                        self._ready_event.set()
-                        if not first_connect:
-                            logger.info(f"MCP session reconnected for {self.server_name}")
-                        first_connect = False
-                        reconnect_delay = self._RECONNECT_INITIAL_DELAY
-                        reason = await self._keep_alive_until_stopped(session)
-                        if reason == "stop":
-                            break
-                        await self._session_proxy.disconnect()
-                        reconnect = True
+                        if self._reader_error_event is not None and self._reader_error_event.is_set():
+                            first_connect = False
+                            reconnect = True
+                        else:
+                            self._session_proxy.set_session(session)
+                            self._reconnect_generation = None
+                            self._reconnect_event.clear()
+                            self._ready_event.set()
+                            if not first_connect:
+                                logger.info(f"MCP session reconnected for {self.server_name}")
+                            first_connect = False
+                            reconnect_delay = self._RECONNECT_INITIAL_DELAY
+                            reason = await self._keep_alive_until_stopped(session)
+                            if reason == "stop":
+                                break
+                            await self._session_proxy.disconnect()
+                            reconnect = True
                 except asyncio.CancelledError:
                     raise
                 except BaseException as exc:
@@ -483,22 +531,28 @@ class LongLivedSession:
         while not self._stop_event.is_set():
             stop_task = asyncio.create_task(self._stop_event.wait())
             reconnect_task = asyncio.create_task(self._reconnect_event.wait())
+            wait_tasks = [stop_task, reconnect_task]
+            if self._reader_error_event is not None:
+                wait_tasks.append(asyncio.create_task(self._reader_error_event.wait()))
             try:
                 done, _ = await asyncio.wait(
-                    {stop_task, reconnect_task},
+                    wait_tasks,
                     timeout=None if _SESSION_PING_INTERVAL <= 0 else _SESSION_PING_INTERVAL,
                     return_when=asyncio.FIRST_COMPLETED,
                 )
             finally:
-                for task in (stop_task, reconnect_task):
+                for task in wait_tasks:
                     if not task.done():
                         task.cancel()
-                await asyncio.gather(stop_task, reconnect_task, return_exceptions=True)
+                await asyncio.gather(*wait_tasks, return_exceptions=True)
 
             if self._stop_event.is_set():
                 return "stop"
             if self._reconnect_event.is_set():
                 self._reconnect_event.clear()
+                return "reconnect"
+            if self._reader_error_event is not None and self._reader_error_event.is_set():
+                self._reader_error_event.clear()
                 return "reconnect"
             if done:
                 continue
@@ -667,6 +721,7 @@ class MCPClientPool:
         ll_session: LongLivedSession | None = None
         try:
             client_config = dict(runtime_config)
+            reader_error_event: asyncio.Event | None = None
             # 仅动态 token provider 需要挂载 DynamicMCPTokenAuth
             # （legacy_static / bound_secret / stdio_env 的 headers 已在 resolve_runtime_mcp_config 中静态注入）
             auth_config_payload = client_config.get("auth_config")
@@ -698,8 +753,25 @@ class MCPClientPool:
                 read_timeout = sse_read_timeout or timeout or 300
                 from datetime import timedelta
 
-                client_config.setdefault("session_kwargs", {})
-                client_config["session_kwargs"]["read_timeout_seconds"] = timedelta(seconds=float(read_timeout))
+                session_kwargs = dict(client_config.get("session_kwargs") or {})
+                session_kwargs["read_timeout_seconds"] = timedelta(seconds=float(read_timeout))
+
+                if client_config.get("transport") == "sse":
+                    sse_reader_error_event = asyncio.Event()
+                    reader_error_event = sse_reader_error_event
+                    existing_message_handler = session_kwargs.get("message_handler")
+
+                    async def handle_session_message(message: Any) -> None:
+                        if isinstance(message, httpx.RemoteProtocolError):
+                            sse_reader_error_event.set()
+                        if existing_message_handler is not None:
+                            await existing_message_handler(message)
+                        else:
+                            await lowlevel.checkpoint()
+
+                    session_kwargs["message_handler"] = handle_session_message
+
+                client_config["session_kwargs"] = session_kwargs
 
             logger.info(
                 f"Creating new long-lived MCP session for {cache_key} (transport: {client_config.get('transport')})"
@@ -707,7 +779,10 @@ class MCPClientPool:
             client = await self._get_mcp_client({server_name: client_config})
             if client is None:
                 raise RuntimeError(f"Failed to initialize MCP client for {server_name}")
-            ll_session = LongLivedSession(client, server_name)
+            if reader_error_event is None:
+                ll_session = LongLivedSession(client, server_name)
+            else:
+                ll_session = LongLivedSession(client, server_name, reader_error_event=reader_error_event)
             await ll_session.start()
 
             result = (ll_session, config_hash)

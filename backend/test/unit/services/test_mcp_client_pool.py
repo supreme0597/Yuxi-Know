@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import runpy
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from yuxi.agents.mcp import client_pool as client_pool_module
@@ -297,6 +299,248 @@ async def test_long_lived_session_recovers_after_consecutive_reconnect_failures(
     assert ll_session.is_running is True
 
     await ll_session.stop()
+
+
+@pytest.mark.asyncio
+async def test_long_lived_session_reconnects_when_reader_error_event_is_set():
+    sessions = [_FakeSession(), _FakeSession()]
+    attempts = 0
+    reader_error_event = asyncio.Event()
+
+    class SessionContext:
+        async def __aenter__(self):
+            nonlocal attempts
+            attempts += 1
+            return sessions[min(attempts - 1, 1)]
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            del exc_type, exc, traceback
+
+    class FakeClient:
+        def session(self, server_name):
+            assert server_name == "test_server"
+            return SessionContext()
+
+    client = FakeClient()
+    ll_session = LongLivedSession(client, "test_server", reader_error_event=reader_error_event)
+    ll_session._RECONNECT_INITIAL_DELAY = 0
+    ll_session._RECONNECT_MAX_DELAY = 0
+
+    await ll_session.start()
+    first_generation = ll_session.session.generation
+    reader_error_event.set()
+
+    assert await ll_session.session.wait_for_new_session(first_generation, timeout=0.5) is True
+    assert attempts == 2
+
+    await ll_session.stop()
+
+
+@pytest.mark.asyncio
+async def test_long_lived_session_keeps_reader_error_reported_during_session_enter():
+    reader_error_event = asyncio.Event()
+    second_session_entered = asyncio.Event()
+    release_second_session = asyncio.Event()
+    attempts = 0
+
+    class SessionContext:
+        async def __aenter__(self):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                reader_error_event.set()
+            else:
+                second_session_entered.set()
+                await release_second_session.wait()
+            return _FakeSession()
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            del exc_type, exc, traceback
+
+    class FakeClient:
+        def session(self, server_name):
+            assert server_name == "test_server"
+            return SessionContext()
+
+    ll_session = LongLivedSession(
+        FakeClient(),
+        "test_server",
+        reader_error_event=reader_error_event,
+    )
+    ll_session._RECONNECT_INITIAL_DELAY = 0
+    ll_session._RECONNECT_MAX_DELAY = 0
+
+    start_task = asyncio.create_task(ll_session.start())
+    await second_session_entered.wait()
+
+    assert start_task.done() is False
+    assert attempts == 2
+
+    release_second_session.set()
+    await asyncio.wait_for(start_task, timeout=0.5)
+
+    await ll_session.stop()
+
+
+@pytest.mark.asyncio
+async def test_long_lived_session_keeps_retrying_after_initial_reader_disconnect():
+    reader_error_event = asyncio.Event()
+    attempts = 0
+
+    class SessionContext:
+        async def __aenter__(self):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                reader_error_event.set()
+                return _FakeSession()
+            if attempts in {2, 3}:
+                raise ConnectionError(f"reconnect attempt {attempts} failed")
+            return _FakeSession()
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            del exc_type, exc, traceback
+
+    class FakeClient:
+        def session(self, server_name):
+            assert server_name == "test_server"
+            return SessionContext()
+
+    ll_session = LongLivedSession(
+        FakeClient(),
+        "test_server",
+        reader_error_event=reader_error_event,
+    )
+    ll_session._RECONNECT_INITIAL_DELAY = 0
+    ll_session._RECONNECT_MAX_DELAY = 0
+
+    await ll_session.start()
+
+    assert attempts == 4
+    assert ll_session.session.is_connected is True
+
+    await ll_session.stop()
+
+
+@pytest.mark.asyncio
+async def test_client_pool_sse_reader_handler_preserves_existing_handler_and_signals_owner():
+    observed_messages = []
+
+    async def existing_message_handler(message):
+        observed_messages.append(message)
+
+    original_session_kwargs = {"message_handler": existing_message_handler}
+    runtime_config = {
+        "transport": "sse",
+        "url": "http://mcp.test/sse",
+        "session_kwargs": original_session_kwargs,
+    }
+    mock_client = MagicMock()
+    mock_session = MagicMock(is_connected=True)
+    mock_owner = MagicMock(session=mock_session)
+    mock_owner.start = AsyncMock()
+    mock_owner.stop = AsyncMock()
+    pool = MCPClientPool()
+
+    with (
+        patch("yuxi.agents.mcp.client_pool.MultiServerMCPClient", return_value=mock_client) as client_class,
+        patch("yuxi.agents.mcp.client_pool.LongLivedSession", return_value=mock_owner) as owner_class,
+    ):
+        assert await pool.get_session("test_server", "p1", runtime_config) is mock_session
+
+    client_config = client_class.call_args.args[0]["test_server"]
+    message_handler = client_config["session_kwargs"]["message_handler"]
+    reader_error_event = owner_class.call_args.kwargs["reader_error_event"]
+    error = httpx.RemoteProtocolError(
+        "peer closed connection without sending complete message body (incomplete chunked read)"
+    )
+
+    await message_handler(error)
+
+    assert observed_messages == [error]
+    assert reader_error_event.is_set()
+    assert client_config["session_kwargs"] is not original_session_kwargs
+    assert runtime_config["session_kwargs"] is original_session_kwargs
+
+
+def test_mcp_sse_restart_disconnect_log_is_downgraded_without_traceback(caplog):
+    sdk_logger = logging.getLogger("mcp.client.sse")
+    error = httpx.RemoteProtocolError(
+        "peer closed connection without sending complete message body (incomplete chunked read)"
+    )
+
+    with caplog.at_level(logging.WARNING, logger="mcp.client.sse"):
+        try:
+            raise error
+        except httpx.RemoteProtocolError:
+            sdk_logger.exception("Error in sse_reader")
+
+    record = caplog.records[-1]
+    assert record.levelno == logging.WARNING
+    assert record.exc_info is None
+    assert record.getMessage() == "MCP SSE connection closed by peer; reconnecting"
+
+
+def test_mcp_sse_unexpected_reader_error_keeps_error_traceback(caplog):
+    sdk_logger = logging.getLogger("mcp.client.sse")
+
+    with caplog.at_level(logging.ERROR, logger="mcp.client.sse"):
+        try:
+            raise ValueError("invalid event payload")
+        except ValueError:
+            sdk_logger.exception("Error in sse_reader")
+
+    record = caplog.records[-1]
+    assert record.levelno == logging.ERROR
+    assert record.exc_info is not None
+    assert record.getMessage() == "Error in sse_reader"
+
+
+def test_mcp_sse_similar_protocol_error_keeps_error_traceback(caplog):
+    sdk_logger = logging.getLogger("mcp.client.sse")
+
+    with caplog.at_level(logging.ERROR, logger="mcp.client.sse"):
+        try:
+            raise httpx.RemoteProtocolError("proxy returned incomplete chunked read metadata")
+        except httpx.RemoteProtocolError:
+            sdk_logger.exception("Error in sse_reader")
+
+    record = caplog.records[-1]
+    assert record.levelno == logging.ERROR
+    assert record.exc_info is not None
+    assert record.getMessage() == "Error in sse_reader"
+
+
+@pytest.mark.parametrize(
+    "sdk_message",
+    ["Encountered SSE exception", "Error parsing server message", "Error in post_writer"],
+)
+def test_mcp_sse_other_sdk_error_messages_keep_error_traceback(caplog, sdk_message):
+    sdk_logger = logging.getLogger("mcp.client.sse")
+
+    with caplog.at_level(logging.ERROR, logger="mcp.client.sse"):
+        try:
+            raise httpx.RemoteProtocolError(
+                "peer closed connection without sending complete message body (incomplete chunked read)"
+            )
+        except httpx.RemoteProtocolError:
+            sdk_logger.exception(sdk_message)
+
+    record = caplog.records[-1]
+    assert record.levelno == logging.ERROR
+    assert record.exc_info is not None
+    assert record.getMessage() == sdk_message
+
+
+def test_mcp_sse_disconnect_filter_installation_is_reload_safe():
+    sdk_logger = logging.getLogger("mcp.client.sse")
+    marker = client_pool_module._MCP_SSE_FILTER_MARKER
+    before = sum(bool(getattr(log_filter, marker, False)) for log_filter in sdk_logger.filters)
+
+    runpy.run_path(client_pool_module.__file__, run_name="client_pool_filter_reload_test")
+
+    after = sum(bool(getattr(log_filter, marker, False)) for log_filter in sdk_logger.filters)
+    assert before == after == 1
 
 
 @pytest.mark.asyncio
