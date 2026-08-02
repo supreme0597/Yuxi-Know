@@ -478,6 +478,9 @@ class PostgresManager(metaclass=SingletonMeta):
                 updated_at TIMESTAMPTZ DEFAULT NOW()
             )
             """,
+            # 模型供应商 share_config 字段迁移（幂等）。
+            "ALTER TABLE IF EXISTS model_providers ADD COLUMN IF NOT EXISTS share_config JSONB NOT NULL DEFAULT "
+            '\'{"access_level": "global", "department_ids": [], "user_uids": []}\'::jsonb',
             """
             CREATE TABLE IF NOT EXISTS subagent_threads (
                 id SERIAL PRIMARY KEY,

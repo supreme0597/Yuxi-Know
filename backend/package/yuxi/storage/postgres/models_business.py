@@ -19,6 +19,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from yuxi.storage.minio.client import normalize_public_minio_url
 from yuxi.utils.datetime_utils import format_utc_datetime, utc_now_naive
+from yuxi.utils.share_config import EMPTY_SHARE_CONFIG
 
 Base = declarative_base()
 
@@ -649,12 +650,27 @@ class ModelProvider(Base):
     is_enabled = Column(Boolean, nullable=False, default=True, index=True, comment="供应商是否启用")
     is_builtin = Column(Boolean, nullable=False, default=False, comment="是否内置")
 
+    share_config = Column(
+        JSON,
+        nullable=False,
+        default=dict,
+        comment="共享权限配置，结构同 Agent.share_config",
+    )
+
     created_by = Column(String(100), nullable=True)
     updated_by = Column(String(100), nullable=True)
     created_at = Column(DateTime, default=utc_now_naive, comment="创建时间")
     updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive, comment="更新时间")
 
-    def to_dict(self) -> dict[str, Any]:
+    def _mask_api_key(self) -> str | None:
+        if not self.api_key:
+            return None
+        if len(self.api_key) <= 8:
+            return "***"
+        return f"{self.api_key[:3]}***{self.api_key[-4:]}"
+
+    def to_dict(self, *, include_api_key: bool = False) -> dict[str, Any]:
+        masked = self._mask_api_key()
         return {
             "id": self.id,
             "provider_id": self.provider_id,
@@ -668,13 +684,15 @@ class ModelProvider(Base):
             "embedding_models_endpoint": self.embedding_models_endpoint,
             "rerank_models_endpoint": self.rerank_models_endpoint,
             "api_key_env": self.api_key_env,
-            "api_key": self.api_key,
+            "api_key": self.api_key if include_api_key else masked,
+            "api_key_masked": masked,
             "capabilities": self.capabilities or [],
             "enabled_models": self.enabled_models or [],
             "headers_json": self.headers_json or {},
             "extra_json": self.extra_json or {},
             "is_enabled": bool(self.is_enabled),
             "is_builtin": bool(self.is_builtin),
+            "share_config": self.share_config or EMPTY_SHARE_CONFIG.copy(),
             "created_by": self.created_by,
             "updated_by": self.updated_by,
             "created_at": format_utc_datetime(self.created_at),
