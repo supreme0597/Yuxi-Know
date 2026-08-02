@@ -653,7 +653,7 @@ class ModelProvider(Base):
     share_config = Column(
         JSON,
         nullable=False,
-        default=dict,
+        default=lambda: EMPTY_SHARE_CONFIG.copy(),
         comment="共享权限配置，结构同 Agent.share_config",
     )
 
@@ -663,6 +663,10 @@ class ModelProvider(Base):
     updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive, comment="更新时间")
 
     def _mask_api_key(self) -> str | None:
+        """对 api_key 进行脱敏处理。
+
+        规则：None 返回 None，长度 ≤8 返回 "***"，否则显示前 3 位 + "***" + 后 4 位。
+        """
         if not self.api_key:
             return None
         if len(self.api_key) <= 8:

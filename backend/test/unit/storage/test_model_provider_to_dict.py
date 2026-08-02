@@ -42,3 +42,10 @@ def test_to_dict_handles_none_api_key():
     data = p.to_dict()
     assert data["api_key"] is None
     assert data["api_key_masked"] is None
+
+
+def test_to_dict_preserves_non_default_share_config():
+    p = _build("sk-test-key")
+    p.share_config = {"access_level": "department", "department_ids": [1, 2], "user_uids": []}
+    data = p.to_dict()
+    assert data["share_config"] == {"access_level": "department", "department_ids": [1, 2], "user_uids": []}
