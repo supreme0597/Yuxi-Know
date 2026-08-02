@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from yuxi.models.providers.builtin import BUILTIN_PROVIDERS
 from yuxi.models.providers.repository import (
+    count_provider_references,
     create_model_provider,
     delete_model_provider,
     get_model_provider,
@@ -263,13 +264,27 @@ async def ensure_builtin_model_providers_in_db(db: AsyncSession) -> None:
         await create_model_provider(db, _normalize_payload(payload))
 
 
-async def create_provider_config(db: AsyncSession, data: dict[str, Any], username: str) -> ModelProvider:
-    """创建独立模型供应商配置。"""
+async def create_provider_config(db: AsyncSession, data: dict[str, Any], current_user) -> ModelProvider:
+    """创建模型供应商配置，按当前用户角色决定是否强制私有。"""
+    from yuxi.models.providers.share import normalize_provider_share_config
+    from yuxi.repositories.agent_repository import ADMIN_ROLES
+
     payload = _normalize_payload(data)
     if await get_model_provider(db, payload["provider_id"]):
         raise ValueError(f"供应商 {payload['provider_id']} 已存在")
-    payload["created_by"] = username
-    payload["updated_by"] = username
+
+    if "share_config" not in data:
+        data["share_config"] = {"access_level": "global", "department_ids": [], "user_uids": []}
+    payload["share_config"] = normalize_provider_share_config(
+        data["share_config"],
+        user_uid=str(current_user.uid),
+        department_id=current_user.department_id,
+        force_private=current_user.role not in ADMIN_ROLES,
+    )
+    if not data.get("created_by"):
+        data["created_by"] = str(current_user.uid)
+    payload["created_by"] = str(current_user.uid)
+    payload["updated_by"] = str(current_user.uid)
     return await create_model_provider(db, payload)
 
 
@@ -277,29 +292,57 @@ async def update_provider_config(
     db: AsyncSession,
     provider_id: str,
     data: dict[str, Any],
-    username: str,
+    current_user,
 ) -> ModelProvider | None:
-    """更新独立模型供应商配置。"""
+    """更新模型供应商配置。is_builtin 强制 share_config=global。"""
+    from yuxi.models.providers.share import normalize_provider_share_config
+    from yuxi.repositories.agent_repository import ADMIN_ROLES
+
     provider = await get_model_provider(db, provider_id)
     if provider is None:
         return None
+    if provider.is_builtin and "share_config" in data:
+        data.pop("share_config")
+    if "share_config" in data:
+        data["share_config"] = normalize_provider_share_config(
+            data["share_config"],
+            user_uid=str(current_user.uid),
+            department_id=current_user.department_id,
+            force_private=current_user.role not in ADMIN_ROLES,
+        )
     payload = _normalize_payload(data, partial=True)
     # partial 更新时仅传 enabled_models，结合 DB 中现有 capabilities 校验
     if "enabled_models" in payload and "capabilities" not in payload:
         existing_caps = set(provider.capabilities or [])
         if existing_caps:
             _validate_models_capabilities(payload.get("enabled_models"), existing_caps)
+    # TODO 需要分析下，丢弃代码了
+    # payload = {k: v for k, v in payload.items() if k != "provider_id"}
+    #     payload["updated_by"] = str(current_user.uid)
     payload["updated_by"] = username
     return await update_model_provider(db, provider, payload)
 
 
-async def delete_provider_config(db: AsyncSession, provider_id: str) -> bool:
-    """删除独立模型供应商配置。"""
+async def delete_provider_config(
+    db: AsyncSession,
+    provider_id: str,
+    current_user,
+) -> tuple[bool, dict | None]:
+    """删除模型供应商配置。被引用时返回 (False, references)。"""
+    from yuxi.models.providers.share import user_can_manage_provider
+
     provider = await get_model_provider(db, provider_id)
     if provider is None:
-        return False
+        return False, None
+    if provider.is_builtin:
+        return False, None
+    if not user_can_manage_provider(current_user, provider):
+        return False, None
+    references = await count_provider_references(db, provider_id)
+    if references:
+        return False, references
     await delete_model_provider(db, provider)
-    return True
+    return True, None
 
 
 async def _fetch_models_from_endpoint(

@@ -85,7 +85,7 @@ async def create_provider(
         provider = await create_provider_config(
             db,
             payload.model_dump(exclude_none=True),
-            current_user.username,
+            current_user,
         )
         await db.commit()
         await _refresh_model_cache()
@@ -136,7 +136,7 @@ async def update_provider(
         ):
             if nullable_field in unset_fields and getattr(payload, nullable_field) is None:
                 data[nullable_field] = None
-        provider = await update_provider_config(db, provider_id, data, current_user.username)
+        provider = await update_provider_config(db, provider_id, data, current_user)
         if provider is None:
             raise HTTPException(status_code=404, detail=f"供应商 {provider_id} 不存在")
         await db.commit()
@@ -158,8 +158,10 @@ async def delete_provider(
     db: AsyncSession = Depends(get_db),
 ):
     """删除独立模型供应商配置。"""
-    deleted = await delete_provider_config(db, provider_id)
+    deleted, references = await delete_provider_config(db, provider_id, current_user)
     if not deleted:
+        if references:
+            raise HTTPException(status_code=409, detail=f"供应商 {provider_id} 被以下资源引用，无法删除: {references}")
         raise HTTPException(status_code=404, detail=f"供应商 {provider_id} 不存在")
     await db.commit()
     await _refresh_model_cache()
