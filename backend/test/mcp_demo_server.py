@@ -34,6 +34,7 @@ safe_echo_annotations = types.ToolAnnotations(
     idempotentHint=True,
 )
 active_tool_calls: dict[str, int] = {}
+tool_call_messages: dict[str, int] = {}
 
 @server.list_tools()
 async def handle_list_tools() -> list[types.Tool]:
@@ -150,10 +151,11 @@ async def handle_call_tool(name: str, arguments: dict[str, Any] | None) -> list[
         return [types.TextContent(type="text", text="[User Output] 成功获取用户专有敏感配置与画像数据")]
 
     elif name in {"echo_delayed_safe", "echo_delayed_unannotated"}:
+        message = str(args.get("message", ""))
+        tool_call_messages[message] = tool_call_messages.get(message, 0) + 1
         active_tool_calls[name] = active_tool_calls.get(name, 0) + 1
         try:
             await asyncio.sleep(float(args.get("delay_seconds", 0)))
-            message = args.get("message", "")
             return [types.TextContent(type="text", text=f"[Delayed Output] 回显内容: {message}")]
         finally:
             remaining = active_tool_calls[name] - 1
@@ -172,7 +174,7 @@ async def handle_call_tool(name: str, arguments: dict[str, Any] | None) -> list[
 
 session_manager = StreamableHTTPSessionManager(
     app=server,
-    stateless=True,
+    stateless=os.environ.get("MCP_DEMO_STREAMABLE_STATEFUL") != "1",
 )
 
 @asynccontextmanager
@@ -188,7 +190,10 @@ sse_transport = SseServerTransport("/messages")
 
 @app.get("/test/faults/state")
 async def get_fault_state():
-    return {"active_tools": dict(active_tool_calls)}
+    return {
+        "active_tools": dict(active_tool_calls),
+        "tool_call_messages": dict(tool_call_messages),
+    }
 
 
 async def restart_process():

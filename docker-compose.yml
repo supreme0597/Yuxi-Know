@@ -423,6 +423,64 @@ services:
     command: uv run --no-sync --no-dev test/mcp_demo_server.py --transport sse --port 8999
     restart: unless-stopped
 
+  mcp-streamable-demo-a:
+    image: yuxi-api:${YUXI_VERSION:-0.6.2}
+    working_dir: /app
+    volumes:
+      - ./backend/package:/app/package
+      - ./backend/test:/app/test
+      - ./.env:/app/.env
+    environment:
+      MCP_DEMO_STREAMABLE_STATEFUL: "1"
+    networks:
+      - app-network
+    command: uv run --no-sync --no-dev test/mcp_demo_server.py --transport streamable-http --port 9001
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9001/test/faults/state || exit 1"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+  mcp-streamable-demo-b:
+    image: yuxi-api:${YUXI_VERSION:-0.6.2}
+    working_dir: /app
+    volumes:
+      - ./backend/package:/app/package
+      - ./backend/test:/app/test
+      - ./.env:/app/.env
+    environment:
+      MCP_DEMO_STREAMABLE_STATEFUL: "1"
+    networks:
+      - app-network
+    command: uv run --no-sync --no-dev test/mcp_demo_server.py --transport streamable-http --port 9002
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9002/test/faults/state || exit 1"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+  mcp-streamable-fault-proxy:
+    image: yuxi-api:${YUXI_VERSION:-0.6.2}
+    working_dir: /app
+    volumes:
+      - ./backend/test:/app/test
+    networks:
+      - app-network
+    depends_on:
+      mcp-streamable-demo-a:
+        condition: service_healthy
+      mcp-streamable-demo-b:
+        condition: service_healthy
+    command: uv run --no-sync --no-dev test/mcp_streamable_fault_proxy.py --port 8998
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8998/test/faults/state || exit 1"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
 volumes:
   nltk_data:
 
