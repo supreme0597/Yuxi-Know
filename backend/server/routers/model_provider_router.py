@@ -8,16 +8,20 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.utils.auth_middleware import get_admin_user, get_db, get_required_user
+from yuxi.models.providers.repository import (
+    count_provider_references,
+    get_visible_model_provider,
+    list_visible_model_providers,
+)
 from yuxi.models.providers.service import (
     check_credential_status,
     create_provider_config,
     delete_provider_config,
     fetch_remote_models,
-    get_all_model_providers,
-    get_model_provider_by_id,
     test_model_status_by_spec,
     update_provider_config,
 )
+from yuxi.models.providers.share import user_can_manage_provider
 from yuxi.storage.postgres.models_business import User
 from yuxi.storage.postgres.manager import pg_manager
 from yuxi.utils import logger
@@ -28,6 +32,7 @@ model_providers = APIRouter(prefix="/system/model-providers", tags=["model-provi
 async def _refresh_model_cache() -> None:
     """刷新模型缓存（CRUD 操作后调用）。"""
     from yuxi.models.providers.cache import model_cache
+    from yuxi.models.providers.service import get_all_model_providers
 
     try:
         async with pg_manager.get_async_session_context() as session:
@@ -57,39 +62,43 @@ class ModelProviderPayload(BaseModel):
     extra_json: dict[str, Any] | None = Field(None, description="扩展配置")
     is_enabled: bool | None = Field(None, description="是否启用")
     is_builtin: bool | None = Field(None, description="是否内置")
+    share_config: dict[str, Any] | None = Field(None, description="共享权限配置")
+
+
+def _serialize_provider(provider, *, current_user) -> dict:
+    """序列化 provider，附加权限状态与凭据状态。"""
+    data = provider.to_dict(include_api_key=False)
+    data["credential_status"] = check_credential_status(provider)
+    data["can_manage"] = user_can_manage_provider(current_user, provider)
+    return data
 
 
 @model_providers.get("")
 async def list_providers(
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """获取独立模型供应商配置列表。"""
-    providers = await get_all_model_providers(db)
-    data = []
-    for p in providers:
-        d = p.to_dict()
-        d["credential_status"] = check_credential_status(p)
-        data.append(d)
-    return {"success": True, "data": data}
+    """获取对当前用户可见的模型供应商配置列表。"""
+    providers = await list_visible_model_providers(db, current_user)
+    return {"success": True, "data": [_serialize_provider(p, current_user=current_user) for p in providers]}
 
 
 @model_providers.post("")
 async def create_provider(
     payload: ModelProviderPayload,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """创建独立模型供应商配置。"""
+    """创建模型供应商配置。非管理员角色默认私有。"""
     try:
         provider = await create_provider_config(
             db,
             payload.model_dump(exclude_none=True),
-            current_user,
+            current_user=current_user,
         )
         await db.commit()
         await _refresh_model_cache()
-        return {"success": True, "data": provider.to_dict()}
+        return {"success": True, "data": _serialize_provider(provider, current_user=current_user)}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -100,48 +109,46 @@ async def create_provider(
 @model_providers.get("/{provider_id}")
 async def get_provider(
     provider_id: str,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """获取单个独立模型供应商配置。"""
-    provider = await get_model_provider_by_id(db, provider_id)
+    """获取单个模型供应商配置（需可见）。"""
+    provider = await get_visible_model_provider(db, provider_id, current_user)
     if provider is None:
         raise HTTPException(status_code=404, detail=f"供应商 {provider_id} 不存在")
-    data = provider.to_dict()
-    data["credential_status"] = check_credential_status(provider)
-    return {"success": True, "data": data}
+    return {"success": True, "data": _serialize_provider(provider, current_user=current_user)}
 
 
 @model_providers.put("/{provider_id}")
 async def update_provider(
     provider_id: str,
     payload: ModelProviderPayload,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """更新独立模型供应商配置。"""
+    """更新模型供应商配置（需可见且可管理）。"""
+    provider = await get_visible_model_provider(db, provider_id, current_user)
+    if provider is None:
+        raise HTTPException(status_code=404, detail=f"供应商 {provider_id} 不存在")
+    if not user_can_manage_provider(current_user, provider):
+        raise HTTPException(status_code=403, detail="不能修改非自己管理的供应商")
+
     try:
-        # 获取用户显式设置过的字段（即使值为 None），以便正确处理清空操作
         unset_fields = payload.model_fields_set
         data = payload.model_dump(exclude_none=True)
         for nullable_field in (
-            "api_key_env",
-            "api_key",
-            "default_protocol",
-            "embedding_base_url",
-            "rerank_base_url",
-            "models_endpoint",
-            "embedding_models_endpoint",
-            "rerank_models_endpoint",
+            "api_key_env", "api_key", "default_protocol",
+            "embedding_base_url", "rerank_base_url",
+            "models_endpoint", "embedding_models_endpoint", "rerank_models_endpoint",
         ):
             if nullable_field in unset_fields and getattr(payload, nullable_field) is None:
                 data[nullable_field] = None
-        provider = await update_provider_config(db, provider_id, data, current_user)
-        if provider is None:
+        updated = await update_provider_config(db, provider_id, data, current_user=current_user)
+        if updated is None:
             raise HTTPException(status_code=404, detail=f"供应商 {provider_id} 不存在")
         await db.commit()
         await _refresh_model_cache()
-        return {"success": True, "data": provider.to_dict()}
+        return {"success": True, "data": _serialize_provider(updated, current_user=current_user)}
     except HTTPException:
         raise
     except ValueError as e:
@@ -154,15 +161,28 @@ async def update_provider(
 @model_providers.delete("/{provider_id}")
 async def delete_provider(
     provider_id: str,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """删除独立模型供应商配置。"""
-    deleted, references = await delete_provider_config(db, provider_id, current_user)
-    if not deleted:
-        if references:
-            raise HTTPException(status_code=409, detail=f"供应商 {provider_id} 被以下资源引用，无法删除: {references}")
+    """删除模型供应商配置（需可见、可管理、无引用）。"""
+    provider = await get_visible_model_provider(db, provider_id, current_user)
+    if provider is None:
         raise HTTPException(status_code=404, detail=f"供应商 {provider_id} 不存在")
+    if not user_can_manage_provider(current_user, provider):
+        raise HTTPException(status_code=403, detail="不能删除非自己管理的供应商")
+    if provider.is_builtin:
+        raise HTTPException(status_code=409, detail="内置模型供应商不能删除")
+
+    references = await count_provider_references(db, provider_id)
+    if references:
+        raise HTTPException(
+            status_code=409,
+            detail={"message": "供应商被其他资源引用，无法删除", "references": references},
+        )
+
+    deleted, _refs = await delete_provider_config(db, provider_id, current_user=current_user)
+    if not deleted:
+        raise HTTPException(status_code=500, detail="删除供应商失败")
     await db.commit()
     await _refresh_model_cache()
     return {"success": True}
@@ -171,18 +191,17 @@ async def delete_provider(
 @model_providers.get("/{provider_id}/remote-models")
 async def get_remote_models(
     provider_id: str,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """实时拉取远端 /models，不落库。"""
-    provider = await get_model_provider_by_id(db, provider_id)
+    """实时拉取远端 /models（需可见）。"""
+    provider = await get_visible_model_provider(db, provider_id, current_user)
     if provider is None:
         raise HTTPException(status_code=404, detail=f"供应商 {provider_id} 不存在")
     try:
         models = await fetch_remote_models(provider)
         return {"success": True, "data": models}
     except httpx.HTTPStatusError as e:
-        # 远程 API 返回的错误，不透传状态码避免前端误判为系统认证失败
         detail = e.response.text
         if e.response.status_code == 401:
             raise HTTPException(status_code=502, detail="远端 API 认证失败，请检查 API Key 配置")
@@ -196,7 +215,7 @@ async def get_remote_models(
 async def refresh_model_cache(
     current_user: User = Depends(get_admin_user),
 ):
-    """强制刷新模型缓存，从数据库重新加载所有供应商配置到 Redis。"""
+    """强制刷新模型缓存到 Redis（仅管理员）。"""
     await _refresh_model_cache()
     from yuxi.models.providers.cache import model_cache
 
@@ -206,24 +225,22 @@ async def refresh_model_cache(
 @model_providers.get("/models/v2")
 async def get_v2_models(
     model_type: str = "chat",
-    _current_user: User = Depends(get_required_user),
+    current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """获取 v2 格式的模型列表，按 provider 分组。
-
-    v2 模型 spec 格式: provider_id:model_id（冒号分隔）
-    返回数据供前端模型选择器使用。
-    """
+    """获取 v2 格式的模型列表，按 provider 分组，仅返回当前用户可见的 provider。"""
     from yuxi.models.providers.cache import model_cache
+    from yuxi.models.providers.service import get_all_model_providers
 
     grouped = model_cache.get_specs_grouped_by_provider(model_type)
-    providers = await get_all_model_providers(db)
-    provider_name_by_id = {
-        provider.provider_id: provider.display_name or provider.provider_id for provider in providers
-    }
+    visible_providers = {p.provider_id for p in await list_visible_model_providers(db, current_user)}
+    all_providers = await get_all_model_providers(db)
+    provider_name_by_id = {p.provider_id: p.display_name or p.provider_id for p in all_providers}
 
     result = {}
     for provider_id, models in grouped.items():
+        if provider_id not in visible_providers:
+            continue
         result[provider_id] = {
             "provider_id": provider_id,
             "provider_display_name": provider_name_by_id.get(provider_id, provider_id),
@@ -236,18 +253,26 @@ async def get_v2_models(
                     "batch_size": m.batch_size,
                 }
                 for m in models
-            ]
+            ],
         }
-
     return {"success": True, "data": result}
 
 
 @model_providers.get("/models/status")
 async def get_model_status_by_spec(
     spec: str,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    """根据 full spec 检查模型状态（自动识别 V1/V2、Chat/Embedding）。"""
+    """根据 spec 检查模型状态；所属 provider 必须对当前用户可见。"""
+    from yuxi.models.providers.cache import model_cache
+
+    info = model_cache.get_model_info(spec)
+    if info is None:
+        raise HTTPException(status_code=404, detail=f"模型 {spec} 不存在")
+    provider = await get_visible_model_provider(db, info.provider_id, current_user)
+    if provider is None:
+        raise HTTPException(status_code=403, detail="不能访问此模型")
     try:
         result = await test_model_status_by_spec(spec)
         return {"success": True, "data": result}
