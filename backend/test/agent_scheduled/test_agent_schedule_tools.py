@@ -63,7 +63,7 @@ async def test_list_my_schedules_filters_by_current_user(monkeypatch) -> None:
         timezone="UTC",
         enabled=True,
         next_run_at=None,
-        agent_config_id=1,
+        agent_slug="a1",
     )
     repo = _FakeRepo({"list_schedules": AsyncMock(return_value=[row])})
     _patch_session(monkeypatch, repo)
@@ -175,7 +175,7 @@ async def test_get_schedule_admin_can_read_others(monkeypatch) -> None:
 async def test_create_schedule_succeeds_when_agent_belongs_to_user(monkeypatch) -> None:
     fake_schedule = SimpleNamespace(id="new-1", to_dict=lambda: {"id": "new-1", "name": "demo"})
     sched_repo = _FakeRepo({"create_schedule": AsyncMock(return_value=fake_schedule)})
-    agent_repo = _FakeRepo({"get_by_id": AsyncMock(return_value=SimpleNamespace(created_by="u1"))})
+    agent_repo = _FakeRepo({"get_by_slug": AsyncMock(return_value=SimpleNamespace(created_by="u1"))})
 
     @asynccontextmanager
     async def _ctx():
@@ -194,7 +194,7 @@ async def test_create_schedule_succeeds_when_agent_belongs_to_user(monkeypatch) 
     result = await tools.create_schedule.coroutine(  # type: ignore[attr-defined]
         name="demo",
         description=None,
-        agent_config_id=42,
+        agent_slug="agent-42",
         cron_expr="0 * * * *",
         timezone="Asia/Shanghai",
         query="hi",
@@ -211,7 +211,7 @@ async def test_create_schedule_succeeds_when_agent_belongs_to_user(monkeypatch) 
 
 async def test_create_schedule_rejects_foreign_agent(monkeypatch) -> None:
     sched_repo = _FakeRepo({"create_schedule": AsyncMock()})
-    agent_repo = _FakeRepo({"get_by_id": AsyncMock(return_value=SimpleNamespace(created_by="other_user"))})
+    agent_repo = _FakeRepo({"get_by_slug": AsyncMock(return_value=SimpleNamespace(created_by="other_user"))})
 
     @asynccontextmanager
     async def _ctx():
@@ -224,7 +224,7 @@ async def test_create_schedule_rejects_foreign_agent(monkeypatch) -> None:
     result = await tools.create_schedule.coroutine(  # type: ignore[attr-defined]
         name="demo",
         description=None,
-        agent_config_id=42,
+        agent_slug="agent-42",
         cron_expr="0 * * * *",
         timezone="Asia/Shanghai",
         query="hi",
@@ -242,7 +242,7 @@ async def test_create_schedule_admin_bypasses_agent_ownership(monkeypatch) -> No
     fake_schedule = SimpleNamespace(id="new-2", to_dict=lambda: {"id": "new-2"})
     sched_repo = _FakeRepo({"create_schedule": AsyncMock(return_value=fake_schedule)})
     # admin 路径下不应调用 AgentRepository
-    agent_repo = _FakeRepo({"get_by_id": AsyncMock()})
+    agent_repo = _FakeRepo({"get_by_slug": AsyncMock()})
 
     @asynccontextmanager
     async def _ctx():
@@ -255,7 +255,7 @@ async def test_create_schedule_admin_bypasses_agent_ownership(monkeypatch) -> No
     await tools.create_schedule.coroutine(  # type: ignore[attr-defined]
         name="demo",
         description=None,
-        agent_config_id=42,
+        agent_slug="agent-42",
         cron_expr="0 * * * *",
         timezone="Asia/Shanghai",
         query="hi",
@@ -265,7 +265,7 @@ async def test_create_schedule_admin_bypasses_agent_ownership(monkeypatch) -> No
         runtime=_make_runtime(user_id="admin1", is_admin=True),
     )
 
-    agent_repo._methods["get_by_id"].assert_not_awaited()
+    agent_repo._methods["get_by_slug"].assert_not_awaited()
     sched_repo._methods["create_schedule"].assert_awaited_once()
 
 
@@ -274,7 +274,7 @@ async def test_create_schedule_admin_bypasses_agent_ownership(monkeypatch) -> No
 
 async def test_update_schedule_rejects_foreign_agent(monkeypatch) -> None:
     sched_repo = _FakeRepo({"get_by_id_for_user": AsyncMock(return_value=SimpleNamespace(id="sx"))})
-    agent_repo = _FakeRepo({"get_by_id": AsyncMock(return_value=SimpleNamespace(created_by="other"))})
+    agent_repo = _FakeRepo({"get_by_slug": AsyncMock(return_value=SimpleNamespace(created_by="other"))})
 
     @asynccontextmanager
     async def _ctx():
@@ -288,7 +288,7 @@ async def test_update_schedule_rejects_foreign_agent(monkeypatch) -> None:
         schedule_id="sx",
         name=None,
         description=None,
-        agent_config_id=99,
+        agent_slug="agent-99",
         cron_expr=None,
         timezone=None,
         query=None,
@@ -311,7 +311,7 @@ async def test_update_schedule_succeeds_when_owner_and_agent_match(monkeypatch) 
             "update_for_user": AsyncMock(return_value=updated),
         }
     )
-    agent_repo = _FakeRepo({"get_by_id": AsyncMock(return_value=SimpleNamespace(created_by="u1"))})
+    agent_repo = _FakeRepo({"get_by_slug": AsyncMock(return_value=SimpleNamespace(created_by="u1"))})
 
     @asynccontextmanager
     async def _ctx():
@@ -325,7 +325,7 @@ async def test_update_schedule_succeeds_when_owner_and_agent_match(monkeypatch) 
         schedule_id="sx",
         name="new",
         description=None,
-        agent_config_id=42,
+        agent_slug="agent-42",
         cron_expr=None,
         timezone=None,
         query=None,
@@ -341,7 +341,7 @@ async def test_update_schedule_succeeds_when_owner_and_agent_match(monkeypatch) 
 
 
 async def test_update_schedule_skips_agent_check_when_agent_id_not_provided(monkeypatch) -> None:
-    """update_schedule 若 agent_config_id=None，应跳过 _check_agent_ownership。"""
+    """update_schedule 若 agent_slug=None，应跳过 _check_agent_ownership。"""
     existing = SimpleNamespace(id="sx", user_id="u1", to_dict=lambda: {"id": "sx"})
     updated = SimpleNamespace(id="sx", name="x", to_dict=lambda: {"id": "sx", "name": "x"})
     sched_repo = _FakeRepo(
@@ -350,7 +350,7 @@ async def test_update_schedule_skips_agent_check_when_agent_id_not_provided(monk
             "update_for_user": AsyncMock(return_value=updated),
         }
     )
-    agent_repo = _FakeRepo({"get_by_id": AsyncMock()})
+    agent_repo = _FakeRepo({"get_by_slug": AsyncMock()})
 
     @asynccontextmanager
     async def _ctx():
@@ -364,7 +364,7 @@ async def test_update_schedule_skips_agent_check_when_agent_id_not_provided(monk
         schedule_id="sx",
         name="x",
         description=None,
-        agent_config_id=None,
+        agent_slug=None,
         cron_expr=None,
         timezone=None,
         query=None,
@@ -375,7 +375,7 @@ async def test_update_schedule_skips_agent_check_when_agent_id_not_provided(monk
     )
 
     assert json.loads(result)["name"] == "x"
-    agent_repo._methods["get_by_id"].assert_not_awaited()
+    agent_repo._methods["get_by_slug"].assert_not_awaited()
 
 
 async def test_update_schedule_enable_uses_existing_cron(monkeypatch) -> None:
@@ -399,7 +399,7 @@ async def test_update_schedule_enable_uses_existing_cron(monkeypatch) -> None:
             "update_for_user": AsyncMock(return_value=updated),
         }
     )
-    agent_repo = _FakeRepo({"get_by_id": AsyncMock()})
+    agent_repo = _FakeRepo({"get_by_slug": AsyncMock()})
 
     @asynccontextmanager
     async def _ctx():
@@ -414,7 +414,7 @@ async def test_update_schedule_enable_uses_existing_cron(monkeypatch) -> None:
         schedule_id="sx",
         name=None,
         description=None,
-        agent_config_id=None,
+        agent_slug=None,
         cron_expr=None,
         timezone=None,
         query=None,

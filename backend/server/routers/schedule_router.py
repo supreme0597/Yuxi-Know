@@ -18,7 +18,7 @@ schedule_router = APIRouter(prefix="/schedules", tags=["schedules"])
 class ScheduleCreateRequest(BaseModel):
     name: str = Field(..., max_length=255, description="任务名称")
     description: str | None = Field(None, description="描述信息")
-    agent_config_id: int = Field(..., description="智能体配置 ID")
+    agent_slug: str = Field(..., description="目标 Agent slug")
     cron_expr: str = Field(..., description="Cron 表达式")
     timezone: str = Field(default="Asia/Shanghai", description="时区")
     query: str = Field(..., description="发送给 Agent 的 Query")
@@ -30,7 +30,7 @@ class ScheduleCreateRequest(BaseModel):
 class ScheduleUpdateRequest(BaseModel):
     name: str | None = Field(None, max_length=255)
     description: str | None = None
-    agent_config_id: int | None = None
+    agent_slug: str | None = None
     cron_expr: str | None = None
     timezone: str | None = None
     query: str | None = None
@@ -51,15 +51,15 @@ def _raise_forbidden(message: str = "无权进行该操作"):
     raise HTTPException(status_code=403, detail=message)
 
 
-async def _verify_agent_ownership(db: AsyncSession, agent_config_id: int, current_user: User) -> None:
-    """校验 agent_config 归属当前用户；失败抛 403。admin 跳过。
+async def _verify_agent_ownership(db: AsyncSession, agent_slug: str, current_user: User) -> None:
+    """校验 agent 归属当前用户；失败抛 403。admin 跳过。
 
-    注：AgentConfig 没有 user_id 字段，owner 记录在 `created_by`（String，值为 user.id 的字符串形式）。
+    注：Agent 的 owner 记录在 `created_by`（值为 User.uid 的字符串形式）。
     与 tools.py 中的 `_check_agent_ownership` 行为保持一致。
     """
     if _is_admin(current_user):
         return
-    config_item = await AgentRepository(db).get_by_id(id=agent_config_id)
+    config_item = await AgentRepository(db).get_by_slug(slug=agent_slug)
     if config_item is None or str(config_item.created_by) != str(current_user.uid):
         raise HTTPException(status_code=403, detail="无权使用该 agent")
 
@@ -72,9 +72,9 @@ async def create_schedule_route(
 ):
     """创建定时任务"""
     try:
-        # 校验 agent_config 归属（admin 跳过）
-        if payload.agent_config_id is not None:
-            await _verify_agent_ownership(db, payload.agent_config_id, current_user)
+        # 校验 agent 归属（admin 跳过）
+        if payload.agent_slug is not None:
+            await _verify_agent_ownership(db, payload.agent_slug, current_user)
 
         next_run = None
         if payload.enabled:
@@ -88,7 +88,7 @@ async def create_schedule_route(
             name=payload.name,
             description=payload.description,
             user_id=str(current_user.uid),
-            agent_config_id=payload.agent_config_id,
+            agent_slug=payload.agent_slug,
             cron_expr=payload.cron_expr,
             timezone=payload.timezone,
             query=payload.query,
@@ -156,9 +156,9 @@ async def update_schedule_route(
 ):
     """更新定时任务"""
     try:
-        # 若替换 agent_config_id，先校验归属
-        if payload.agent_config_id is not None:
-            await _verify_agent_ownership(db, payload.agent_config_id, current_user)
+        # 若替换 agent_slug，先校验归属
+        if payload.agent_slug is not None:
+            await _verify_agent_ownership(db, payload.agent_slug, current_user)
 
         repo = ScheduleRepository(db)
         schedule = await repo.get_by_id_for_user(

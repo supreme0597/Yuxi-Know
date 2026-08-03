@@ -4,44 +4,40 @@ import uuid
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
 
 
-async def _get_agent_config_id(test_client, admin_headers):
-    # 直接通过 API 自动创建一个测试专用的智能体配置（基于 ChatbotAgent）
+async def _get_agent_slug(test_client, admin_headers):
+    # 通过当前 agents API 创建一个测试专用的 agent（基于 ChatbotAgent）
     payload = {
-        "name": f"pytest_config_{uuid.uuid4().hex[:8]}",
-        "description": "pytest config description",
-        "icon": "",
-        "pics": [],
-        "examples": [],
-        "config_json": {},
+        "name": f"pytest_agent_{uuid.uuid4().hex[:8]}",
+        "backend_id": "ChatbotAgent",
     }
 
-    response = await test_client.post("/api/chat/agent/ChatbotAgent/configs", json=payload, headers=admin_headers)
-    assert response.status_code == 200, f"Failed to create test config: {response.text}"
+    response = await test_client.post("/api/agent", json=payload, headers=admin_headers)
+    assert response.status_code == 200, f"Failed to create test agent: {response.text}"
 
-    config_data = response.json().get("config") or {}
-    config_id = config_data.get("id")
-    assert config_id is not None, f"Config ID is missing in response: {config_data}"
-    return config_id
+    agent = response.json().get("agent") or {}
+    slug = agent.get("slug")
+    assert slug is not None, f"Agent slug is missing in response: {agent}"
+    return slug
 
 
 async def test_schedule_crud_and_permissions(test_client, admin_headers, standard_user):
     """测试定时任务配置的 CRUD、局部状态修改、手动触发执行、日志查询以及多用户权限隔离
 
-    注：Task 7 在 schedule_router 中加入 agent_config 归属校验（admin 跳过），
-    普通用户绑定非自己的 agent_config_id 会被 403 拒绝。本测试使用 admin_headers
-    创建 config + schedule（admin 拥有），再由 standard_user 通过「越权访问」方式
+    注：schedule_router 中按 agent_slug 做归属校验（admin 跳过），
+    普通用户绑定非自己的 agent_slug 会被 403 拒绝。本测试使用 admin_headers
+    创建 agent + schedule（admin 拥有），再由 standard_user 通过「越权访问」方式
     验证路由层 owner-aware 过滤。
     """
     user_headers = standard_user["headers"]
 
-    # 1. 动态生成所需的 agent_config_id（admin 创建）
-    config_id = await _get_agent_config_id(test_client, admin_headers)
+    # 1. 动态生成所需的 agent slug（admin 创建）
+    agent_slug = await _get_agent_slug(test_client, admin_headers)
 
-    # 2. admin 创建一个定时调度（admin 拥有 schedule + config，便于后续 admin/普通用户混合测试）
+    # 2. admin 创建一个定时调度（admin 拥有 schedule + agent，便于后续 admin/普通用户混合测试）
     create_payload = {
         "name": "测试定时任务",
         "description": "这是描述信息",
-        "agent_config_id": config_id,
+        "agent_slug": agent_slug,
         "cron_expr": "0 9 * * 1",  # 每周一早上 9 点
         "timezone": "Asia/Shanghai",
         "query": "你好，请播报今天的天气",

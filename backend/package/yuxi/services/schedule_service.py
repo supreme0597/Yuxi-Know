@@ -35,13 +35,12 @@ class ScheduleService:
         本方法只 flush 不提交；提交由调用方负责（手动触发由路由提交，Cron 轮询由
         create_scheduled_run 提交），以隔离 T2 事务生命周期。
         """
-        # 1. 解析 agent_config 获取 agent slug（Agent.slug 即旧 AgentConfig.agent_id）
-        config_repo = AgentRepository(db)
-        config_item = await config_repo.get_by_id(id=schedule.agent_config_id)
+        # 1. 解析 agent slug（定时任务直接以 agent_slug 关联智能体），校验智能体存在
+        agent_slug = schedule.agent_slug
+        config_item = await AgentRepository(db).get_by_slug(slug=agent_slug)
         if config_item is None:
-            raise ScheduleTriggerError(f"agent_config {schedule.agent_config_id} 不存在")
+            raise ScheduleTriggerError(f"agent {agent_slug} 不存在")
 
-        agent_slug = config_item.slug
         owner_uid = str(schedule.user_id)
 
         # 2. 创建对话（Thread）
@@ -52,7 +51,7 @@ class ScheduleService:
             agent_id=agent_slug,
             title=title,
             thread_id=thread_id,
-            metadata={"agent_config_id": schedule.agent_config_id, "schedule_id": schedule.id},
+            metadata={"agent_slug": schedule.agent_slug, "schedule_id": schedule.id},
         )
 
         # 3. 落库输入消息：run 的输入正文由 Message 承载，process_agent_run 从这里恢复 query/图片

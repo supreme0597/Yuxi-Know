@@ -20,7 +20,7 @@ import {
   Calendar
 } from 'lucide-vue-next'
 
-import { scheduleApi, agentApi } from '@/apis'
+import { scheduleApi } from '@/apis'
 import { useAgentStore } from '@/stores/agent'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import PageShoulder from '@/components/shared/PageShoulder.vue'
@@ -215,7 +215,7 @@ const formRef = ref(null)
 const formState = reactive({
   name: '',
   description: '',
-  agent_config_id: null,
+  agent_slug: null,
   cron_expr: '',
   timezone: 'Asia/Shanghai',
   query: '',
@@ -225,7 +225,7 @@ const formState = reactive({
 
 const rules = {
   name: [{ required: true, message: '请输入任务名称', trigger: 'blur' }],
-  agent_config_id: [{ required: true, message: '请选择绑定的智能体配置', trigger: 'change' }],
+  agent_slug: [{ required: true, message: '请选择绑定的智能体', trigger: 'change' }],
   cron_expr: [{ required: true, message: '请配置定时周期', trigger: 'change' }],
   query: [{ required: true, message: '请输入触发 Query 提示词', trigger: 'blur' }]
 }
@@ -300,7 +300,7 @@ const formatDateTime = (value) => {
   }
 }
 
-// Load Agent Configs
+// Load Agents
 const loadAgentConfigs = async () => {
   try {
     if (agentStore.agents.length === 0) {
@@ -310,24 +310,14 @@ const loadAgentConfigs = async () => {
     const options = []
     const tempMap = {}
 
-    await Promise.all(
-      agentStore.agents.map(async (agent) => {
-        try {
-          const res = await agentApi.getAgentConfigs(agent.id)
-          const configs = res.configs || []
-          configs.forEach((cfg) => {
-            const label = `${agent.name || agent.id} - ${cfg.name}`
-            options.push({
-              value: cfg.id,
-              label: label
-            })
-            tempMap[cfg.id] = label
-          })
-        } catch (e) {
-          console.warn(`获取智能体 ${agent.id} 的配置失败:`, e)
-        }
+    agentStore.agents.forEach((agent) => {
+      const label = agent.name || agent.slug
+      options.push({
+        value: agent.slug,
+        label: label,
       })
-    )
+      tempMap[agent.slug] = label
+    })
 
     agentConfigOptions.value = options
     agentConfigMap.value = tempMap
@@ -436,7 +426,7 @@ const showCreateModal = () => {
   Object.assign(formState, {
     name: '',
     description: '',
-    agent_config_id: agentConfigOptions.value[0]?.value || null,
+    agent_slug: agentConfigOptions.value[0]?.value || null,
     cron_expr: '0 9 * * 1-5', // 默认每个工作日早上9点
     timezone: 'Asia/Shanghai',
     query: '请播报今天的新闻与重要事项',
@@ -462,7 +452,7 @@ const showEditModal = (record) => {
   Object.assign(formState, {
     name: record.name,
     description: record.description || '',
-    agent_config_id: record.agent_config_id,
+    agent_slug: record.agent_slug,
     cron_expr: record.cron_expr,
     timezone: record.timezone || 'Asia/Shanghai',
     query: record.query,
@@ -495,7 +485,7 @@ const handleSave = async () => {
     const payload = {
       name: formState.name,
       description: formState.description || null,
-      agent_config_id: formState.agent_config_id,
+      agent_slug: formState.agent_slug,
       cron_expr: formState.cron_expr,
       timezone: formState.timezone,
       query: formState.query,
@@ -633,9 +623,9 @@ const columns = [
     fixed: 'left' // 将任务名称锁定在最左侧，确保在横向滚动或大分辨率下关键标识雷打不动
   },
   {
-    title: '绑定的智能体配置',
-    dataIndex: 'agent_config_id',
-    key: 'agent_config_id'
+    title: '绑定的智能体',
+    dataIndex: 'agent_slug',
+    key: 'agent_slug'
     // 去掉固定宽度以承接自适应弹性拉伸，完美吸收多余空间
   },
   {
@@ -796,7 +786,7 @@ onMounted(async () => {
               <div class="body-info-row">
                 <span class="info-label text-muted"> <Cpu :size="13" /> 绑定的智能体配置 </span>
                 <span class="info-value agent-name-badge">
-                  {{ agentConfigMap[record.agent_config_id] || record.agent_config_id }}
+                  {{ agentConfigMap[record.agent_slug] || record.agent_slug }}
                 </span>
               </div>
 
@@ -925,11 +915,11 @@ onMounted(async () => {
               </div>
             </template>
 
-            <!-- Agent Config cell -->
-            <template v-else-if="column.key === 'agent_config_id'">
+            <!-- Agent cell -->
+            <template v-else-if="column.key === 'agent_slug'">
               <div class="agent-config-cell">
                 <span class="config-name">
-                  {{ agentConfigMap[record.agent_config_id] || record.agent_config_id }}
+                  {{ agentConfigMap[record.agent_slug] || record.agent_slug }}
                 </span>
               </div>
             </template>
@@ -1076,11 +1066,11 @@ onMounted(async () => {
 
         <!-- 3. 运行环境：绑定智能体 与 状态开关 -->
         <div class="form-row">
-          <a-form-item label="绑定智能体配置" name="agent_config_id" class="form-col-6">
+          <a-form-item label="绑定智能体" name="agent_slug" class="form-col-6">
             <a-select
-              v-model:value="formState.agent_config_id"
+              v-model:value="formState.agent_slug"
               :options="agentConfigOptions"
-              placeholder="选择自动执行的智能体及配置"
+              placeholder="选择自动执行的智能体"
               show-search
               option-filter-prop="label"
             />

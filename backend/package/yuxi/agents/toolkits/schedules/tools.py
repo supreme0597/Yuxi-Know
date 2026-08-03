@@ -78,18 +78,18 @@ def _json_or_error(obj: Any, err: str) -> str:
 
 async def _check_agent_ownership(
     db_session: AsyncSession,
-    agent_config_id: int,
+    agent_slug: str,
     user_id: str,
     is_admin: bool,
 ) -> str | None:
-    """校验 agent_config 归属当前用户。
+    """校验 agent 归属当前用户。
 
     返回 None 表示通过；返回字符串为面向 LLM 的中文错误消息。
     admin 跳过校验。
     """
     if is_admin:
         return None
-    config = await AgentRepository(db_session).get_by_id(id=agent_config_id)
+    config = await AgentRepository(db_session).get_by_slug(slug=agent_slug)
     if config is None or str(config.created_by) != str(user_id):
         return "无权使用该 agent"
     return None
@@ -150,7 +150,7 @@ async def list_my_schedules(  # type: ignore[no-redef]
             "timezone": r.timezone,
             "enabled": r.enabled,
             "next_run_at": r.next_run_at,
-            "agent_config_id": r.agent_config_id,
+            "agent_slug": r.agent_slug,
         }
         for r in rows
     ]
@@ -203,7 +203,7 @@ class CreateScheduleInput(BaseModel):
 
     name: str
     description: str | None = None
-    agent_config_id: int
+    agent_slug: str
     cron_expr: str
     timezone: str = "Asia/Shanghai"
     query: str
@@ -221,7 +221,7 @@ class CreateScheduleInput(BaseModel):
 async def create_schedule(  # type: ignore[no-redef]
     name: str,
     description: str | None,
-    agent_config_id: int,
+    agent_slug: str,
     cron_expr: str,
     timezone: str,
     query: str,
@@ -230,7 +230,7 @@ async def create_schedule(  # type: ignore[no-redef]
     enabled: bool = True,
     runtime: ToolRuntime = None,
 ) -> str:
-    """创建新的定时任务。普通用户只能绑定自己创建的 agent_config；admin 不受限。"""
+    """创建新的定时任务。普通用户只能绑定自己创建的 agent；admin 不受限。"""
     user_id = _resolve_user(runtime)
     if not user_id:
         return "无法获取用户信息"
@@ -238,7 +238,7 @@ async def create_schedule(  # type: ignore[no-redef]
     try:
         async with pg_manager.get_async_session_context() as session:
             is_admin = await _is_admin(runtime, session)
-            err = await _check_agent_ownership(session, agent_config_id, user_id, is_admin)
+            err = await _check_agent_ownership(session, agent_slug, user_id, is_admin)
             if err:
                 return err
 
@@ -255,7 +255,7 @@ async def create_schedule(  # type: ignore[no-redef]
                 name=name,
                 description=description,
                 user_id=str(user_id),
-                agent_config_id=agent_config_id,
+                agent_slug=agent_slug,
                 cron_expr=cron_expr,
                 timezone=timezone,
                 query=query,
@@ -281,7 +281,7 @@ class UpdateScheduleInput(BaseModel):
     schedule_id: str
     name: str | None = None
     description: str | None = None
-    agent_config_id: int | None = None
+    agent_slug: str | None = None
     cron_expr: str | None = None
     timezone: str | None = None
     query: str | None = None
@@ -300,7 +300,7 @@ async def update_schedule(  # type: ignore[no-redef]
     schedule_id: str,
     name: str | None,
     description: str | None,
-    agent_config_id: int | None,
+    agent_slug: str | None,
     cron_expr: str | None,
     timezone: str | None,
     query: str | None,
@@ -309,7 +309,7 @@ async def update_schedule(  # type: ignore[no-redef]
     enabled: bool | None = None,
     runtime: ToolRuntime = None,
 ) -> str:
-    """更新定时任务；agent_config_id 必须归属当前用户（admin 跳过）。"""
+    """更新定时任务；agent_slug 必须归属当前用户（admin 跳过）。"""
     user_id = _resolve_user(runtime)
     if not user_id:
         return "无法获取用户信息"
@@ -317,8 +317,8 @@ async def update_schedule(  # type: ignore[no-redef]
     try:
         async with pg_manager.get_async_session_context() as session:
             is_admin = await _is_admin(runtime, session)
-            if agent_config_id is not None:
-                err = await _check_agent_ownership(session, agent_config_id, user_id, is_admin)
+            if agent_slug is not None:
+                err = await _check_agent_ownership(session, agent_slug, user_id, is_admin)
                 if err:
                     return err
 
@@ -332,8 +332,8 @@ async def update_schedule(  # type: ignore[no-redef]
                 update_data["name"] = name
             if description is not None:
                 update_data["description"] = description
-            if agent_config_id is not None:
-                update_data["agent_config_id"] = agent_config_id
+            if agent_slug is not None:
+                update_data["agent_slug"] = agent_slug
             if cron_expr is not None:
                 update_data["cron_expr"] = cron_expr
             if timezone is not None:

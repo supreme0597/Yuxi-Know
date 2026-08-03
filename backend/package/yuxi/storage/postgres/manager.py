@@ -718,7 +718,7 @@ class PostgresManager(metaclass=SingletonMeta):
                 name VARCHAR(255) NOT NULL,
                 description TEXT,
                 user_id VARCHAR(64) NOT NULL,
-                agent_config_id INTEGER NOT NULL,
+                agent_slug VARCHAR(64) NOT NULL,
                 cron_expr VARCHAR(128) NOT NULL,
                 timezone VARCHAR(64) NOT NULL DEFAULT 'Asia/Shanghai',
                 query TEXT NOT NULL,
@@ -750,6 +750,21 @@ class PostgresManager(metaclass=SingletonMeta):
             "CREATE INDEX IF NOT EXISTS idx_schedule_defs_user ON schedule_definitions(user_id)",
             "CREATE INDEX IF NOT EXISTS idx_schedule_logs_schedule ON schedule_logs(schedule_id)",
             "CREATE INDEX IF NOT EXISTS idx_schedule_logs_created ON schedule_logs(created_at)",
+            """
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'schedule_definitions' AND column_name = 'agent_config_id'
+                ) AND NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'schedule_definitions' AND column_name = 'agent_slug'
+                ) THEN
+                    EXECUTE 'ALTER TABLE schedule_definitions RENAME COLUMN agent_config_id TO agent_slug';
+                    EXECUTE 'ALTER TABLE schedule_definitions ALTER COLUMN agent_slug TYPE VARCHAR(64) USING agent_slug::VARCHAR(64)';
+                END IF;
+            END $$;
+            """,
         ]
 
         async with self.async_engine.begin() as conn:

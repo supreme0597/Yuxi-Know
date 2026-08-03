@@ -67,7 +67,7 @@ async def _make_schedule(db: AsyncSession, *, schedule_id: str, user_id: str) ->
         id=schedule_id,
         name=f"s-{schedule_id}",
         user_id=user_id,
-        agent_config_id=1,
+        agent_slug="agent-1",
         cron_expr="0 * * * *",
         timezone="Asia/Shanghai",
         query="hi",
