@@ -16,7 +16,6 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from yuxi.agents.toolkits.schedules import tools
-from yuxi.agents.toolkits.schedules.tools import ListMySchedulesInput
 
 
 pytestmark = pytest.mark.asyncio
@@ -70,7 +69,8 @@ async def test_list_my_schedules_filters_by_current_user(monkeypatch) -> None:
     _patch_session(monkeypatch, repo)
 
     result = await tools.list_my_schedules.coroutine(  # type: ignore[attr-defined]
-        args=ListMySchedulesInput(),
+        limit=20,
+        offset=0,
         runtime=_make_runtime(user_id="u1"),
     )
 
@@ -88,7 +88,8 @@ async def test_list_my_schedules_admin_passes_none_user_filter(monkeypatch) -> N
     _patch_session(monkeypatch, repo)
 
     await tools.list_my_schedules.coroutine(  # type: ignore[attr-defined]
-        args=ListMySchedulesInput(),
+        limit=20,
+        offset=0,
         runtime=_make_runtime(user_id="admin1", is_admin=True),
     )
 
@@ -101,7 +102,8 @@ async def test_list_my_schedules_clamps_limit(monkeypatch) -> None:
     _patch_session(monkeypatch, repo)
 
     await tools.list_my_schedules.coroutine(  # type: ignore[attr-defined]
-        args=ListMySchedulesInput(limit=9999),
+        limit=9999,
+        offset=0,
         runtime=_make_runtime(user_id="u1"),
     )
 
@@ -114,7 +116,8 @@ async def test_list_my_schedules_returns_error_when_user_id_missing(monkeypatch)
     _patch_session(monkeypatch, repo)
 
     result = await tools.list_my_schedules.coroutine(  # type: ignore[attr-defined]
-        args=ListMySchedulesInput(),
+        limit=20,
+        offset=0,
         runtime=_make_runtime(user_id=None),
     )
 
