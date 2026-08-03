@@ -199,7 +199,7 @@ async def test_create_schedule_succeeds_when_agent_belongs_to_user(monkeypatch) 
         timezone="Asia/Shanghai",
         query="hi",
         image_content=None,
-        config={},
+        schedule_config={},
         enabled=True,
         runtime=_make_runtime(user_id="u1"),
     )
@@ -229,7 +229,7 @@ async def test_create_schedule_rejects_foreign_agent(monkeypatch) -> None:
         timezone="Asia/Shanghai",
         query="hi",
         image_content=None,
-        config={},
+        schedule_config={},
         enabled=True,
         runtime=_make_runtime(user_id="u1"),
     )
@@ -260,7 +260,7 @@ async def test_create_schedule_admin_bypasses_agent_ownership(monkeypatch) -> No
         timezone="Asia/Shanghai",
         query="hi",
         image_content=None,
-        config={},
+        schedule_config={},
         enabled=True,
         runtime=_make_runtime(user_id="admin1", is_admin=True),
     )
@@ -293,7 +293,7 @@ async def test_update_schedule_rejects_foreign_agent(monkeypatch) -> None:
         timezone=None,
         query=None,
         image_content=None,
-        config=None,
+        schedule_config=None,
         enabled=None,
         runtime=_make_runtime(user_id="u1"),
     )
@@ -330,7 +330,7 @@ async def test_update_schedule_succeeds_when_owner_and_agent_match(monkeypatch) 
         timezone=None,
         query=None,
         image_content=None,
-        config=None,
+        schedule_config=None,
         enabled=None,
         runtime=_make_runtime(user_id="u1"),
     )
@@ -369,7 +369,7 @@ async def test_update_schedule_skips_agent_check_when_agent_id_not_provided(monk
         timezone=None,
         query=None,
         image_content=None,
-        config=None,
+        schedule_config=None,
         enabled=None,
         runtime=_make_runtime(user_id="u1"),
     )
