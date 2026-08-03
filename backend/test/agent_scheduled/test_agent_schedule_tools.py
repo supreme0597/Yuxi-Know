@@ -2,7 +2,7 @@
 
 Covers `list_my_schedules` and `get_schedule` LangGraph @tool functions.
 
-所有依赖（pg_manager / ScheduleRepository / AgentConfigRepository）通过
+所有依赖（pg_manager / ScheduleRepository / AgentRepository）通过
 monkeypatch 注入 fake，避免真实数据库。
 """
 
@@ -48,7 +48,7 @@ def _patch_session(monkeypatch, repo: _FakeRepo) -> None:
 
     monkeypatch.setattr(tools, "pg_manager", MagicMock(get_async_session_context=_ctx))
     monkeypatch.setattr(tools, "ScheduleRepository", _factory)
-    monkeypatch.setattr(tools, "AgentConfigRepository", lambda _s: MagicMock())
+    monkeypatch.setattr(tools, "AgentRepository", lambda _s: MagicMock())
 
 
 # ========== list_my_schedules ==========
@@ -189,7 +189,7 @@ async def test_create_schedule_succeeds_when_agent_belongs_to_user(monkeypatch) 
 
     monkeypatch.setattr(tools, "pg_manager", MagicMock(get_async_session_context=_ctx))
     monkeypatch.setattr(tools, "ScheduleRepository", _sched_factory)
-    monkeypatch.setattr(tools, "AgentConfigRepository", _agent_factory)
+    monkeypatch.setattr(tools, "AgentRepository", _agent_factory)
 
     result = await tools.create_schedule.coroutine(  # type: ignore[attr-defined]
         name="demo",
@@ -219,7 +219,7 @@ async def test_create_schedule_rejects_foreign_agent(monkeypatch) -> None:
 
     monkeypatch.setattr(tools, "pg_manager", MagicMock(get_async_session_context=_ctx))
     monkeypatch.setattr(tools, "ScheduleRepository", lambda _s: sched_repo)
-    monkeypatch.setattr(tools, "AgentConfigRepository", lambda _s: agent_repo)
+    monkeypatch.setattr(tools, "AgentRepository", lambda _s: agent_repo)
 
     result = await tools.create_schedule.coroutine(  # type: ignore[attr-defined]
         name="demo",
@@ -241,7 +241,7 @@ async def test_create_schedule_rejects_foreign_agent(monkeypatch) -> None:
 async def test_create_schedule_admin_bypasses_agent_ownership(monkeypatch) -> None:
     fake_schedule = SimpleNamespace(id="new-2", to_dict=lambda: {"id": "new-2"})
     sched_repo = _FakeRepo({"create_schedule": AsyncMock(return_value=fake_schedule)})
-    # admin 路径下不应调用 AgentConfigRepository
+    # admin 路径下不应调用 AgentRepository
     agent_repo = _FakeRepo({"get_by_id": AsyncMock()})
 
     @asynccontextmanager
@@ -250,7 +250,7 @@ async def test_create_schedule_admin_bypasses_agent_ownership(monkeypatch) -> No
 
     monkeypatch.setattr(tools, "pg_manager", MagicMock(get_async_session_context=_ctx))
     monkeypatch.setattr(tools, "ScheduleRepository", lambda _s: sched_repo)
-    monkeypatch.setattr(tools, "AgentConfigRepository", lambda _s: agent_repo)
+    monkeypatch.setattr(tools, "AgentRepository", lambda _s: agent_repo)
 
     await tools.create_schedule.coroutine(  # type: ignore[attr-defined]
         name="demo",
@@ -282,7 +282,7 @@ async def test_update_schedule_rejects_foreign_agent(monkeypatch) -> None:
 
     monkeypatch.setattr(tools, "pg_manager", MagicMock(get_async_session_context=_ctx))
     monkeypatch.setattr(tools, "ScheduleRepository", lambda _s: sched_repo)
-    monkeypatch.setattr(tools, "AgentConfigRepository", lambda _s: agent_repo)
+    monkeypatch.setattr(tools, "AgentRepository", lambda _s: agent_repo)
 
     result = await tools.update_schedule.coroutine(  # type: ignore[attr-defined]
         schedule_id="sx",
@@ -319,7 +319,7 @@ async def test_update_schedule_succeeds_when_owner_and_agent_match(monkeypatch) 
 
     monkeypatch.setattr(tools, "pg_manager", MagicMock(get_async_session_context=_ctx))
     monkeypatch.setattr(tools, "ScheduleRepository", lambda _s: sched_repo)
-    monkeypatch.setattr(tools, "AgentConfigRepository", lambda _s: agent_repo)
+    monkeypatch.setattr(tools, "AgentRepository", lambda _s: agent_repo)
 
     result = await tools.update_schedule.coroutine(  # type: ignore[attr-defined]
         schedule_id="sx",
@@ -358,7 +358,7 @@ async def test_update_schedule_skips_agent_check_when_agent_id_not_provided(monk
 
     monkeypatch.setattr(tools, "pg_manager", MagicMock(get_async_session_context=_ctx))
     monkeypatch.setattr(tools, "ScheduleRepository", lambda _s: sched_repo)
-    monkeypatch.setattr(tools, "AgentConfigRepository", lambda _s: agent_repo)
+    monkeypatch.setattr(tools, "AgentRepository", lambda _s: agent_repo)
 
     result = await tools.update_schedule.coroutine(  # type: ignore[attr-defined]
         schedule_id="sx",
@@ -407,7 +407,7 @@ async def test_update_schedule_enable_uses_existing_cron(monkeypatch) -> None:
 
     monkeypatch.setattr(tools, "pg_manager", MagicMock(get_async_session_context=_ctx))
     monkeypatch.setattr(tools, "ScheduleRepository", lambda _s: sched_repo)
-    monkeypatch.setattr(tools, "AgentConfigRepository", lambda _s: agent_repo)
+    monkeypatch.setattr(tools, "AgentRepository", lambda _s: agent_repo)
     monkeypatch.setattr(tools, "compute_next_run", lambda _c, _t: "2099-01-01T00:00:00Z")
 
     result = await tools.update_schedule.coroutine(  # type: ignore[attr-defined]

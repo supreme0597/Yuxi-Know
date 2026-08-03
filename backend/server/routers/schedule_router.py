@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.utils.auth_middleware import get_db, get_required_user
-from yuxi.repositories.agent_config_repository import AgentConfigRepository
+from yuxi.repositories.agent_repository import AgentRepository
 from yuxi.repositories.schedule_repository import ScheduleRepository
 from yuxi.services.schedule_service import ScheduleService
 from yuxi.services.schedule_manager import compute_next_run
@@ -59,8 +59,8 @@ async def _verify_agent_ownership(db: AsyncSession, agent_config_id: int, curren
     """
     if _is_admin(current_user):
         return
-    config_item = await AgentConfigRepository(db).get_by_id(agent_config_id)
-    if config_item is None or str(config_item.created_by) != str(current_user.id):
+    config_item = await AgentRepository(db).get_by_id(id=agent_config_id)
+    if config_item is None or str(config_item.created_by) != str(current_user.uid):
         raise HTTPException(status_code=403, detail="无权使用该 agent")
 
 
@@ -87,7 +87,7 @@ async def create_schedule_route(
             id=str(uuid.uuid4()),
             name=payload.name,
             description=payload.description,
-            user_id=str(current_user.id),
+            user_id=str(current_user.uid),
             agent_config_id=payload.agent_config_id,
             cron_expr=payload.cron_expr,
             timezone=payload.timezone,

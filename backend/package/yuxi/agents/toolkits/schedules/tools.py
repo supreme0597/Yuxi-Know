@@ -24,7 +24,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from yuxi.agents.toolkits.registry import tool
-from yuxi.repositories.agent_config_repository import AgentConfigRepository
+from yuxi.repositories.agent_repository import AgentRepository
 from yuxi.repositories.schedule_repository import ScheduleRepository
 from yuxi.services.schedule_manager import compute_next_run
 from yuxi.services.schedule_service import ScheduleService
@@ -37,11 +37,12 @@ from yuxi.utils import logger
 
 
 def _resolve_user(runtime: ToolRuntime) -> str | None:
-    """从 runtime.context 拿当前用户 user_id；缺失返回 None。"""
+    """从 runtime.context 拿当前用户 uid；缺失返回 None。"""
     context = getattr(runtime, "context", None)
     if context is None:
         return None
-    return getattr(context, "user_id", None)
+    # 运行时上下文以 uid 标识用户（BaseContext.uid），兼容旧字段名 user_id。
+    return getattr(context, "uid", None) or getattr(context, "user_id", None)
 
 
 async def _is_admin(runtime: ToolRuntime, db_session: AsyncSession) -> bool:
@@ -58,7 +59,7 @@ async def _is_admin(runtime: ToolRuntime, db_session: AsyncSession) -> bool:
     user_id = _resolve_user(runtime)
     if not user_id:
         return False
-    stmt = select(User.role).where(User.user_id == user_id).limit(1)
+    stmt = select(User.role).where(User.uid == user_id).limit(1)
     result = await db_session.execute(stmt)
     role = result.scalar_one_or_none()
     return role in ("admin", "superadmin")
@@ -88,7 +89,7 @@ async def _check_agent_ownership(
     """
     if is_admin:
         return None
-    config = await AgentConfigRepository(db_session).get_by_id(agent_config_id)
+    config = await AgentRepository(db_session).get_by_id(id=agent_config_id)
     if config is None or str(config.created_by) != str(user_id):
         return "无权使用该 agent"
     return None

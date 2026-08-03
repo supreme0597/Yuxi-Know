@@ -346,6 +346,11 @@ class AgentRepository:
             return agents
         return [agent for agent in agents if user_can_access_agent(user, agent)]
 
+    async def get_by_id(self, id: int) -> Agent | None:
+        """按主键读取智能体；定时任务通过 agents.id 关联智能体。"""
+        result = await self.db.execute(select(Agent).where(Agent.id == id))
+        return result.scalar_one_or_none()
+
     async def get_by_slug(self, slug: str) -> Agent | None:
         result = await self.db.execute(select(Agent).where(Agent.slug == slug))
         return result.scalar_one_or_none()

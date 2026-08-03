@@ -4,6 +4,8 @@
 
 同一版本的多次功能更新时，应以功能为单位进行更新，比如之前添加了 A 功能的更新，在后续的更新中修复了因 A 功能引入的 bug，那么这个修复说明应该和 A 功能描述放在一起，而不是新增一条修复记录，功能更新同理。
 
+- 修复定时任务与 main 分支的合并不兼容：`feat/schedule` 基于旧 `agent_config_repository` 与「按 query 直接提交 Run」契约开发，合并后无法启动且定时任务不会真正执行。改为使用重构后的 `AgentRepository`（新增 `get_by_id`）并对接「统一 run 提交」契约——调度触发改为先建对话与输入 Message、再以 `agent_slug/uid/input_message_id/run_type="chat"` 登记 `AgentRun` 并入队 `process_agent_run`；统一用户标识为 `uid`（ScheduleDefinition.user_id、Agent.created_by、run.uid 与运行时 context.uid 一致），移除指向已删除 `agent_configs` 表的死外键；修正工具运行时 `context.uid` 读取与 `_is_admin` 的 `User.uid` 查询。
+
 ## v0.7.1 (2026-07-17)
 
 ### 安全
