@@ -89,7 +89,7 @@ async def _check_agent_ownership(
     if is_admin:
         return None
     config = await AgentConfigRepository(db_session).get_by_id(agent_config_id)
-    if config is None or str(config.user_id) != str(user_id):
+    if config is None or str(config.created_by) != str(user_id):
         return "无权使用该 agent"
     return None
 
