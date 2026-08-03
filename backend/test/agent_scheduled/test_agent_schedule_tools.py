@@ -175,7 +175,7 @@ async def test_get_schedule_admin_can_read_others(monkeypatch) -> None:
 async def test_create_schedule_succeeds_when_agent_belongs_to_user(monkeypatch) -> None:
     fake_schedule = SimpleNamespace(id="new-1", to_dict=lambda: {"id": "new-1", "name": "demo"})
     sched_repo = _FakeRepo({"create_schedule": AsyncMock(return_value=fake_schedule)})
-    agent_repo = _FakeRepo({"get_by_id": AsyncMock(return_value=SimpleNamespace(user_id="u1"))})
+    agent_repo = _FakeRepo({"get_by_id": AsyncMock(return_value=SimpleNamespace(created_by="u1"))})
 
     @asynccontextmanager
     async def _ctx():
@@ -211,7 +211,7 @@ async def test_create_schedule_succeeds_when_agent_belongs_to_user(monkeypatch) 
 
 async def test_create_schedule_rejects_foreign_agent(monkeypatch) -> None:
     sched_repo = _FakeRepo({"create_schedule": AsyncMock()})
-    agent_repo = _FakeRepo({"get_by_id": AsyncMock(return_value=SimpleNamespace(user_id="other_user"))})
+    agent_repo = _FakeRepo({"get_by_id": AsyncMock(return_value=SimpleNamespace(created_by="other_user"))})
 
     @asynccontextmanager
     async def _ctx():
@@ -274,7 +274,7 @@ async def test_create_schedule_admin_bypasses_agent_ownership(monkeypatch) -> No
 
 async def test_update_schedule_rejects_foreign_agent(monkeypatch) -> None:
     sched_repo = _FakeRepo({"get_by_id_for_user": AsyncMock(return_value=SimpleNamespace(id="sx"))})
-    agent_repo = _FakeRepo({"get_by_id": AsyncMock(return_value=SimpleNamespace(user_id="other"))})
+    agent_repo = _FakeRepo({"get_by_id": AsyncMock(return_value=SimpleNamespace(created_by="other"))})
 
     @asynccontextmanager
     async def _ctx():
@@ -311,7 +311,7 @@ async def test_update_schedule_succeeds_when_owner_and_agent_match(monkeypatch) 
             "update_for_user": AsyncMock(return_value=updated),
         }
     )
-    agent_repo = _FakeRepo({"get_by_id": AsyncMock(return_value=SimpleNamespace(user_id="u1"))})
+    agent_repo = _FakeRepo({"get_by_id": AsyncMock(return_value=SimpleNamespace(created_by="u1"))})
 
     @asynccontextmanager
     async def _ctx():
