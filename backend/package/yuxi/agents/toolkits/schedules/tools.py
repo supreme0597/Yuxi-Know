@@ -14,8 +14,6 @@ admin 通过 runtime.context.is_admin（若 BaseContext 带）或
 fallback 到 user.role 判断。
 """
 
-from __future__ import annotations
-
 import json
 import uuid
 from typing import Any
@@ -209,7 +207,7 @@ class CreateScheduleInput(BaseModel):
     timezone: str = "Asia/Shanghai"
     query: str
     image_content: str | None = None
-    config: dict = {}
+    schedule_config: dict = {}
     enabled: bool = True
 
 
@@ -227,9 +225,9 @@ async def create_schedule(  # type: ignore[no-redef]
     timezone: str,
     query: str,
     image_content: str | None,
-    config: dict,
-    enabled: bool,
-    runtime: ToolRuntime,
+    schedule_config: dict | None = None,
+    enabled: bool = True,
+    runtime: ToolRuntime = None,
 ) -> str:
     """创建新的定时任务。普通用户只能绑定自己创建的 agent_config；admin 不受限。"""
     user_id = _resolve_user(runtime)
@@ -261,7 +259,7 @@ async def create_schedule(  # type: ignore[no-redef]
                 timezone=timezone,
                 query=query,
                 image_content=image_content,
-                config=config or {},
+                config=schedule_config or {},
                 enabled=enabled,
                 next_run_at=next_run,
             )
@@ -287,7 +285,7 @@ class UpdateScheduleInput(BaseModel):
     timezone: str | None = None
     query: str | None = None
     image_content: str | None = None
-    config: dict | None = None
+    schedule_config: dict | None = None
     enabled: bool | None = None
 
 
@@ -306,9 +304,9 @@ async def update_schedule(  # type: ignore[no-redef]
     timezone: str | None,
     query: str | None,
     image_content: str | None,
-    config: dict | None,
-    enabled: bool | None,
-    runtime: ToolRuntime,
+    schedule_config: dict | None = None,
+    enabled: bool | None = None,
+    runtime: ToolRuntime = None,
 ) -> str:
     """更新定时任务；agent_config_id 必须归属当前用户（admin 跳过）。"""
     user_id = _resolve_user(runtime)
@@ -338,8 +336,8 @@ async def update_schedule(  # type: ignore[no-redef]
                 update_data["query"] = query
             if image_content is not None:
                 update_data["image_content"] = image_content
-            if config is not None:
-                update_data["config"] = config
+            if schedule_config is not None:
+                update_data["config"] = schedule_config
             if enabled is not None:
                 update_data["enabled"] = enabled
 
