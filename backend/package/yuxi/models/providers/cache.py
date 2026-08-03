@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass, field
+from threading import Lock
 from typing import Any
 
 from yuxi.storage.redis import sync_redis_client
@@ -197,3 +198,37 @@ def resolve_model_spec(spec: str) -> ModelInfo:
     all_specs = model_cache.get_all_specs()
     available = [item.spec for item in all_specs[:10]]
     raise ValueError(f"未找到模型: '{spec}'。可用模型 ({len(all_specs)}): {available}")
+
+
+class VisibilityCache:
+    """按 uid 缓存可见 provider_id 集合，TTL 30s。"""
+
+    def __init__(self, ttl_seconds: int = 30) -> None:
+        self._ttl = ttl_seconds
+        self._cache: dict[str, tuple[float, frozenset[str]]] = {}
+        self._lock = Lock()
+
+    def get(self, uid: str) -> frozenset[str] | None:
+        with self._lock:
+            entry = self._cache.get(uid)
+            if not entry:
+                return None
+            ts, value = entry
+            if time.monotonic() - ts > self._ttl:
+                self._cache.pop(uid, None)
+                return None
+            return value
+
+    def set(self, uid: str, provider_ids: set[str]) -> None:
+        with self._lock:
+            self._cache[uid] = (time.monotonic(), frozenset(provider_ids))
+
+    def invalidate(self, uid: str | None = None) -> None:
+        with self._lock:
+            if uid is None:
+                self._cache.clear()
+            else:
+                self._cache.pop(uid, None)
+
+
+visibility_cache = VisibilityCache()

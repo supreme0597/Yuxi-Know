@@ -50,7 +50,13 @@ def _langchain_kwargs(provider_type: str, kwargs: dict) -> dict:
     return langchain_kwargs
 
 
-def select_model(model_spec: str, **kwargs) -> LangChainChatAdapter:
+def select_model(
+    model_spec: str,
+    *,
+    current_user=None,
+    **kwargs,
+) -> LangChainChatAdapter:
+    """解析 model_spec 为 LangChain adapter；若提供 current_user，做可见性校验。"""
     if not model_spec:
         raise ValueError("model_spec 不能为空")
 
@@ -62,6 +68,18 @@ def select_model(model_spec: str, **kwargs) -> LangChainChatAdapter:
 
     if info.model_type != "chat":
         raise ValueError(f"Model {model_spec} is not a chat model (type={info.model_type})")
+
+    if current_user is not None:
+        try:
+            from yuxi.models.providers.cache import visibility_cache
+
+            uid = str(current_user.uid)
+            cached = visibility_cache.get(uid)
+
+            if cached is not None and info.provider_id not in cached:
+                raise ValueError(f"无权访问模型: {model_spec}")
+        except ImportError:
+            pass
 
     logger.info(f"Selecting model: {model_spec} (provider_type={info.provider_type})")
 
