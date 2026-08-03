@@ -321,6 +321,11 @@ async def update_schedule(  # type: ignore[no-redef]
                 if err:
                     return err
 
+            repo = ScheduleRepository(session)
+            existing = await repo.get_by_id_for_user(schedule_id, user_id, is_admin=is_admin)
+            if existing is None:
+                return "未找到该任务"
+
             update_data: dict[str, Any] = {}
             if name is not None:
                 update_data["name"] = name
@@ -341,23 +346,19 @@ async def update_schedule(  # type: ignore[no-redef]
             if enabled is not None:
                 update_data["enabled"] = enabled
 
-            # 若改了 cron/时区/启用状态，重算 next_run_at
-            if enabled or "cron_expr" in update_data or "timezone" in update_data:
-                final_cron = update_data.get("cron_expr")
-                final_tz = update_data.get("timezone")
-                final_enabled = update_data.get("enabled", enabled if enabled is not None else True)
+            # 若改了 cron/时区/启用状态，重算 next_run_at；未提供的字段用已有任务兜底（PATCH 语义）
+            if enabled is not None or "cron_expr" in update_data or "timezone" in update_data:
+                final_cron = update_data.get("cron_expr", existing.cron_expr)
+                final_tz = update_data.get("timezone", existing.timezone)
+                final_enabled = update_data.get("enabled", existing.enabled)
                 if final_enabled:
                     try:
-                        # 需要原值兜底；这里用 None 时抛错
-                        if final_cron is None or final_tz is None:
-                            raise ValueError("缺少 cron 或时区")
                         update_data["next_run_at"] = compute_next_run(final_cron, final_tz)
                     except Exception as e:
                         return f"cron 表达式无效: {e}"
                 else:
                     update_data["next_run_at"] = None
 
-            repo = ScheduleRepository(session)
             updated = await repo.update_for_user(schedule_id, user_id, update_data, is_admin=is_admin)
             if updated is None:
                 return "未找到该任务"
