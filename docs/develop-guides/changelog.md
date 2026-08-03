@@ -4,6 +4,18 @@
 
 同一版本的多次功能更新时，应以功能为单位进行更新，比如之前添加了 A 功能的更新，在后续的更新中修复了因 A 功能引入的 bug，那么这个修复说明应该和 A 功能描述放在一起，而不是新增一条修复记录，功能更新同理。
 
+## 未发布
+
+### 模型供应商权限管控
+
+- 新增 `ModelProvider.share_config` 字段，三档可见性：global / department / user
+- 模型供应商列表 / 详情 / 创建 / 更新 / 删除 端点按可见性 / 管理权 / 引用计数三层校验
+- API Key 在列表响应中默认脱敏（`api_key_masked`），仅 PUT 回写场景返回明文
+- 消费侧 `select_model` 引入 `VisibilityCache`，按 `user.uid` 缓存 30s
+- 删除供应商时若被知识库 / 智能体 / 系统配置引用，返回 409 与引用列表
+- 前端 `ModelProviderManagePanel` 接入 `ShareConfigForm`，新增「全部 / 我创建的 / 部门共享 / 全局共享」标签页
+
+
 ## v0.7.1 (2026-07-17)
 
 ### 安全
