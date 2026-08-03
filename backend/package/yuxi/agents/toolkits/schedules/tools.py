@@ -110,7 +110,12 @@ class ListMySchedulesInput(BaseModel):
     offset: int = 0
 
 
-@tool(args_schema=ListMySchedulesInput)  # type: ignore[misc]
+@tool(
+    category="schedules",
+    tags=["定时任务", "列表"],
+    display_name="列出我的定时任务",
+    args_schema=ListMySchedulesInput,
+)  # type: ignore[misc]
 async def list_my_schedules(  # type: ignore[no-redef]
     args: ListMySchedulesInput,
     runtime: ToolRuntime,
@@ -161,7 +166,12 @@ class GetScheduleInput(BaseModel):
     schedule_id: str
 
 
-@tool(args_schema=GetScheduleInput)  # type: ignore[misc]
+@tool(
+    category="schedules",
+    tags=["定时任务", "查询"],
+    display_name="查看定时任务详情",
+    args_schema=GetScheduleInput,
+)  # type: ignore[misc]
 async def get_schedule(schedule_id: str, runtime: ToolRuntime) -> str:  # type: ignore[no-redef]
     """获取单条定时任务详情（按 owner 隔离）。
 
@@ -202,7 +212,12 @@ class CreateScheduleInput(BaseModel):
     enabled: bool = True
 
 
-@tool(args_schema=CreateScheduleInput)  # type: ignore[misc]
+@tool(
+    category="schedules",
+    tags=["定时任务", "创建"],
+    display_name="创建定时任务",
+    args_schema=CreateScheduleInput,
+)  # type: ignore[misc]
 async def create_schedule(  # type: ignore[no-redef]
     name: str,
     description: str | None,
@@ -275,7 +290,12 @@ class UpdateScheduleInput(BaseModel):
     enabled: bool | None = None
 
 
-@tool(args_schema=UpdateScheduleInput)  # type: ignore[misc]
+@tool(
+    category="schedules",
+    tags=["定时任务", "修改"],
+    display_name="修改定时任务",
+    args_schema=UpdateScheduleInput,
+)  # type: ignore[misc]
 async def update_schedule(  # type: ignore[no-redef]
     schedule_id: str,
     name: str | None,
@@ -357,7 +377,12 @@ class DeleteScheduleInput(BaseModel):
     schedule_id: str
 
 
-@tool(args_schema=DeleteScheduleInput)  # type: ignore[misc]
+@tool(
+    category="schedules",
+    tags=["定时任务", "删除", "危险"],
+    display_name="删除定时任务",
+    args_schema=DeleteScheduleInput,
+)  # type: ignore[misc]
 async def delete_schedule(schedule_id: str, runtime: ToolRuntime) -> str:  # type: ignore[no-redef]
     """删除定时任务（按 owner 隔离）。"""
     user_id = _resolve_user(runtime)
@@ -388,7 +413,12 @@ class ListScheduleLogsInput(BaseModel):
     offset: int = 0
 
 
-@tool(args_schema=ListScheduleLogsInput)  # type: ignore[misc]
+@tool(
+    category="schedules",
+    tags=["定时任务", "日志"],
+    display_name="查看定时任务执行日志",
+    args_schema=ListScheduleLogsInput,
+)  # type: ignore[misc]
 async def list_schedule_logs(  # type: ignore[no-redef]
     schedule_id: str,
     limit: int,
@@ -425,7 +455,12 @@ class TriggerScheduleInput(BaseModel):
     schedule_id: str
 
 
-@tool(args_schema=TriggerScheduleInput)  # type: ignore[misc]
+@tool(
+    category="schedules",
+    tags=["定时任务", "执行"],
+    display_name="手动触发定时任务",
+    args_schema=TriggerScheduleInput,
+)  # type: ignore[misc]
 async def trigger_schedule(schedule_id: str, runtime: ToolRuntime) -> str:  # type: ignore[no-redef]
     """立即触发一次定时任务；不影响原 cron 周期。
 
