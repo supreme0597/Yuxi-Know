@@ -8,6 +8,7 @@ from urllib.parse import quote, unquote
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import StreamingResponse
 from yuxi import config
 from yuxi.knowledge.chunking.ragflow_like.presets import get_chunk_preset_options
@@ -38,7 +39,7 @@ from yuxi.storage.postgres.models_business import User
 from yuxi.utils import logger
 from yuxi.utils.upload_utils import MAX_UPLOAD_SIZE_BYTES, read_upload_with_limit, write_upload_to_path
 
-from server.utils.auth_middleware import get_admin_user, get_required_user
+from server.utils.auth_middleware import get_admin_user, get_db, get_required_user
 
 knowledge = APIRouter(prefix="/knowledge", tags=["knowledge"])
 
@@ -128,6 +129,13 @@ async def _delete_document_storage_objects(kb_id: str, doc_id: str, file_path: s
         await minio_client.adelete_file(minio_client.KB_BUCKETS["parsed"], f"{kb_id}/preview/{doc_id}.pdf")
     except Exception as minio_error:
         logger.warning(f"从MinIO删除预览 PDF 失败: {minio_error}")
+
+
+def _provider_id_from_spec(spec: str | None) -> str | None:
+    """从 model_spec 中解析 provider_id（spec 格式：provider_id:model_id）。"""
+    if not spec or ":" not in spec:
+        return None
+    return spec.split(":", 1)[0]
 
 
 async def _ensure_database_supports_documents(kb_id: str, operation: str) -> None:
@@ -222,6 +230,7 @@ async def create_database(
     llm_model_spec: str | None = Body(None),
     share_config: dict | None = Body(None),
     current_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """创建知识库"""
     logger.debug(
@@ -261,6 +270,21 @@ async def create_database(
                 raise HTTPException(status_code=400, detail=f"不支持的 embedding 模型: {embedding_model_spec}")
         else:
             embedding_model_spec = None
+
+        from yuxi.models.providers.repository import get_visible_model_provider
+
+        embedding_provider = _provider_id_from_spec(embedding_model_spec)
+        llm_provider = _provider_id_from_spec(llm_model_spec)
+
+        if embedding_provider and model_cache.get_specs_grouped_by_provider("embedding").get(embedding_provider):
+            provider_obj = await get_visible_model_provider(db, embedding_provider, current_user)
+            if provider_obj is None:
+                raise HTTPException(status_code=403, detail=f"无权访问 embedding 模型供应商: {embedding_provider}")
+
+        if llm_provider and model_cache.get_specs_grouped_by_provider("chat").get(llm_provider):
+            provider_obj = await get_visible_model_provider(db, llm_provider, current_user)
+            if provider_obj is None:
+                raise HTTPException(status_code=403, detail=f"无权访问 LLM 模型供应商: {llm_provider}")
 
         database_info = await knowledge_base.create_database(
             database_name,
@@ -410,6 +434,7 @@ async def update_database_info(
     kb_id: str,
     data: UpdateDatabaseRequest,
     current_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """更新知识库信息"""
     logger.debug(
@@ -435,6 +460,14 @@ async def update_database_info(
                 if kb_class.apply_chunk_defaults
                 else kb_class.normalize_additional_params(merged_params)
             )
+
+        from yuxi.models.providers.repository import get_visible_model_provider
+
+        llm_provider = _provider_id_from_spec(data.llm_model_spec)
+        if llm_provider and model_cache.get_specs_grouped_by_provider("chat").get(llm_provider):
+            provider_obj = await get_visible_model_provider(db, llm_provider, current_user)
+            if provider_obj is None:
+                raise HTTPException(status_code=403, detail=f"无权访问 LLM 模型供应商: {llm_provider}")
 
         database = await knowledge_base.update_database(
             kb_id,
