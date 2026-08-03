@@ -2,6 +2,7 @@
 change: agent-schedule-toolkit
 design-doc: docs/superpowers/specs/2026-08-03-agent-schedule-toolkit-design.md
 base-ref: 78910d92e3c61ca7f845f8574ea4297e5fc84bb9
+archived-with: 2026-08-03-agent-schedule-toolkit
 ---
 
 # agent-schedule-toolkit 实施计划

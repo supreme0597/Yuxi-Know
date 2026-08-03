@@ -2,6 +2,8 @@
 comet_change: agent-schedule-toolkit
 role: technical-design
 canonical_spec: openspec
+archived-with: 2026-08-03-agent-schedule-toolkit
+status: final
 ---
 
 # agent-schedule-toolkit — Design Doc
