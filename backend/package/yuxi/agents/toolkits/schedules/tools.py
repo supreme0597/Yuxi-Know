@@ -117,14 +117,15 @@ class ListMySchedulesInput(BaseModel):
     args_schema=ListMySchedulesInput,
 )  # type: ignore[misc]
 async def list_my_schedules(  # type: ignore[no-redef]
-    args: ListMySchedulesInput,
+    limit: int,
+    offset: int,
     runtime: ToolRuntime,
 ) -> str:
     """列出当前用户可访问的定时任务列表（admin 看全部）。
 
     Args:
-        args.limit: 最多返回条数（默认 20，最大 100）
-        args.offset: 分页偏移
+        limit: 最多返回条数（默认 20，最大 100）
+        offset: 分页偏移
 
     Returns:
         JSON 数组；每条含 id/name/cron_expr/enabled/next_run_at 等。
@@ -133,8 +134,8 @@ async def list_my_schedules(  # type: ignore[no-redef]
     if not user_id:
         return "无法获取用户信息"
 
-    limit = min(max(int(args.limit), 1), LIST_MAX_LIMIT)
-    offset = max(int(args.offset), 0)
+    limit = min(max(int(limit), 1), LIST_MAX_LIMIT)
+    offset = max(int(offset), 0)
 
     async with pg_manager.get_async_session_context() as session:
         is_admin = await _is_admin(runtime, session)
