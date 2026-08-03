@@ -20,8 +20,11 @@ import { modelIcons } from '@/utils/modelIcon'
 import PageShoulder from '@/components/shared/PageShoulder.vue'
 import InfoCard from '@/components/shared/InfoCard.vue'
 import ExtensionCardGrid from '@/components/extensions/ExtensionCardGrid.vue'
+import ShareConfigForm from '@/components/ShareConfigForm.vue'
+import { useUserStore } from '@/stores/user'
 
 const configStore = useConfigStore()
+const userStore = useUserStore()
 const loading = ref(false)
 const remoteLoading = ref(false)
 const saving = ref(false)
@@ -56,6 +59,12 @@ const providerForm = reactive({
   rerank_models_endpoint: '',
   api_key_env: '',
   api_key: '',
+  api_key_placeholder: '',
+  share_config: {
+    access_level: 'global',
+    department_ids: [],
+    user_uids: []
+  },
   capabilities: ['chat'],
   is_enabled: true,
   headers_text: '{}',
@@ -92,15 +101,35 @@ const remoteModelsLoaded = ref({})
 // Remote model search state per provider
 const remoteModelSearch = ref({})
 const remoteModelTypeFilter = ref({})
+const providerTab = ref('all')
+const allowedAccessLevels = computed(() => {
+  if (userStore.isSuperAdmin || userStore.isAdmin) {
+    return ['global', 'department', 'user']
+  }
+  return ['user']
+})
 const filteredProviders = computed(() => {
   const keyword = searchQuery.value.trim().toLowerCase()
+  const filteredByTab = (() => {
+    const list = providers.value || []
+    if (providerTab.value === 'mine') {
+      return list.filter((p) => p.created_by === userStore.uid)
+    }
+    if (providerTab.value === 'department') {
+      return list.filter((p) => p.share_config?.access_level === 'department')
+    }
+    if (providerTab.value === 'global') {
+      return list.filter((p) => p.share_config?.access_level === 'global')
+    }
+    return list
+  })()
   const filtered = keyword
-    ? providers.value.filter(
+    ? filteredByTab.filter(
         (p) =>
           p.provider_id.toLowerCase().includes(keyword) ||
           p.display_name.toLowerCase().includes(keyword)
       )
-    : providers.value
+    : filteredByTab
   return [...filtered].sort((a, b) => {
     if (a.is_enabled !== b.is_enabled) return a.is_enabled ? -1 : 1
     if (a.is_enabled && b.is_enabled && a.credential_status !== b.credential_status) {
@@ -331,6 +360,12 @@ const openCreateProviderModal = () => {
     rerank_models_endpoint: '',
     api_key_env: '',
     api_key: '',
+    api_key_placeholder: '',
+    share_config: {
+      access_level: 'global',
+      department_ids: [],
+      user_uids: []
+    },
     capabilities: ['chat'],
     is_enabled: true,
     headers_text: '{}',
@@ -353,7 +388,17 @@ const openEditProviderModal = (provider) => {
     embedding_models_endpoint: provider.embedding_models_endpoint ?? '',
     rerank_models_endpoint: provider.rerank_models_endpoint ?? '',
     api_key_env: provider.api_key_env || '',
-    api_key: provider.api_key || '',
+    api_key: '',
+    api_key_placeholder: provider.api_key_masked || '未设置',
+    share_config: {
+      access_level: provider.share_config?.access_level || 'global',
+      department_ids: Array.isArray(provider.share_config?.department_ids)
+        ? [...provider.share_config.department_ids]
+        : [],
+      user_uids: Array.isArray(provider.share_config?.user_uids)
+        ? [...provider.share_config.user_uids]
+        : []
+    },
     capabilities: provider.capabilities?.length ? provider.capabilities : ['chat'],
     is_enabled: provider.is_enabled !== false,
     headers_text: formatJsonText(provider.headers_json),
@@ -361,6 +406,12 @@ const openEditProviderModal = (provider) => {
   })
   showProviderModal.value = true
 }
+
+const editingProviderCanManage = computed(() => {
+  if (!editingProviderId.value) return true
+  const p = providers.value.find((x) => x.provider_id === editingProviderId.value)
+  return p?.can_manage ?? true
+})
 
 const buildProviderPayload = () => ({
   provider_id: providerForm.provider_id || undefined,
@@ -375,6 +426,15 @@ const buildProviderPayload = () => ({
   rerank_models_endpoint: providerForm.rerank_models_endpoint || null,
   api_key_env: providerForm.api_key_env || null,
   api_key: providerForm.api_key || null,
+  share_config: {
+    access_level: providerForm.share_config?.access_level || 'global',
+    department_ids: Array.isArray(providerForm.share_config?.department_ids)
+      ? providerForm.share_config.department_ids
+      : [],
+    user_uids: Array.isArray(providerForm.share_config?.user_uids)
+      ? providerForm.share_config.user_uids
+      : []
+  },
   capabilities: providerForm.capabilities,
   is_enabled: providerForm.is_enabled,
   headers_json: parseJsonObject(providerForm.headers_text, '请求头'),
@@ -707,6 +767,13 @@ defineExpose({
       </template>
     </PageShoulder>
 
+    <a-tabs v-model:active-key="providerTab" class="provider-tabs">
+      <a-tab-pane key="all" tab="全部" />
+      <a-tab-pane key="mine" tab="我创建的" />
+      <a-tab-pane key="department" tab="部门共享" />
+      <a-tab-pane key="global" tab="全局共享" />
+    </a-tabs>
+
     <ExtensionCardGrid :min-width="320">
       <InfoCard
         v-for="provider in filteredProviders"
@@ -716,7 +783,8 @@ defineExpose({
         :default-icon="Globe"
         :info="getProviderInfo(provider)"
         :status="getProviderStatus(provider)"
-        @click="openEditProviderModal(provider)"
+        :disabled="!provider.can_manage && !provider.can_view"
+        @click="provider.can_manage ? openEditProviderModal(provider) : undefined"
       >
         <template #icon>
           <img
@@ -724,6 +792,23 @@ defineExpose({
             :src="getIconUrl(getProviderIcon(provider))"
             :alt="provider.display_name"
           />
+        </template>
+        <template #tags>
+          <a-tag
+            v-if="provider.share_config?.access_level === 'global'"
+            color="blue"
+            class="share-scope-tag"
+          >
+            全局
+          </a-tag>
+          <a-tag
+            v-else-if="provider.share_config?.access_level === 'department'"
+            color="purple"
+            class="share-scope-tag"
+          >
+            部门共享
+          </a-tag>
+          <a-tag v-else color="orange" class="share-scope-tag">指定人</a-tag>
         </template>
         <template #footer>
           <button class="view-models-btn" type="button" @click.stop="openModelsModal(provider)">
@@ -735,6 +820,7 @@ defineExpose({
           </button>
           <span class="provider-enable-switch" @click.stop>
             <a-switch
+              v-if="provider.can_manage"
               size="small"
               :checked="provider.is_enabled"
               :loading="togglingProviderId === provider.provider_id"
@@ -755,7 +841,7 @@ defineExpose({
       <template #footer>
         <div class="provider-modal-footer">
           <a-button
-            v-if="editingProviderId"
+            v-if="editingProviderId && editingProviderCanManage"
             danger
             class="lucide-icon-btn"
             @click="deleteProviderFromEdit"
@@ -769,6 +855,7 @@ defineExpose({
             <a-button
               type="primary"
               :loading="saving"
+              :disabled="!!editingProviderId && !editingProviderCanManage"
               @click="editingProviderId ? saveProvider() : createProvider()"
             >
               确认
@@ -821,9 +908,21 @@ defineExpose({
           </label>
           <label class="form-label">
             <span>API Key</span>
-            <a-input-password v-model:value="providerForm.api_key" />
+            <a-input-password
+              v-model:value="providerForm.api_key"
+              :placeholder="providerForm.api_key_placeholder || '请输入 API Key'"
+            />
           </label>
         </div>
+
+        <label class="form-label full-width">
+          <span>共享范围</span>
+          <ShareConfigForm
+            v-model="providerForm.share_config"
+            :allowed-access-levels="allowedAccessLevels"
+            :auto-select-user-dept="true"
+          />
+        </label>
 
         <div class="form-row">
           <label class="form-label">
@@ -1161,6 +1260,14 @@ defineExpose({
     width: 30px;
     height: 30px;
   }
+}
+
+.provider-tabs {
+  margin-bottom: 12px;
+}
+
+.share-scope-tag {
+  margin-right: 0;
 }
 
 .view-models-btn {
