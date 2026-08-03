@@ -378,6 +378,61 @@ async def test_update_schedule_skips_agent_check_when_agent_id_not_provided(monk
     agent_repo._methods["get_by_id"].assert_not_awaited()
 
 
+async def test_update_schedule_enable_uses_existing_cron(monkeypatch) -> None:
+    """仅传 enabled=True 时应使用已有任务的 cron/时区重算 next_run_at，而非要求重传。"""
+    existing = SimpleNamespace(
+        id="sx",
+        user_id="u1",
+        cron_expr="*/5 * * * *",
+        timezone="Asia/Shanghai",
+        enabled=False,
+        to_dict=lambda: {"id": "sx", "enabled": True, "next_run_at": "2099-01-01T00:00:00Z"},
+    )
+    updated = SimpleNamespace(
+        id="sx",
+        enabled=True,
+        to_dict=lambda: {"id": "sx", "enabled": True, "next_run_at": "2099-01-01T00:00:00Z"},
+    )
+    sched_repo = _FakeRepo(
+        {
+            "get_by_id_for_user": AsyncMock(return_value=existing),
+            "update_for_user": AsyncMock(return_value=updated),
+        }
+    )
+    agent_repo = _FakeRepo({"get_by_id": AsyncMock()})
+
+    @asynccontextmanager
+    async def _ctx():
+        yield MagicMock()
+
+    monkeypatch.setattr(tools, "pg_manager", MagicMock(get_async_session_context=_ctx))
+    monkeypatch.setattr(tools, "ScheduleRepository", lambda _s: sched_repo)
+    monkeypatch.setattr(tools, "AgentConfigRepository", lambda _s: agent_repo)
+    monkeypatch.setattr(tools, "compute_next_run", lambda _c, _t: "2099-01-01T00:00:00Z")
+
+    result = await tools.update_schedule.coroutine(  # type: ignore[attr-defined]
+        schedule_id="sx",
+        name=None,
+        description=None,
+        agent_config_id=None,
+        cron_expr=None,
+        timezone=None,
+        query=None,
+        image_content=None,
+        schedule_config=None,
+        enabled=True,
+        runtime=_make_runtime(user_id="u1"),
+    )
+
+    payload = json.loads(result)
+    assert payload["enabled"] is True
+    call_args = sched_repo._methods["update_for_user"].call_args
+    # 第 3 个位置参数是 update_data；仅传 enabled=True 时应用已有 cron/时区重算 next_run_at
+    assert call_args.args[2]["next_run_at"] == "2099-01-01T00:00:00Z"
+    # cron_expr 未被本次更新覆盖（PATCH 语义：未提供的字段保持原值）
+    assert "cron_expr" not in call_args.args[2]
+
+
 # ========== delete_schedule ==========
 
 

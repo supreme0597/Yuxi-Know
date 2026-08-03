@@ -44,3 +44,9 @@
 - [ ] 6.2 在 `docs/agents/` 下新增（或追加到现有的）"agent-schedule-tools"说明文档，并在 `docs/.vitepress/config.mts` 的 `agents` 导航中补充入口（如 `docs/develop-guides/roadmap.md` 指引该分组维护）。
 - [ ] 6.3 `make format` 格式化代码；按 `docs/develop-guides/testing-guidelines.md` 完成 lint 与端到端冒烟。
 - [ ] 6.4 提交 PR（标题：`feat: 在 agent 运行时新增 schedule 管理工具集并加固按用户隔离`，正文按 `CONTRIBUTING.md` 模板）。
+
+## 7. 修复 update_schedule PATCH 语义
+
+- [x] 7.1 `update_schedule` 工具支持 PATCH 式部分更新：仅传 `enabled` 时，用已有任务的 `cron_expr`/`timezone` 兜底重算 `next_run_at`，不再要求重传 cron/时区（与 `schedule_router.py` 行为对齐）。✅
+- [x] 7.2 修正判定条件 `if enabled or ...` 的布尔陷阱：原写法在 `enabled=False`（禁用）时为 falsy，会跳过清 `next_run_at`；改为 `enabled is not None or ...`。✅
+- [x] 7.3 新增测试 `test_update_schedule_enable_uses_existing_cron` 覆盖「仅传 enabled=True 即用已有 cron/时区重算」场景。✅
