@@ -71,12 +71,14 @@ async def list_my_schedules(runtime: ToolRuntime) -> str:
 
 ### 4. AgentConfig 归属校验：放在路由 / 工具入口
 
-在 `create_schedule_route`（`schedule_router.py:54-92`）和 `update_schedule_route`（`schedule_router.py:132-172`）中，如果 `payload.agent_config_id` 不为空，调 `AgentConfigRepository.get_by_id`，校验 `config_item.user_id == current_user.id`；admin 跳过。`@tool` 实现里同样校验（`runtime.context.user_id`）。
+在 `create_schedule_route`（`schedule_router.py:54-92`）和 `update_schedule_route`（`schedule_router.py:132-172`）中，如果 `payload.agent_config_id` 不为空，调 `AgentConfigRepository.get_by_id`，校验 `config_item.created_by == str(current_user.id)`；admin 跳过。`@tool` 实现里同样校验（`runtime.context.user_id` 与 `AgentConfig.created_by` 比较）。注意：`AgentConfig` 模型没有 `user_id` 字段，owner 记录在 `created_by`（值为 `user.id` 字符串形式）。
 
 **Alternatives considered:**
 
 - 让仓储层在创建/更新时自动改写/校验 `agent_config_id`：模型层不持有"agent 属于谁"的信息，需要 join，破坏仓储单表职责。
 - 把 `AgentConfig` 改造成按 user 私有：影响范围过大（agent 目前是按 department 共享的，且被多处依赖），不属于本次需求。
+
+**字段命名约定（build 阶段修正）：** `create_schedule` / `update_schedule` 工具入参的"附加配置"字段命名为 `schedule_config`（不是 `config`）。原因：`config` 与 LangChain 内部 `_arun(self, *, config, ...)` 的保留参数同名，会被吞掉导致 `missing config`；参考 `kbs/tools.py` 不踩该坑。另外，`schedules/tools.py` 不得使用 `from __future__ import annotations`，否则 `runtime: ToolRuntime` 会被字符串化，LangChain 无法识别 `runtime` 注入（报 `missing runtime`）。
 
 ### 5. 工具返回格式：字符串（LLM 友好）
 
@@ -99,7 +101,7 @@ async def list_my_schedules(runtime: ToolRuntime) -> str:
 
 ## Risks / Trade-offs
 
-- **[Risk] agent_config 归属校验依赖 `AgentConfig.user_id` 字段** → Mitigation：在 `models_business.py:134-186` 已确认该字段存在；如未来 AgentConfig 改造为非 user 归属，校验会失效，需同步修改。
+- **[Risk] agent_config 归属校验依赖 `AgentConfig` 的 owner 字段** → Mitigation：`AgentConfig` 模型没有 `user_id` 字段，owner 记录在 `created_by`（`models_business.py:153`，值为 `user.id` 字符串形式）；校验用 `config_item.created_by == str(current_user.id)`。如未来 AgentConfig 改造为非 user 归属，校验会失效，需同步修改。
 - **[Risk] 工具的 `args_schema` 中允许 LLM 传 `user_id` 字段** → Mitigation：所有 `*Input` Pydantic 模型显式不包含 `user_id`；并在工具函数内断言 runtime context 优先。
 - **[Risk] `ScheduleRepository` 新增 owner-aware 方法后，原 `get_by_id` / `update` / `delete` 仍被 ARQ worker 等内部调用使用** → Mitigation：保留原方法签名（只是新增 owner-aware 版本），并在新方法 docstring 中标注 owner-aware 适用场景。
 - **[Risk] 工具元数据自动出现在 agent 配置 UI，但用户未勾选** → Mitigation：在 `docs/develop-guides/roadmap.md` 记录；如需更主动引导，build 阶段可考虑在 `agent_config` 默认 `tools` 列表里加入 schedule 工具（由 LLM 调用者按需在配置页启用）。

@@ -8,13 +8,13 @@
 
 ## 2. 修复 HTTP 路由越权漏洞
 
-- [ ] 2.1 在 `backend/server/routers/schedule_router.py` 的 `create_schedule_route` 中，当 `payload.agent_config_id` 不为空时调 `AgentConfigRepository.get_by_id`，校验 `config_item.user_id == str(current_user.id)`，admin 跳过；失败返回 403。
+- [ ] 2.1 在 `backend/server/routers/schedule_router.py` 的 `create_schedule_route` 中，当 `payload.agent_config_id` 不为空时调 `AgentConfigRepository.get_by_id`，校验 `config_item.created_by == str(current_user.id)`（注意 `AgentConfig` 无 `user_id` 字段，owner 记为 `created_by`），admin 跳过；失败返回 403。
 - [ ] 2.2 在 `update_schedule_route` 中做同样校验，并在替换 `agent_config_id` 之前完成。
 - [ ] 2.3 将 `schedule_router.py` 中所有 schedule 读写调用改为 owner-aware 仓储方法（`get_by_id_for_user` / `update_for_user` / `delete_for_user` / `list_logs_for_user`），admin 路径显式传 `is_admin=True`。
 
 ## 3. 新增 @tool 工具集
 
-- [ ] 3.1 新建 `backend/package/yuxi/agents/toolkits/schedules/__init__.py`（参考 `kbs/__init__.py` 写法）。
+- [x] 3.1 新建 `backend/package/yuxi/agents/toolkits/schedules/__init__.py`（参考 `kbs/__init__.py` 写法）。✅ commit 0b286bd2
 - [ ] 3.2 新建 `backend/package/yuxi/agents/toolkits/schedules/tools.py`，定义七个工具的 Pydantic args_schema（不包含 `user_id`）：`list_my_schedules` / `get_schedule` / `create_schedule` / `update_schedule` / `delete_schedule` / `trigger_schedule` / `list_schedule_logs`。每个函数签名形如 `async def xxx(..., runtime: ToolRuntime) -> str`，从 `runtime.context.user_id` 取当前用户。
 - [ ] 3.3 七个工具内部使用 `async with pg_manager.get_async_session_context() as session: ScheduleRepository(session)` 模式调 owner-aware 仓储方法，admin 路径传 `is_admin=True`。
 - [ ] 3.4 `create_schedule` / `update_schedule` 工具内部对 `agent_config_id` 做归属校验，失败返回 LLM 友好错误消息（"无权使用该 agent"）。
@@ -22,7 +22,7 @@
 
 ## 4. 注册新工具
 
-- [ ] 4.1 在 `backend/package/yuxi/agents/toolkits/__init__.py:3` 加上 `from . import schedules` 触发装饰器执行。
+- [x] 4.1 在 `backend/package/yuxi/agents/toolkits/__init__.py:3` 加上 `from . import schedules` 触发装饰器执行。✅ commit 0b286bd2
 - [ ] 4.2 启动 api-dev 容器（`docker compose up -d api-dev`），调用 `get_all_tool_instances()` 验证七个新工具已注册；通过 `web/src/views/AgentView.vue` 或 `SubAgent` 配置页确认工具元数据可见。
 
 ## 5. 测试
