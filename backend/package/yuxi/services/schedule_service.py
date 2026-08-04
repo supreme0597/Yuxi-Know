@@ -2,6 +2,7 @@ import uuid
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
+from croniter import croniter
 from sqlalchemy.ext.asyncio import AsyncSession
 from yuxi.repositories.agent_repository import AgentRepository
 from yuxi.repositories.agent_run_repository import AgentRunRepository
@@ -34,12 +35,23 @@ class TimezoneError(ScheduleValidationError):
     detail = "无效的时区"
 
 
+class CronError(ScheduleValidationError):
+    status_code = 400
+    detail = "无效的 Cron 表达式"
+
+
 def validate_timezone(tz: str) -> None:
     """校验 IANA 时区有效性，非法时抛 TimezoneError（不再静默回退）。"""
     try:
         ZoneInfo(tz)
     except Exception:
         raise TimezoneError(f"无效的时区: {tz}")
+
+
+def validate_cron(cron_expr: str) -> None:
+    """校验 Cron 表达式有效性，非法时抛 CronError（与启用状态无关）。"""
+    if not croniter.is_valid(cron_expr):
+        raise CronError(f"无效的 Cron 表达式: {cron_expr}")
 
 
 class ScheduleService:

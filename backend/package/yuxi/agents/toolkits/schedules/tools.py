@@ -31,6 +31,7 @@ from yuxi.services.schedule_manager import compute_next_run
 from yuxi.services.schedule_service import (
     ScheduleService,
     ScheduleValidationError,
+    validate_cron,
     validate_timezone,
 )
 from yuxi.storage.postgres.manager import pg_manager
@@ -228,11 +229,13 @@ async def get_schedule(schedule_id: str, runtime: ToolRuntime) -> str:  # type: 
 class CreateScheduleInput(BaseModel):
     """创建一个新的定时任务。"""
 
-    name: str
+    name: str = Field(..., max_length=255)
     description: str | None = None
-    agent_slug: str = Field(..., description="目标 Agent 的 slug（可通过 list_agents 查询可用智能体）")
-    cron_expr: str
-    timezone: str = "Asia/Shanghai"
+    agent_slug: str = Field(
+        ..., max_length=64, description="目标 Agent 的 slug（可通过 list_agents 查询可用智能体）"
+    )
+    cron_expr: str = Field(..., max_length=128)
+    timezone: str = Field(default="Asia/Shanghai", max_length=64)
     query: str
     enabled: bool = True
 
@@ -266,19 +269,17 @@ async def create_schedule(  # type: ignore[no-redef]
             if err:
                 return err
 
-            # 校验时区（与启用状态无关，避免脏值延迟到调度才报错）
+            # 校验时区与 cron（与启用状态无关，避免脏值延迟到调度才报错）
             try:
                 validate_timezone(timezone)
+                validate_cron(cron_expr)
             except ScheduleValidationError as e:
                 return str(e.detail)
 
-            # 计算 next_run_at；cron 失败由 compute_next_run 抛
+            # 计算 next_run_at（cron/时区已校验，不会失败）
             next_run = None
             if enabled:
-                try:
-                    next_run = compute_next_run(cron_expr, timezone)
-                except Exception as e:
-                    return f"cron 表达式无效: {e}"
+                next_run = compute_next_run(cron_expr, timezone)
 
             schedule = ScheduleDefinition(
                 id=str(uuid.uuid4()),
@@ -307,13 +308,13 @@ class UpdateScheduleInput(BaseModel):
     """更新定时任务字段；只更新提供的字段。"""
 
     schedule_id: str
-    name: str | None = None
+    name: str | None = Field(None, max_length=255)
     description: str | None = None
     agent_slug: str | None = Field(
-        None, description="目标 Agent 的 slug（可通过 list_agents 查询可用智能体）；留空不修改"
+        None, max_length=64, description="目标 Agent 的 slug（可通过 list_agents 查询可用智能体）；留空不修改"
     )
-    cron_expr: str | None = None
-    timezone: str | None = None
+    cron_expr: str | None = Field(None, max_length=128)
+    timezone: str | None = Field(None, max_length=64)
     query: str | None = None
     enabled: bool | None = None
 
@@ -349,13 +350,6 @@ async def update_schedule(  # type: ignore[no-redef]
                 if err:
                     return err
 
-            # 若显式修改时区，先校验有效性
-            if timezone is not None:
-                try:
-                    validate_timezone(timezone)
-                except ScheduleValidationError as e:
-                    return str(e.detail)
-
             repo = ScheduleRepository(session)
             existing = await repo.get_by_id(schedule_id, user_id)
             if existing is None:
@@ -377,16 +371,19 @@ async def update_schedule(  # type: ignore[no-redef]
             if enabled is not None:
                 update_data["enabled"] = enabled
 
-            # 若改了 cron/时区/启用状态，重算 next_run_at；未提供的字段用已有任务兜底（PATCH 语义）
+            # 若改了 cron/时区/启用状态，先校验有效性（与启用状态无关），再重算 next_run_at；
+            # 未提供的字段用已有任务兜底（PATCH 语义）
             if enabled is not None or "cron_expr" in update_data or "timezone" in update_data:
                 final_cron = update_data.get("cron_expr", existing.cron_expr)
                 final_tz = update_data.get("timezone", existing.timezone)
                 final_enabled = update_data.get("enabled", existing.enabled)
+                try:
+                    validate_cron(final_cron)
+                    validate_timezone(final_tz)
+                except ScheduleValidationError as e:
+                    return str(e.detail)
                 if final_enabled:
-                    try:
-                        update_data["next_run_at"] = compute_next_run(final_cron, final_tz)
-                    except Exception as e:
-                        return f"cron 表达式无效: {e}"
+                    update_data["next_run_at"] = compute_next_run(final_cron, final_tz)
                 else:
                     update_data["next_run_at"] = None
 

@@ -10,6 +10,7 @@ from yuxi.repositories.schedule_repository import ScheduleRepository
 from yuxi.services.schedule_service import (
     ScheduleService,
     ScheduleValidationError,
+    validate_cron,
     validate_timezone,
 )
 from yuxi.services.schedule_manager import compute_next_run
@@ -22,9 +23,9 @@ schedule_router = APIRouter(prefix="/schedules", tags=["schedules"])
 class ScheduleCreateRequest(BaseModel):
     name: str = Field(..., max_length=255, description="任务名称")
     description: str | None = Field(None, description="描述信息")
-    agent_slug: str = Field(..., description="目标 Agent slug")
-    cron_expr: str = Field(..., description="Cron 表达式")
-    timezone: str = Field(default="Asia/Shanghai", description="时区")
+    agent_slug: str = Field(..., max_length=64, description="目标 Agent slug")
+    cron_expr: str = Field(..., max_length=128, description="Cron 表达式")
+    timezone: str = Field(default="Asia/Shanghai", max_length=64, description="时区")
     query: str = Field(..., description="发送给 Agent 的 Query")
     image_content: str | None = Field(None, description="图片 base64 内容")
     config: dict = Field(default_factory=dict, description="其他运行配置")
@@ -34,9 +35,9 @@ class ScheduleCreateRequest(BaseModel):
 class ScheduleUpdateRequest(BaseModel):
     name: str | None = Field(None, max_length=255)
     description: str | None = None
-    agent_slug: str | None = None
-    cron_expr: str | None = None
-    timezone: str | None = None
+    agent_slug: str | None = Field(None, max_length=64)
+    cron_expr: str | None = Field(None, max_length=128)
+    timezone: str | None = Field(None, max_length=64)
     query: str | None = None
     image_content: str | None = None
     config: dict | None = None
@@ -80,18 +81,16 @@ async def create_schedule_route(
             if agent is None:
                 raise HTTPException(status_code=404, detail="指定的 Agent 不存在或无权使用")
 
-        # 校验时区（与启用状态无关，避免脏值延迟到调度才报错）
+        # 校验时区与 cron（与启用状态无关，避免脏值延迟到调度才报错）
         try:
             validate_timezone(payload.timezone)
+            validate_cron(payload.cron_expr)
         except ScheduleValidationError as e:
             raise _as_http(e)
 
         next_run = None
         if payload.enabled:
-            try:
-                next_run = compute_next_run(payload.cron_expr, payload.timezone)
-            except Exception as e:
-                raise HTTPException(status_code=400, detail=f"Cron 表达式或时区错误: {e}")
+            next_run = compute_next_run(payload.cron_expr, payload.timezone)
 
         schedule = ScheduleDefinition(
             id=str(uuid.uuid4()),
@@ -181,19 +180,15 @@ async def update_schedule_route(
         timezone_str = update_data.get("timezone", schedule.timezone)
         enabled = update_data.get("enabled", schedule.enabled)
 
-        # 若本次显式修改了时区，先校验有效性
-        if "timezone" in update_data:
+        # 若改了 cron/时区/启用状态，先校验有效性（与启用状态无关），再重算 next_run_at
+        if "enabled" in update_data or "cron_expr" in update_data or "timezone" in update_data:
             try:
+                validate_cron(cron_expr)
                 validate_timezone(timezone_str)
             except ScheduleValidationError as e:
                 raise _as_http(e)
-
-        if "enabled" in update_data or "cron_expr" in update_data or "timezone" in update_data:
             if enabled:
-                try:
-                    update_data["next_run_at"] = compute_next_run(cron_expr, timezone_str)
-                except Exception as e:
-                    raise HTTPException(status_code=400, detail=f"Cron 表达式或时区错误: {e}")
+                update_data["next_run_at"] = compute_next_run(cron_expr, timezone_str)
             else:
                 update_data["next_run_at"] = None
 
