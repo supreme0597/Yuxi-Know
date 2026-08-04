@@ -6,14 +6,16 @@
       :placeholder="placeholder"
       :rows="rows"
       :auto-size="autoSize"
+      :disabled="disabled"
     />
-    <a-tooltip v-if="name" title="使用 AI 生成或优化描述">
+    <a-tooltip v-if="showAiButton" :title="tip">
       <a-button
         class="ai-btn"
         type="text"
         size="small"
         :loading="loading"
-        @click="generateDescription"
+        :disabled="disabled"
+        @click="runPolish"
       >
         <template #icon>
           <WandSparkles size="14" />
@@ -25,7 +27,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { databaseApi } from '@/apis/knowledge_api'
 import { WandSparkles } from 'lucide-vue-next'
@@ -58,6 +60,22 @@ const props = defineProps({
   actionPlacement: {
     type: String,
     default: 'inside'
+  },
+  /**
+   * 可选的通用润色函数 (text) => Promise<string>。
+   * 传入时走通用润色路径（如提问"其他"项），否则走默认的知识库描述生成逻辑。
+   */
+  polish: {
+    type: Function,
+    default: null
+  },
+  tip: {
+    type: String,
+    default: '使用 AI 生成或优化描述'
+  },
+  disabled: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -65,24 +83,41 @@ const emit = defineEmits(['update:modelValue'])
 
 const loading = ref(false)
 
-const generateDescription = async () => {
-  if (!props.name?.trim()) {
-    message.warning('请先输入知识库名称')
-    return
-  }
+// 是否展示 AI 按钮：通用润色模式始终展示；默认知识库描述模式需提供 name
+const showAiButton = computed(() => Boolean(props.polish) || Boolean(props.name?.trim()))
 
+const runPolish = async () => {
+  const current = props.modelValue ?? ''
   loading.value = true
   try {
-    const result = await databaseApi.generateDescription(props.name, props.modelValue, props.files)
-    if (result.status === 'success' && result.description) {
-      emit('update:modelValue', result.description)
-      message.success('描述生成成功')
+    let polished
+    if (props.polish) {
+      if (!current.trim()) {
+        message.warning('请输入需要润色的内容')
+        return
+      }
+      polished = await props.polish(current)
     } else {
-      message.error(result.message || '生成失败')
+      if (!props.name?.trim()) {
+        message.warning('请先输入知识库名称')
+        return
+      }
+      const result = await databaseApi.generateDescription(props.name, current, props.files)
+      if (result.status === 'success' && result.description) {
+        polished = result.description
+      } else {
+        message.error(result.message || '生成失败')
+        return
+      }
+    }
+
+    if (polished != null && polished !== '') {
+      emit('update:modelValue', polished)
+      message.success(current.trim() ? '润色成功' : '生成成功')
     }
   } catch (error) {
-    console.error('生成描述失败:', error)
-    message.error(error.message || '生成描述失败')
+    console.error('生成/润色失败:', error)
+    message.error(error.message || '操作失败')
   } finally {
     loading.value = false
   }

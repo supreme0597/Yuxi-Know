@@ -1,16 +1,21 @@
 from __future__ import annotations
 
+import textwrap
+import traceback
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
+from yuxi import config
+from yuxi.models import select_model
 from yuxi.services.agent_invocation_service import (
     create_agent_call_run_view,
     create_agent_eval_run_view,
     get_agent_call_run_result_view,
 )
 from yuxi.storage.postgres.models_business import User
+from yuxi.utils import logger
 
 from server.utils.auth_middleware import get_db, get_required_user
 
@@ -106,3 +111,48 @@ async def create_agent_eval_run(
         current_user=current_user,
         db=db,
     )
+
+
+class PolishTextRequest(BaseModel):
+    text: str = Field(..., description="需要润色的原始文本")
+    context: str | None = Field(None, description="可选背景信息，例如所回答的问题，用于让润色更有针对性")
+
+
+@agent_invocation_router.post("/polish-text")
+async def polish_text(
+    payload: PolishTextRequest,
+    current_user: User = Depends(get_required_user),
+):
+    """使用 LLM 润色任意自由文本（如提问中断中用户填写的"其他"选项内容）。"""
+    text = (payload.text or "").strip()
+    if not text:
+        raise HTTPException(status_code=422, detail="待润色文本不能为空")
+
+    context = (payload.context or "").strip()
+    prompt = textwrap.dedent(
+        f"""
+        请帮我润色下面这段用户填写的内容，在保持原意与真实意图的前提下，让表达更清晰、通顺、得体。
+
+        {f"背景问题: {context}" if context else ""}
+
+        原始内容:
+        {text}
+
+        要求:
+        1. 仅优化表达方式，不要添加用户未表达的内容，也不要擅自改变事实
+        2. 语言自然流畅，避免生硬或书面腔过重
+        3. 不要使用 Markdown 格式
+        4. 直接输出润色后的内容，不要任何前缀说明
+
+        请直接输出润色后的内容，不要有任何前缀说明。
+    """
+    ).strip()
+
+    try:
+        model = select_model(model_spec=config.default_model)
+        response = await model.call(prompt)
+        polished = response.content.strip()
+        return {"text": polished, "status": "success"}
+    except Exception as e:
+        logger.error(f"文本润色失败: {e}, {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"文本润色失败: {e}")

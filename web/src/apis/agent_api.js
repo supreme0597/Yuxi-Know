@@ -13,6 +13,14 @@ import { useUserStore } from '@/stores/user'
 
 export const agentApi = {
   /**
+   * 使用 AI 润色任意自由文本（如提问中断中用户填写的"其他"选项内容）
+   * @param {string} text - 待润色的原始文本
+   * @param {string} context - 可选背景信息（如所回答的问题），用于让润色更有针对性
+   * @returns {Promise<{text: string, status: string}>} - 润色结果
+   */
+  polishText: (text, context = '') => apiPost('/api/agent-invocation/polish-text', { text, context }),
+
+  /**
    * 简单聊天调用（非流式）
    * @param {string} query - 查询内容
    * @returns {Promise} - 聊天响应

@@ -63,6 +63,7 @@
 - 修复 Windows 初始化脚本自动生成 JWT 配置失败（#804）：`init.ps1` 改用 Windows PowerShell 兼容的 `RandomNumberGenerator.Create().GetBytes(...)` 生成随机字节，避免旧 .NET 环境缺少 `RandomNumberGenerator.Fill()` 导致按 Enter 自动生成时报错。
 - 优化 Bash 与 Windows 初始化脚本：目标镜像标签已存在时直接跳过重复拉取；已有 `.env` 会逐项检查必填 API Key、JWT 密钥、实例 ID 和 Sandbox Provisioner Token，缺失或为空时提示输入，安全配置支持回车生成，并避免写入重复键。
 - 优化知识库文件列表状态流转与文件预览边界：`uploaded/parsed/error_parsing/error_indexing` 状态分别展示解析、入库或重试操作；源文件预览与解析后的 Markdown 查看分离，txt/图片/Markdown/HTML/PDF/代码类按源文件类型预览；Office 源文件仅支持 `.docx/.pptx`，点击预览时按需生成并缓存 PDF 预览内容，由同一个预览接口直接返回，不再把解析 Markdown 产物当作源文件预览。
+- 提问中断（HumanApproval）中"其他"选项输入框支持 AI 润色：复用 `AiTextarea` 组件，通过新增的通用 `polish` 入参接入 `POST /api/agent-invocation/polish-text`；该接口使用默认模型在保持用户原意的前提下润色自由文本，并把所回答的问题作为背景，鉴权为任意已登录用户。原有知识库描述生成逻辑保留为 `AiTextarea` 的默认路径，未传入 `polish` 时行为不变。
 - 收敛知识库分块策略选项来源：后端以单一 `CHUNK_PRESETS` 配置派生 preset id、描述和选项列表，并新增 `/api/knowledge/chunk-presets`；前端分块策略选择器改为通过接口读取选项，避免前后端重复维护同一份文案。
 - 优化大规模知识库文件列表加载：知识库详情接口默认不再返回全量 `files`，新增按 `parent_id/path_prefix/page/page_size/status` 查询的轻量文件列表接口；前端文件管理页改为目录懒加载与服务端分页，后端按 `source_path`/路径型文件名聚合虚拟目录，列表项只保留交互所需字段，顶部统计改用后端聚合结果，避免数十万文件场景下前端全量建树和传输压力。工作区知识库文件浏览统一改用同一套分页懒加载查询，支持真实目录和虚拟目录页码分页，非文档型知识库不再出现在工作区文件源中；文件浏览组件和后端列表接口均不再承载文件名搜索，后续搜索能力由独立后端接口和组件实现；文件列表展示抽出共享 `FileBrowserTable`，知识库详情和工作区共用展示层，并移除原知识库文件列表拖拽移动入口。
 - 优化知识库启动元数据加载：服务启动时不再把全部 `knowledge_files` 记录加载进 `self.files_meta`，文件解析、入库、预览、下载、打开内容等单文件操作改为按 `file_id` 从数据库懒加载；文件状态流转改为通过数据库窄字段更新和状态条件更新完成，移除进程内处理队列修复逻辑，避免 api/worker 多进程下出现虚假的状态修复；文件统计刷新改用数据库聚合，文件大小补全从启动阶段移入显式统计修复任务，并收敛处理参数合并日志，避免大规模文档场景下启动内存和日志压力随文件数线性放大。

@@ -62,14 +62,14 @@
             </label>
 
             <div v-if="shouldShowOtherInput(activeQuestion)" class="other-input">
-              <textarea
-                ref="otherTextareaRef"
-                :value="otherTexts[activeQuestion.questionId] || ''"
+              <AiTextarea
+                :model-value="otherTexts[activeQuestion.questionId] || ''"
+                :auto-size="{ minRows: 1, maxRows: 4 }"
+                :polish="(text) => polishOtherText(activeQuestion, text)"
+                tip="使用 AI 润色你输入的内容"
                 :disabled="isProcessing"
-                rows="1"
-                placeholder="其他：请输入自定义内容"
-                @input="handleOtherTextInput(activeQuestion.questionId, $event)"
-              ></textarea>
+                @update:model-value="(val) => handleOtherTextInput(activeQuestion.questionId, val)"
+              />
             </div>
           </div>
         </div>
@@ -95,12 +95,14 @@
 </template>
 
 <script setup>
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
   isOtherOption,
   normalizeQuestions,
   DEFAULT_OTHER_OPTION_VALUE
 } from '@/utils/questionUtils'
+import AiTextarea from '@/components/AiTextarea.vue'
+import { agentApi } from '@/apis/agent_api'
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
@@ -113,8 +115,6 @@ const isProcessing = ref(false)
 const activeQuestionIndex = ref(0)
 const selectedValues = ref({})
 const otherTexts = ref({})
-const otherTextareaRef = ref(null)
-const OTHER_TEXTAREA_MAX_ROWS = 4
 
 const normalizedQuestions = computed(() => {
   const questions = normalizeQuestions(props.questions)
@@ -141,37 +141,23 @@ const resetForm = () => {
   otherTexts.value = {}
 }
 
-const adjustOtherTextareaHeight = () => {
-  const textarea = otherTextareaRef.value
-  if (!textarea) return
-
-  const style = window.getComputedStyle(textarea)
-  const lineHeight = Number.parseFloat(style.lineHeight) || 20
-  const paddingY =
-    (Number.parseFloat(style.paddingTop) || 0) + (Number.parseFloat(style.paddingBottom) || 0)
-  const borderY =
-    (Number.parseFloat(style.borderTopWidth) || 0) +
-    (Number.parseFloat(style.borderBottomWidth) || 0)
-  const maxHeight = lineHeight * OTHER_TEXTAREA_MAX_ROWS + paddingY + borderY
-
-  textarea.style.height = 'auto'
-  textarea.style.maxHeight = `${maxHeight}px`
-  textarea.style.height = `${Math.min(textarea.scrollHeight, maxHeight)}px`
-  textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden'
+const handleOtherTextInput = (questionId, value) => {
+  otherTexts.value[questionId] = value
 }
 
-const handleOtherTextInput = (questionId, event) => {
-  otherTexts.value[questionId] = event.target.value
-  adjustOtherTextareaHeight()
+const polishOtherText = async (questionItem, text) => {
+  const context = questionItem?.question || ''
+  const result = await agentApi.polishText(text, context)
+  if (result.status === 'success' && result.text) {
+    return result.text
+  }
+  throw new Error(result.message || '润色失败')
 }
 
 const setActiveQuestion = (index) => {
   if (isProcessing.value) return
   if (index < 0 || index >= normalizedQuestions.value.length) return
   activeQuestionIndex.value = index
-  nextTick(() => {
-    adjustOtherTextareaHeight()
-  })
 }
 
 const syncAnswersWithQuestions = () => {
@@ -231,9 +217,6 @@ watch(
   (newVal) => {
     if (newVal) {
       activeQuestionIndex.value = 0
-      nextTick(() => {
-        adjustOtherTextareaHeight()
-      })
       return
     }
 
@@ -250,9 +233,6 @@ watch(
     if (activeQuestionIndex.value >= normalizedQuestions.value.length) {
       activeQuestionIndex.value = Math.max(0, normalizedQuestions.value.length - 1)
     }
-    nextTick(() => {
-      adjustOtherTextareaHeight()
-    })
   },
   { immediate: true, deep: true }
 )
@@ -266,17 +246,11 @@ const toggleSelect = (questionId, value) => {
   } else {
     selectedValues.value[questionId] = [...current, value]
   }
-  nextTick(() => {
-    adjustOtherTextareaHeight()
-  })
 }
 
 const setSingle = (questionId, value) => {
   if (isProcessing.value) return
   selectedValues.value[questionId] = [value]
-  nextTick(() => {
-    adjustOtherTextareaHeight()
-  })
 }
 
 const isQuestionAnswered = (questionItem) => {
