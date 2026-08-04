@@ -21,7 +21,7 @@ from yuxi.models.providers.service import (
     test_model_status_by_spec,
     update_provider_config,
 )
-from yuxi.models.providers.share import user_can_manage_provider
+from yuxi.models.providers.share import user_can_access_provider, user_can_manage_provider
 from yuxi.storage.postgres.models_business import User
 from yuxi.storage.postgres.manager import pg_manager
 from yuxi.utils import logger
@@ -30,8 +30,8 @@ model_providers = APIRouter(prefix="/system/model-providers", tags=["model-provi
 
 
 async def _refresh_model_cache() -> None:
-    """刷新模型缓存（CRUD 操作后调用）。"""
-    from yuxi.models.providers.cache import model_cache
+    """刷新模型缓存（CRUD 操作后调用），并失效按用户维度的可见性缓存。"""
+    from yuxi.models.providers.cache import model_cache, visibility_cache
     from yuxi.models.providers.service import get_all_model_providers
 
     try:
@@ -41,6 +41,7 @@ async def _refresh_model_cache() -> None:
             logger.info(f"Model cache refreshed: {len(model_cache.get_all_specs())} models loaded")
     except Exception as e:
         logger.error(f"Failed to refresh model cache: {e}")
+    visibility_cache.invalidate()
 
 
 class ModelProviderPayload(BaseModel):
@@ -70,6 +71,7 @@ def _serialize_provider(provider, *, current_user) -> dict:
     data = provider.to_dict(include_api_key=False)
     data["credential_status"] = check_credential_status(provider)
     data["can_manage"] = user_can_manage_provider(current_user, provider)
+    data["can_view"] = user_can_access_provider(current_user, provider)
     return data
 
 

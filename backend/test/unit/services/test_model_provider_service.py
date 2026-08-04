@@ -11,6 +11,7 @@ from yuxi.models.providers.service import (
     _normalize_remote_model,
     fetch_remote_models,
 )
+from yuxi.storage.postgres.models_business import ModelProvider, User
 
 
 def test_normalize_payload_accepts_enabled_chat_model():
@@ -329,3 +330,118 @@ def test_normalize_payload_allows_model_type_within_capabilities():
     sources = [model["source"] for model in payload["enabled_models"]]
     assert types == ["chat", "embedding"]
     assert sources == ["manual", "manual"]
+
+
+# ==================== update_provider_config 回归测试 ====================
+
+
+def _user(uid: str, role: str = "user", department_id: int | None = 1) -> User:
+    return User(
+        username=uid,
+        uid=uid,
+        password_hash="x",
+        role=role,
+        department_id=department_id,
+    )
+
+
+def _provider(provider_id: str = "openai-test", created_by: str = "creator") -> ModelProvider:
+    return ModelProvider(
+        provider_id=provider_id,
+        display_name="Test",
+        provider_type="openai",
+        base_url="https://api.openai.com/v1",
+        capabilities=["chat"],
+        enabled_models=[],
+        created_by=created_by,
+        share_config={"access_level": "global", "department_ids": [], "user_uids": []},
+    )
+
+
+@pytest.mark.asyncio
+async def test_update_provider_config_writes_updated_by_uid(monkeypatch):
+    """编辑保存供应商不应因未定义变量报错，updated_by 应记录当前操作用户的 uid。"""
+    from unittest.mock import MagicMock
+
+    from yuxi.models.providers import service
+    from yuxi.models.providers.service import update_provider_config
+
+    provider = _provider(created_by="u1")
+    captured = {}
+
+    async def fake_get(db, provider_id):
+        return provider
+
+    async def fake_update(db, provider, payload):
+        captured["payload"] = payload
+        return provider
+
+    monkeypatch.setattr(service, "get_model_provider", fake_get)
+    monkeypatch.setattr(service, "update_model_provider", fake_update)
+
+    user = _user("u1")
+    result = await update_provider_config(MagicMock(), provider.provider_id, {"display_name": "新名称"}, user)
+
+    assert result is provider
+    assert captured["payload"]["updated_by"] == "u1"
+
+
+# ==================== user_can_use_model_spec 消费侧可见性 ====================
+
+
+class _FakeModelInfo:
+    def __init__(self, provider_id):
+        self.provider_id = provider_id
+
+
+@pytest.mark.asyncio
+async def test_user_can_use_model_spec_allows_visible_provider(monkeypatch):
+    """模型所属 provider 对用户可见时返回 True，缓存未命中时从 DB 计算并回填。"""
+    from unittest.mock import MagicMock
+
+    from yuxi.models.providers import repository
+    from yuxi.models.providers.cache import model_cache, visibility_cache
+    from yuxi.models.providers.service import user_can_use_model_spec
+
+    async def fake_list(db, user):
+        return [MagicMock(provider_id="shared-provider")]
+
+    visibility_cache.invalidate()
+    monkeypatch.setattr(model_cache, "get_model_info", lambda spec: _FakeModelInfo("shared-provider"))
+    monkeypatch.setattr(repository, "list_visible_model_providers", fake_list)
+
+    user = _user("u1")
+    assert await user_can_use_model_spec(MagicMock(), user, "shared-provider:gpt-4o") is True
+    # 回填后缓存命中，二次调用不再查询 DB
+    assert visibility_cache.get("u1") == frozenset({"shared-provider"})
+
+
+@pytest.mark.asyncio
+async def test_user_can_use_model_spec_denies_hidden_provider(monkeypatch):
+    """模型所属 provider 对用户不可见时返回 False。"""
+    from unittest.mock import MagicMock
+
+    from yuxi.models.providers.cache import model_cache, visibility_cache
+    from yuxi.models.providers.service import user_can_use_model_spec
+
+    visibility_cache.invalidate()
+    visibility_cache.set("u1", {"shared-provider"})
+    monkeypatch.setattr(model_cache, "get_model_info", lambda spec: _FakeModelInfo("private-provider"))
+
+    user = _user("u1")
+    assert await user_can_use_model_spec(MagicMock(), user, "private-provider:gpt-4o") is False
+
+
+@pytest.mark.asyncio
+async def test_user_can_use_model_spec_unknown_model_allows(monkeypatch):
+    """模型不存在时不做可见性拦截，由下游负责报"模型不存在"错误。"""
+    from unittest.mock import MagicMock
+
+    from yuxi.models.providers.cache import model_cache, visibility_cache
+    from yuxi.models.providers.service import user_can_use_model_spec
+
+    visibility_cache.invalidate()
+    monkeypatch.setattr(model_cache, "get_model_info", lambda spec: None)
+
+    user = _user("u1")
+    assert await user_can_use_model_spec(MagicMock(), user, "ghost-provider:model") is True

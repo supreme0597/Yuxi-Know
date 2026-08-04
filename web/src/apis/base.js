@@ -44,6 +44,7 @@ export async function apiRequest(url, options = {}, requiresAuth = true, respons
       // 尝试解析错误信息
       let errorMessage = `请求失败: ${response.status}, ${response.statusText}`
       let errorData = null
+      let hasBackendMessage = false
 
       console.log('API请求失败:', {
         url,
@@ -58,9 +59,16 @@ export async function apiRequest(url, options = {}, requiresAuth = true, respons
         // 否则直接拼接会得到 "[object Object]"。
         const detail = errorData.detail
         if (detail && typeof detail === 'object') {
-          errorMessage = detail.message || detail.error || errorMessage
+          const readable = detail.message || detail.error
+          if (readable) {
+            errorMessage = readable
+            hasBackendMessage = true
+          }
         } else {
-          errorMessage = detail || errorData.message || errorMessage
+          if (detail || errorData.message) {
+            errorMessage = detail || errorData.message
+            hasBackendMessage = true
+          }
         }
         console.log('API错误详情:', errorData)
 
@@ -109,7 +117,8 @@ export async function apiRequest(url, options = {}, requiresAuth = true, respons
 
         throw error
       } else if (response.status === 403) {
-        error.message = '没有权限执行此操作'
+        // 后端有明确原因（如"无权使用模型: xxx"）时透传给用户，否则用通用文案
+        error.message = hasBackendMessage ? errorMessage : '没有权限执行此操作'
         throw error
       } else if (response.status === 500) {
         error.message = '服务器内部错误，请使用 docker logs api-dev 查看详细日志'

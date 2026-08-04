@@ -61,5 +61,14 @@ def user_can_access_provider(user: User, provider: ModelProvider) -> bool:
 
 
 def user_can_manage_provider(user: User, provider: ModelProvider) -> bool:
-    """用户是否能修改/删除该 provider。"""
-    return user.role in ADMIN_ROLES or provider.created_by == str(user.uid)
+    """用户是否能修改/删除该 provider。
+
+    管理权仅归属创建人；内置供应商与历史未记录创建人的供应商视为系统级资源，由管理员管理。
+    被共享给其他用户（含 admin）的供应商不可由非创建人编辑。
+    """
+    if provider.is_builtin:
+        return user.role in ADMIN_ROLES
+    created_by = provider.created_by
+    if not created_by:
+        return user.role in ADMIN_ROLES
+    return created_by == str(user.uid)

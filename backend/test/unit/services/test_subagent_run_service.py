@@ -281,6 +281,14 @@ def _patch_run_record_creation(
     monkeypatch.setattr(agent_run_service, "AgentRepository", AgentRepo)
     monkeypatch.setattr(agent_run_service, "AgentRunRepository", RunRepo)
 
+    async def fake_user_can_use_model_spec(db_session, user, model_spec):
+        return True
+
+    monkeypatch.setattr(
+        "yuxi.models.providers.service.user_can_use_model_spec",
+        fake_user_can_use_model_spec,
+    )
+
 
 def _fake_create_run_record(captured: dict[str, object], *, run_id: str = "child-run"):
     async def fake_create_run_record(_self, **kwargs):

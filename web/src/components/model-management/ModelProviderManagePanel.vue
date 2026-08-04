@@ -102,6 +102,27 @@ const remoteModelsLoaded = ref({})
 const remoteModelSearch = ref({})
 const remoteModelTypeFilter = ref({})
 const providerTab = ref('all')
+const providerTabOptions = [
+  { value: 'all' },
+  { value: 'mine' },
+  { value: 'department' },
+  { value: 'global' }
+]
+const providerTabLabel = (value) => {
+  if (value === 'mine') return '我创建的'
+  if (value === 'department') return '部门共享'
+  if (value === 'global') return '全局共享'
+  return '全部'
+}
+const providerTabCount = (value) => {
+  const list = providers.value || []
+  if (value === 'mine') return list.filter((p) => p.created_by === userStore.uid).length
+  if (value === 'department') {
+    return list.filter((p) => p.share_config?.access_level === 'department').length
+  }
+  if (value === 'global') return list.filter((p) => p.share_config?.access_level === 'global').length
+  return list.length
+}
 const allowedAccessLevels = computed(() => {
   if (userStore.isSuperAdmin || userStore.isAdmin) {
     return ['global', 'department', 'user']
@@ -425,7 +446,9 @@ const buildProviderPayload = () => ({
   embedding_models_endpoint: providerForm.embedding_models_endpoint || null,
   rerank_models_endpoint: providerForm.rerank_models_endpoint || null,
   api_key_env: providerForm.api_key_env || null,
-  api_key: providerForm.api_key || null,
+  // 编辑弹窗中 key 输入框默认为空（仅显示脱敏占位），未输入新值时不提交该字段，
+  // 避免后端把「未修改」误判为「清空 API Key」。
+  api_key: providerForm.api_key || undefined,
   share_config: {
     access_level: providerForm.share_config?.access_level || 'global',
     department_ids: Array.isArray(providerForm.share_config?.department_ids)
@@ -537,6 +560,9 @@ const toggleProviderEnabled = async (provider, checked) => {
 }
 
 // ============ Models Modal Operations ============
+const currentProviderCanManage = computed(
+  () => currentProviderForModels.value?.can_manage ?? false
+)
 const openModelsModal = (provider) => {
   currentProviderForModels.value = provider
   if (!remoteModelsLoaded.value[provider.provider_id]) {
@@ -767,12 +793,19 @@ defineExpose({
       </template>
     </PageShoulder>
 
-    <a-tabs v-model:active-key="providerTab" class="provider-tabs">
-      <a-tab-pane key="all" tab="全部" />
-      <a-tab-pane key="mine" tab="我创建的" />
-      <a-tab-pane key="department" tab="部门共享" />
-      <a-tab-pane key="global" tab="全局共享" />
-    </a-tabs>
+    <a-segmented
+      v-model:value="providerTab"
+      class="provider-tabs"
+      :options="providerTabOptions"
+      aria-label="按可见范围筛选供应商"
+    >
+      <template #label="{ value }">
+        <span class="provider-tab-label">
+          <span>{{ providerTabLabel(value) }}</span>
+          <span class="provider-tab-count">{{ providerTabCount(value) }}</span>
+        </span>
+      </template>
+    </a-segmented>
 
     <ExtensionCardGrid :min-width="320">
       <InfoCard
@@ -811,7 +844,12 @@ defineExpose({
           <a-tag v-else color="orange" class="share-scope-tag">指定人</a-tag>
         </template>
         <template #footer>
-          <button class="view-models-btn" type="button" @click.stop="openModelsModal(provider)">
+          <button
+            v-if="provider.can_view"
+            class="view-models-btn"
+            type="button"
+            @click.stop="openModelsModal(provider)"
+          >
             <Settings2 :size="14" />
             管理模型
             <span v-if="provider.enabled_models?.length" class="enabled-count"
@@ -915,15 +953,6 @@ defineExpose({
           </label>
         </div>
 
-        <label class="form-label full-width">
-          <span>共享范围</span>
-          <ShareConfigForm
-            v-model="providerForm.share_config"
-            :allowed-access-levels="allowedAccessLevels"
-            :auto-select-user-dept="true"
-          />
-        </label>
-
         <div class="form-row">
           <label class="form-label">
             <span>Models Endpoint</span>
@@ -987,6 +1016,15 @@ defineExpose({
           />
         </div>
 
+        <label class="form-label full-width">
+          <span>共享范围</span>
+          <ShareConfigForm
+            v-model="providerForm.share_config"
+            :allowed-access-levels="allowedAccessLevels"
+            :auto-select-user-dept="true"
+          />
+        </label>
+
         <a-collapse expand-icon-position="end" :ghost="true" class="advanced-collapse">
           <a-collapse-panel key="advanced" header="高级配置">
             <label class="form-label full-width">
@@ -1022,6 +1060,7 @@ defineExpose({
             </h4>
             <div class="actions">
               <a-button
+                v-if="currentProviderCanManage"
                 size="small"
                 type="primary"
                 class="lucide-icon-btn"
@@ -1031,6 +1070,7 @@ defineExpose({
                 获取远程模型
               </a-button>
               <a-button
+                v-if="currentProviderCanManage"
                 size="small"
                 class="lucide-icon-btn"
                 @click="openCreateModal(currentProviderForModels)"
@@ -1046,7 +1086,7 @@ defineExpose({
               <span class="col-type">类型</span>
               <span class="col-context">上下文</span>
               <span class="col-dim">维度</span>
-              <span class="col-ops">操作</span>
+              <span v-if="currentProviderCanManage" class="col-ops">操作</span>
             </div>
             <div
               v-for="model in currentProviderForModels.enabled_models"
@@ -1079,7 +1119,7 @@ defineExpose({
                 >
                 <span v-else>{{ model.dimension || '-' }}</span>
               </span>
-              <span class="col-ops">
+              <span v-if="currentProviderCanManage" class="col-ops">
                 <a-button
                   size="small"
                   class="model-test-button"
@@ -1116,7 +1156,7 @@ defineExpose({
         </div>
 
         <!-- Remote Models Section -->
-        <div class="models-section">
+        <div v-if="currentProviderCanManage" class="models-section">
           <div class="remote-header">
             <h4 class="models-section-title">远端候选模型 ({{ filteredRemoteModels.length }})</h4>
             <a-input
@@ -1263,7 +1303,64 @@ defineExpose({
 }
 
 .provider-tabs {
-  margin-bottom: 12px;
+  margin: 14px var(--page-padding) 0;
+
+  :deep(.ant-segmented) {
+    padding: 3px;
+    border-radius: 9px;
+    background: var(--gray-100);
+  }
+
+  :deep(.ant-segmented-item) {
+    color: var(--gray-600);
+    font-size: 13px;
+    transition:
+      color 0.16s ease,
+      background 0.16s ease;
+
+    &:hover:not(.ant-segmented-item-selected) {
+      color: var(--gray-800);
+    }
+
+    &.ant-segmented-item-selected {
+      border-radius: 6px;
+      color: var(--main-700);
+      font-weight: 600;
+      box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
+    }
+  }
+
+  :deep(.ant-segmented-item-label) {
+    min-height: 30px;
+    padding: 0 14px;
+    line-height: 30px;
+  }
+}
+
+.provider-tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.provider-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--gray-200);
+  color: var(--gray-600);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+:deep(.ant-segmented-item-selected) .provider-tab-count {
+  background: var(--main-100);
+  color: var(--main-700);
 }
 
 .share-scope-tag {

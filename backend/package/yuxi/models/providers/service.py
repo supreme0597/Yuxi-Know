@@ -316,11 +316,35 @@ async def update_provider_config(
         existing_caps = set(provider.capabilities or [])
         if existing_caps:
             _validate_models_capabilities(payload.get("enabled_models"), existing_caps)
-    # TODO 需要分析下，丢弃代码了
-    # payload = {k: v for k, v in payload.items() if k != "provider_id"}
-    #     payload["updated_by"] = str(current_user.uid)
-    payload["updated_by"] = username
+    payload["updated_by"] = str(current_user.uid)
     return await update_model_provider(db, provider, payload)
+
+
+async def user_can_use_model_spec(
+    db: AsyncSession,
+    user,
+    model_spec: str,
+) -> bool:
+    """消费侧校验：model_spec 所属 provider 是否对当前用户可见。
+
+    可见性集合按 uid 缓存 30s（VisibilityCache），未命中时从 DB 计算并回填。
+    模型不存在时返回 True，由下游负责报"模型不存在"错误。
+    """
+    from yuxi.models.providers.cache import model_cache, visibility_cache
+    from yuxi.models.providers.repository import list_visible_model_providers
+
+    info = model_cache.get_model_info(model_spec)
+    if info is None:
+        return True
+
+    uid = str(user.uid)
+    cached = visibility_cache.get(uid)
+    if cached is None:
+        providers = await list_visible_model_providers(db, user)
+        visible = {p.provider_id for p in providers}
+        visibility_cache.set(uid, visible)
+        cached = frozenset(visible)
+    return info.provider_id in cached
 
 
 async def delete_provider_config(

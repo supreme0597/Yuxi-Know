@@ -225,6 +225,10 @@ class SubagentRunService:
             scope.agent_item,
             scope.agent_backend,
         )
+        from yuxi.models.providers.service import user_can_use_model_spec
+
+        if not await user_can_use_model_spec(self.db, scope.current_user, resolved_model_spec):
+            raise HTTPException(status_code=403, detail=f"无权使用模型: {resolved_model_spec}")
         runtime_payload = {
             "tool_call_id": tool_call_id,
             "subagent_name": scope.agent_item.name,

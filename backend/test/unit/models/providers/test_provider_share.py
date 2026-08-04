@@ -25,6 +25,7 @@ def _provider(
     provider_id: str = "openai-test",
     created_by: str = "creator",
     share_config: dict | None = None,
+    is_builtin: bool = False,
 ) -> ModelProvider:
     return ModelProvider(
         provider_id=provider_id,
@@ -34,6 +35,7 @@ def _provider(
         capabilities=["chat"],
         enabled_models=[],
         created_by=created_by,
+        is_builtin=is_builtin,
         share_config=share_config or DEFAULT_PROVIDER_SHARE_CONFIG.copy(),
     )
 
@@ -133,10 +135,46 @@ def test_user_access_not_in_list_denied():
 
 # ---------- manage ----------
 
-def test_admin_can_manage_any():
+def test_admin_cannot_manage_others_non_builtin():
+    """管理权仅归属创建人：admin 对被共享的普通供应商也不可管理。"""
     u = _user("admin", role="admin")
     p = _provider(created_by="other")
+    assert user_can_manage_provider(u, p) is False
+
+
+def test_admin_can_manage_builtin_provider():
+    """内置供应商视为系统级资源，由管理员管理。"""
+    u = _user("admin", role="admin")
+    p = _provider(created_by="system", is_builtin=True)
     assert user_can_manage_provider(u, p) is True
+
+
+def test_normal_user_cannot_manage_builtin_provider():
+    """普通用户不能管理内置供应商。"""
+    u = _user("u1")
+    p = _provider(created_by="system", is_builtin=True)
+    assert user_can_manage_provider(u, p) is False
+
+
+def test_admin_can_manage_provider_without_creator():
+    """历史数据未记录创建人的供应商视为系统级资源，由管理员管理。"""
+    u = _user("admin", role="admin")
+    p = _provider(created_by=None)
+    assert user_can_manage_provider(u, p) is True
+
+
+def test_normal_user_cannot_manage_provider_without_creator():
+    """历史数据未记录创建人的供应商，普通用户不可管理。"""
+    u = _user("u1")
+    p = _provider(created_by=None)
+    assert user_can_manage_provider(u, p) is False
+
+
+def test_superadmin_cannot_manage_others_non_builtin():
+    """superadmin 对普通供应商同样遵循仅创建人规则。"""
+    u = _user("admin", role="superadmin")
+    p = _provider(created_by="other")
+    assert user_can_manage_provider(u, p) is False
 
 
 def test_normal_user_can_manage_own():

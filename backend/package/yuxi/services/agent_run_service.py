@@ -397,6 +397,11 @@ async def create_agent_run_view(
     else:
         resolved_model_spec = resolve_agent_run_model_spec(model_spec, scope.agent_item, scope.agent_backend)
 
+        from yuxi.models.providers.service import user_can_use_model_spec
+
+        if not await user_can_use_model_spec(db, scope.current_user, resolved_model_spec):
+            raise HTTPException(status_code=403, detail=f"无权使用模型: {resolved_model_spec}")
+
     run_input_message = _prepare_run_input_message(
         run_type=run_type,
         input_message=input_message,
@@ -440,7 +445,8 @@ class AgentRunCreationScope:
     conversation: Any
     agent_item: Any
     agent_backend: Any
-    existing_run: Any | None
+    current_user: Any | None = None
+    existing_run: Any | None = None
     parent_run: Any | None = None
 
 
@@ -674,6 +680,7 @@ async def prepare_agent_run_creation_scope(
         conversation=conversation,
         agent_item=agent_item,
         agent_backend=agent_backend,
+        current_user=current_user,
         existing_run=existing,
         parent_run=parent_run,
     )

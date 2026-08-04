@@ -1341,11 +1341,18 @@ def _patch_agent_run_creation(
     async def fake_get_arq_pool():
         return Queue()
 
+    async def fake_user_can_use_model_spec(db_session, user, model_spec):
+        return True
+
     monkeypatch.setattr(agent_run_service.agent_manager, "get_agent", lambda backend_id: _FakeBackend())
     monkeypatch.setattr(agent_run_service, "AgentRepository", AgentRepo)
     monkeypatch.setattr(agent_run_service, "ConversationRepository", ConvRepo)
     monkeypatch.setattr(agent_run_service, "AgentRunRepository", _CreateRunRepo)
     monkeypatch.setattr(agent_run_service, "get_arq_pool", fake_get_arq_pool)
+    monkeypatch.setattr(
+        "yuxi.models.providers.service.user_can_use_model_spec",
+        fake_user_can_use_model_spec,
+    )
     return db
 
 
