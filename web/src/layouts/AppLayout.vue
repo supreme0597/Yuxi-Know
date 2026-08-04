@@ -11,7 +11,8 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   MessageCirclePlus,
-  Search
+  Search,
+  Clock
 } from 'lucide-vue-next'
 
 import { useConfigStore } from '@/stores/config'
@@ -154,6 +155,13 @@ const mainList = computed(() => {
     path: '/model-manage',
     icon: Box,
     activeIcon: Box
+  })
+
+  items.push({
+    name: '定时任务',
+    path: '/schedules',
+    icon: Clock,
+    activeIcon: Clock
   })
 
   if (userStore.isSuperAdmin) {

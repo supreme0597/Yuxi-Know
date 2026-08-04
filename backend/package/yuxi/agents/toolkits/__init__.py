@@ -1,6 +1,6 @@
 # toolkits 包
 # 触发各模块的 @tool 装饰器执行，自动注册工具
-from . import buildin, debug
+from . import buildin, debug, schedules
 
 # 工具获取函数
 from .kbs import get_common_kb_tools
@@ -22,4 +22,5 @@ __all__ = [
     # 触发各模块的 @tool 装饰器执行，自动注册工具
     "buildin",
     "debug",
+    "schedules",
 ]

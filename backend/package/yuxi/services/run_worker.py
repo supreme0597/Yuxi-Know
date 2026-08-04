@@ -7,6 +7,7 @@ import json
 import time
 from dataclasses import dataclass, field
 
+from arq import cron
 from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 from yuxi.agents.mcp.service import ensure_builtin_mcp_servers_in_db
@@ -21,6 +22,7 @@ from yuxi.services.run_queue_service import (
     has_cancel_signal,
     wait_for_cancel_signal,
 )
+from yuxi.services.schedule_manager import daily_cleanup_schedule_logs_job, schedule_poll_job
 from yuxi.storage.postgres.manager import pg_manager
 from yuxi.storage.postgres.models_business import Message, User
 from yuxi.storage.redis import get_arq_redis_settings
@@ -142,12 +144,28 @@ async def mark_run_running(run_id: str):
     async with pg_manager.get_async_session_context() as db:
         repo = AgentRunRepository(db)
         await repo.mark_running(run_id)
+        try:
+            from yuxi.repositories.schedule_repository import ScheduleRepository
+
+            sched_repo = ScheduleRepository(db)
+            await sched_repo.update_log_execution_status(run_id=run_id, execution_status="running")
+            await db.commit()
+        except Exception as e:
+            logger.error(f"Failed to sync schedule log status to running: {e}")
 
 
 async def mark_run_terminal(run_id: str, status: str, error_type: str | None = None, error_message: str | None = None):
     async with pg_manager.get_async_session_context() as db:
         repo = AgentRunRepository(db)
         await repo.set_terminal_status(run_id, status=status, error_type=error_type, error_message=error_message)
+        try:
+            from yuxi.repositories.schedule_repository import ScheduleRepository
+
+            sched_repo = ScheduleRepository(db)
+            await sched_repo.update_log_execution_status(run_id=run_id, execution_status=status)
+            await db.commit()
+        except Exception as e:
+            logger.error(f"Failed to sync schedule log status to terminal {status}: {e}")
 
 
 async def _load_user(uid: str):
