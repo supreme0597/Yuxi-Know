@@ -906,11 +906,15 @@ async def get_thread_history_view(
     thread_id: str,
     current_uid: str,
     db: AsyncSession,
+    include_feedback: bool = True,
+    require_owner: bool = True,
 ) -> dict:
     """获取对话历史消息，包含用户反馈状态"""
     conv_repo = ConversationRepository(db)
     conversation = await conv_repo.get_conversation_by_thread_id(thread_id)
-    if not conversation or conversation.uid != str(current_uid) or conversation.status == "deleted":
+    if not conversation or conversation.status == "deleted":
+        raise HTTPException(status_code=404, detail="对话线程不存在")
+    if require_owner and conversation.uid != str(current_uid):
         raise HTTPException(status_code=404, detail="对话线程不存在")
 
     messages = await conv_repo.get_messages_by_thread_id(thread_id)
@@ -932,7 +936,7 @@ async def get_thread_history_view(
 
     for msg in messages:
         user_feedback = None
-        if msg.feedbacks:
+        if include_feedback and msg.feedbacks:
             for feedback in msg.feedbacks:
                 if feedback.uid == str(current_uid):
                     user_feedback = {

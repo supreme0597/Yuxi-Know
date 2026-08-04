@@ -489,6 +489,33 @@ class OperationLog(Base):
         }
 
 
+class ConversationShare(Base):
+    """ConversationShare table - 对话分享表"""
+
+    __tablename__ = "conversation_shares"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="Primary key")
+    thread_id = Column(String(64), index=True, nullable=False, comment="Thread ID")
+    token = Column(String(64), unique=True, index=True, nullable=False, comment="Share token")
+    created_by = Column(String(64), nullable=False, comment="Owner UID")
+    expires_at = Column(DateTime, nullable=False, comment="Expiry time")
+    is_revoked = Column(Boolean, default=False, nullable=False, comment="Is revoked")
+    created_at = Column(DateTime, default=utc_now_naive, comment="Creation time")
+    updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive, comment="Update time")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "thread_id": self.thread_id,
+            "token": self.token,
+            "created_by": self.created_by,
+            "expires_at": format_utc_datetime(self.expires_at),
+            "is_revoked": bool(self.is_revoked),
+            "created_at": format_utc_datetime(self.created_at),
+            "updated_at": format_utc_datetime(self.updated_at),
+        }
+
+
 class MessageFeedback(Base):
     """Message feedback table - 消息反馈表"""
 

@@ -348,6 +348,58 @@ async def update_thread(
 
 
 # ================================
+# > === 分享管理分组 ===
+# ================================
+
+
+class CreateShareRequest(BaseModel):
+    expires_days: int = Field(ge=1, le=365, description="分享有效期（天）")
+
+
+@chat.post("/thread/{thread_id}/share")
+async def create_thread_share(
+    thread_id: str,
+    request: CreateShareRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_required_user),
+):
+    """创建/复用对话分享链接（仅会话拥有者）。"""
+    from yuxi.services.share_service import create_share
+
+    return await create_share(
+        thread_id=thread_id,
+        owner_uid=str(current_user.uid),
+        expires_days=request.expires_days,
+        db=db,
+    )
+
+
+@chat.get("/thread/{thread_id}/share")
+async def get_thread_share(
+    thread_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_required_user),
+):
+    """查询当前有效分享（仅会话拥有者）。"""
+    from yuxi.services.share_service import get_share
+
+    return await get_share(thread_id=thread_id, owner_uid=str(current_user.uid), db=db)
+
+
+@chat.delete("/thread/{thread_id}/share")
+async def revoke_thread_share(
+    thread_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_required_user),
+):
+    """撤销对话分享（仅会话拥有者）。"""
+    from yuxi.services.share_service import revoke_share
+
+    await revoke_share(thread_id=thread_id, owner_uid=str(current_user.uid), db=db)
+    return {"message": "分享已撤销"}
+
+
+# ================================
 # > === 附件管理分组 ===
 # ================================
 

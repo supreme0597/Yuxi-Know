@@ -8,6 +8,19 @@
           :single-mode="false"
           @thread-change="handleThreadChange"
         >
+          <template #header-right="{ hasActiveThread }">
+            <a-tooltip placement="top" title="分享对话">
+              <button
+                v-if="hasActiveThread"
+                type="button"
+                class="agent-nav-btn agent-state-btn share-entry-btn"
+                aria-label="分享对话"
+                @click.stop="openShareModal"
+              >
+                <Share2 size="16" class="nav-btn-icon" />
+              </button>
+            </a-tooltip>
+          </template>
           <template #input-actions-left="{ hasActiveThread }">
             <a-dropdown
               v-if="selectedAgentId"
@@ -86,17 +99,23 @@
       :backend-options="agentBackendOptions"
       @saved="handleAgentSaved"
     />
+    <ShareConversationModal
+      :open="shareModalOpen"
+      :thread-id="getRouteThreadId()"
+      @close="shareModalOpen = false"
+    />
   </div>
 </template>
 
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
-import { Settings2, ChevronDown, Check } from 'lucide-vue-next'
+import { Settings2, ChevronDown, Check, Share2 } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import { agentApi } from '@/apis/agent_api'
 import AgentChatComponent from '@/components/AgentChatComponent.vue'
 import AgentEditModal from '@/components/model-management/AgentEditModal.vue'
+import ShareConversationModal from '@/components/ShareConversationModal.vue'
 import { isBuiltinAgent, useAgentStore } from '@/stores/agent'
 import { handleChatError } from '@/utils/errorHandler'
 import { generatePixelAvatar } from '@/utils/pixelAvatar'
@@ -107,6 +126,7 @@ import { storeToRefs } from 'pinia'
 // 组件引用
 const chatComponentRef = ref(null)
 const agentEditModalRef = ref(null)
+const shareModalOpen = ref(false)
 
 // Stores
 const agentStore = useAgentStore()
@@ -262,6 +282,14 @@ const handleAgentSaved = async () => {
   }
 }
 
+const openShareModal = () => {
+  if (!getRouteThreadId()) {
+    message.warning('请先选择对话')
+    return
+  }
+  shareModalOpen.value = true
+}
+
 const openAgentManagement = async () => {
   agentDropdownOpen.value = false
   if (!selectedAgentId.value) {
@@ -315,6 +343,30 @@ const openAgentManagement = async () => {
   min-width: 0;
   max-width: min(240px, calc(100vw - 160px));
   gap: 4px;
+}
+
+.share-entry-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 28px;
+  padding: 4px 7px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--gray-900);
+  cursor: pointer;
+  transition: background-color 0.3s;
+
+  &:hover {
+    background-color: var(--gray-100);
+  }
+
+  .nav-btn-icon {
+    width: 16px;
+    height: 16px;
+  }
 }
 
 .config-dropdown-trigger :deep(svg) {

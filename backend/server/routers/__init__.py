@@ -18,6 +18,7 @@ from server.routers.system_task_router import tasks
 from server.routers.tool_router import tools
 from server.routers.user_router import user_router
 from server.routers.workspace_router import workspace
+from server.routers.share_router import share
 
 _LITE_MODE = os.environ.get("LITE_MODE", "").lower() in ("true", "1")
 
@@ -29,6 +30,7 @@ router.include_router(auth)  # /api/auth/* 登录、用户信息与 CLI 浏览�
 router.include_router(agent_router)  # /api/agent/* 智能体管理与运行态
 router.include_router(agent_invocation_router)  # /api/agent-invocation/* 外部 Agent 调用与评估
 router.include_router(chat)  # /api/chat/* 对话线程、消息历史与附件
+router.include_router(share)  # /api/share/* 公开对话分享只读访问
 
 # 管理与工作台接口：后台任务、权限域以及工具体系配置。
 router.include_router(dashboard)  # /api/dashboard/* 仪表盘聚合数据

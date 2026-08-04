@@ -18,6 +18,7 @@
           <Download :size="15" />
         </button>
         <button
+          v-if="!readonly"
           class="item-action-btn"
           :title="isSaving(file.path) ? '保存中' : '保存到工作区'"
           :disabled="isSaving(file.path)"
@@ -46,6 +47,16 @@ const props = defineProps({
   },
   threadId: {
     type: String,
+    default: null
+  },
+  // 只读分享模式：隐藏“保存到工作区”，下载走自定义 URL
+  readonly: {
+    type: Boolean,
+    default: false
+  },
+  // 返回下载 URL；不传则使用登录态的 downloadViewerFile
+  downloadUrlFn: {
+    type: Function,
     default: null
   }
 })
@@ -97,6 +108,19 @@ const openPreview = (file) => {
 
 const downloadFile = async (file) => {
   if (!props.threadId || !file?.path) return
+
+  // 分享只读模式：直接用自定义下载 URL 打开
+  if (props.downloadUrlFn) {
+    const url = props.downloadUrlFn(file.path)
+    if (!url) return
+    const link = document.createElement('a')
+    link.href = url
+    link.download = file.name
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    return
+  }
 
   try {
     const response = await downloadViewerFile(props.threadId, file.path)
