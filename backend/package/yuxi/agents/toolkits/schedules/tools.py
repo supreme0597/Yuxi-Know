@@ -79,6 +79,13 @@ async def _resolve_agent(db_session, user_id: str, agent_ref: str) -> tuple[Agen
 # ========== list_agents ==========
 
 
+class ListAgentsInput(BaseModel):
+    """列出当前用户可用的智能体输入模型"""
+
+    # Langchain 的 runtime 注入机制要求必须有参数
+    dummy: str = Field(default="", description="Dummy parameter - ignore")
+
+
 @tool(
     category="schedules",
     tags=["查询智能体"],
@@ -86,8 +93,9 @@ async def _resolve_agent(db_session, user_id: str, agent_ref: str) -> tuple[Agen
     description="""列出当前用户可用的智能体（slug + 名称）。
 当用户用智能体名称（而非 slug）表达想绑定的智能体时，先调用本工具获取清单，
 把名称映射到对应的 agent_slug，再传给 create_schedule / update_schedule。""",
+    args_schema=ListAgentsInput,
 )
-async def list_agents(runtime: ToolRuntime) -> str:  # type: ignore[no-redef]
+async def list_agents(dummy: str, runtime: ToolRuntime) -> str:  # type: ignore[no-redef]
     """列出当前用户可用的智能体（slug + 名称），供选择定时任务绑定的智能体。
 
     Returns:
