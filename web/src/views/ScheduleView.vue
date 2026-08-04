@@ -359,7 +359,7 @@ const handleToggleEnabled = async (record) => {
   const newVal = !oldVal
 
   try {
-    const res = await scheduleApi.update(record.id, { enabled: newVal })
+    const res = await scheduleApi.patch(record.id, { enabled: newVal })
     if (res && res.success) {
       message.success(`${newVal ? '启用' : '禁用'}成功`)
       await loadSchedules()

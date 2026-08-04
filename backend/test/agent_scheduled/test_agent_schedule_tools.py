@@ -90,6 +90,7 @@ async def test_list_agents_returns_visible_agents(monkeypatch) -> None:
     _patch_pg(monkeypatch)
 
     result = await tools.list_agents.coroutine(  # type: ignore[attr-defined]
+        dummy="",
         runtime=_make_runtime(uid="u1"),
     )
 
@@ -102,6 +103,7 @@ async def test_list_agents_returns_visible_agents(monkeypatch) -> None:
 
 async def test_list_agents_returns_error_when_uid_missing() -> None:
     result = await tools.list_agents.coroutine(  # type: ignore[attr-defined]
+        dummy="",
         runtime=_make_runtime(uid=None),
     )
     assert result == "无法获取用户信息"

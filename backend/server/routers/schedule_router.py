@@ -159,7 +159,7 @@ async def update_schedule_route(
 ):
     """更新定时任务"""
     try:
-        # 超管不可修改定时任务配置（含绑定 agent），仅可查看与启停
+        # 超管不可修改定时任务配置（含绑定 agent），仅可查看与启停；启停走 PATCH 接口
         if _is_superadmin(current_user):
             raise HTTPException(status_code=403, detail="超管不可修改定时任务配置，仅可查看与启停")
 
