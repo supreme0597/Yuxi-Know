@@ -1,5 +1,6 @@
 import uuid
 from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from yuxi.repositories.agent_repository import AgentRepository
@@ -16,6 +17,31 @@ class ScheduleTriggerError(Exception):
     pass
 
 
+class ScheduleValidationError(Exception):
+    """调度输入校验失败：携带建议 HTTP 状态码与提示，供路由/工具各自转换。"""
+
+    status_code: int = 400
+    detail: str = "输入校验失败"
+
+    def __init__(self, message: str | None = None):
+        super().__init__(message or self.detail)
+        if message:
+            self.detail = message
+
+
+class TimezoneError(ScheduleValidationError):
+    status_code = 400
+    detail = "无效的时区"
+
+
+def validate_timezone(tz: str) -> None:
+    """校验 IANA 时区有效性，非法时抛 TimezoneError（不再静默回退）。"""
+    try:
+        ZoneInfo(tz)
+    except Exception:
+        raise TimezoneError(f"无效的时区: {tz}")
+
+
 class ScheduleService:
     """定时任务触发相关核心业务服务层"""
 
@@ -30,7 +56,7 @@ class ScheduleService:
 
         对齐 main 分支「统一 run 提交」契约（feat/unify-run-submission）：run 的输入正文
         由 Message 承载，run 仅登记元数据，并通过 agent_slug / uid 定位智能体与用户。
-        schedule.user_id 存的是归属用户的 uid，与 run.uid、Agent.created_by 保持一致。
+        schedule.uid 存的是归属用户的 uid，与 run.uid、Agent.created_by 保持一致。
 
         本方法只 flush 不提交；提交由调用方负责（手动触发由路由提交，Cron 轮询由
         create_scheduled_run 提交），以隔离 T2 事务生命周期。
@@ -41,7 +67,7 @@ class ScheduleService:
         if config_item is None:
             raise ScheduleTriggerError(f"agent {agent_slug} 不存在")
 
-        owner_uid = str(schedule.user_id)
+        owner_uid = str(schedule.uid)
 
         # 2. 创建对话（Thread）
         thread_id = str(uuid.uuid4())
@@ -88,7 +114,6 @@ class ScheduleService:
             run_type="chat",
             input_message_id=message.id,
             conversation_id=conversation.id,
-            source="schedule",
         )
 
         await db.flush()

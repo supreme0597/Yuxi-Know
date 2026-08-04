@@ -581,7 +581,11 @@ async def _worker_shutdown(ctx):
 
 
 class WorkerSettings:
-    functions = [process_agent_run]
+    functions = [process_agent_run, schedule_poll_job, daily_cleanup_schedule_logs_job]
+    cron_jobs = [
+        cron(schedule_poll_job, second={0, 30}),
+        cron(daily_cleanup_schedule_logs_job, hour=3, minute=0),
+    ]
     max_tries = 2
     retry_jobs = True
     job_timeout = 3600

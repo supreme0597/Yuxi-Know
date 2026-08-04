@@ -53,4 +53,20 @@ BUILTIN_SKILLS: list[BuiltinSkillSpec] = [
         version="2026.06.05",
         mcp_dependencies=("mcp-server-chart",),
     ),
+    BuiltinSkillSpec(
+        slug="schedules",
+        source_dir=_SKILLS_ROOT / "schedules",
+        description="让 Agent 管理定时任务：创建/修改/删除周期性运行的任务、查看任务详情与执行日志、手动触发一次运行。",
+        version="2026.08.04",
+        tool_dependencies=(
+            "list_agents",
+            "create_schedule",
+            "update_schedule",
+            "delete_schedule",
+            "list_schedules",
+            "get_schedule",
+            "list_schedule_logs",
+            "trigger_schedule",
+        ),
+    ),
 ]

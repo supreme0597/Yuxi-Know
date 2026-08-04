@@ -899,7 +899,7 @@ class ScheduleDefinition(Base):
     id = Column(String(64), primary_key=True, comment="Schedule ID")
     name = Column(String(255), nullable=False, comment="Schedule Name")
     description = Column(Text, nullable=True, comment="Schedule Description")
-    user_id = Column(String(64), nullable=False, index=True, comment="Creator User UID")
+    uid = Column(String(64), ForeignKey("users.uid"), nullable=False, index=True, comment="Creator User UID")
     agent_slug = Column(String(64), nullable=False, index=True, comment="目标 Agent slug")
     cron_expr = Column(String(128), nullable=False, comment="Cron Expression")
     timezone = Column(String(64), nullable=False, default="Asia/Shanghai", comment="Timezone")
@@ -921,7 +921,7 @@ class ScheduleDefinition(Base):
             "id": self.id,
             "name": self.name,
             "description": self.description,
-            "user_id": self.user_id,
+            "uid": self.uid,
             "agent_slug": self.agent_slug,
             "cron_expr": self.cron_expr,
             "timezone": self.timezone,

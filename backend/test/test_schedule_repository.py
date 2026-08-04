@@ -1,4 +1,8 @@
-"""ScheduleRepository owner-aware 仓储方法的单元测试。"""
+"""ScheduleRepository 纯 CRUD 仓储方法的单元测试。
+
+owner 过滤以「按 uid 带入查询条件」的方式由仓储实现（get_by_id(uid=...) /
+list_schedules(uid=...)）；admin/超管可见范围等角色逻辑仍留在路由/工具层。
+"""
 
 from __future__ import annotations
 
@@ -66,7 +70,7 @@ async def _make_schedule(db: AsyncSession, *, schedule_id: str, user_id: str) ->
     sched = ScheduleDefinition(
         id=schedule_id,
         name=f"s-{schedule_id}",
-        user_id=user_id,
+        uid=user_id,
         agent_slug="agent-1",
         cron_expr="0 * * * *",
         timezone="Asia/Shanghai",
@@ -96,137 +100,89 @@ async def _make_log(db: AsyncSession, *, schedule_id: str) -> ScheduleLog:
 
 
 # ---------------------------------------------------------------------------
-# get_by_id_for_user
+# 纯 CRUD（owner 过滤已上移到路由/工具层，仓储只做无歧义的数据访问）
 # ---------------------------------------------------------------------------
 
 
-async def test_get_by_id_for_user_returns_row_when_owner_matches(db_session: AsyncSession) -> None:
+async def test_get_by_id_returns_row(db_session: AsyncSession) -> None:
     repo = ScheduleRepository(db_session)
     await _make_schedule(db_session, schedule_id="s1", user_id="u1")
 
-    result = await repo.get_by_id_for_user("s1", "u1")
+    result = await repo.get_by_id("s1")
 
     assert result is not None
     assert result.id == "s1"
 
 
-async def test_get_by_id_for_user_returns_none_when_owner_mismatches(db_session: AsyncSession) -> None:
+async def test_get_by_id_returns_none_for_missing(db_session: AsyncSession) -> None:
+    repo = ScheduleRepository(db_session)
+    assert await repo.get_by_id("nope") is None
+
+
+async def test_get_by_id_with_uid_filters_by_owner(db_session: AsyncSession) -> None:
     repo = ScheduleRepository(db_session)
     await _make_schedule(db_session, schedule_id="s1", user_id="u1")
+    await _make_schedule(db_session, schedule_id="s2", user_id="u2")
 
-    result = await repo.get_by_id_for_user("s1", "u2")
+    own = await repo.get_by_id("s1", uid="u1")
+    assert own is not None and own.id == "s1"
 
-    assert result is None
-
-
-async def test_get_by_id_for_user_admin_skips_owner_filter(db_session: AsyncSession) -> None:
-    repo = ScheduleRepository(db_session)
-    await _make_schedule(db_session, schedule_id="s1", user_id="u1")
-
-    result = await repo.get_by_id_for_user("s1", "u2", is_admin=True)
-
-    assert result is not None
-    assert result.user_id == "u1"
+    # 非 owner：SQL 层直接返回 None
+    assert await repo.get_by_id("s1", uid="u2") is None
+    # 不存在的 id
+    assert await repo.get_by_id("nope", uid="u1") is None
+    # 不带 uid 时不限归属
+    assert await repo.get_by_id("s2") is not None
 
 
-# ---------------------------------------------------------------------------
-# update_for_user
-# ---------------------------------------------------------------------------
-
-
-async def test_update_for_user_modifies_row_when_owner_matches(db_session: AsyncSession) -> None:
+async def test_update_schedule_modifies_row(db_session: AsyncSession) -> None:
     repo = ScheduleRepository(db_session)
     await _make_schedule(db_session, schedule_id="s2", user_id="u1")
 
-    result = await repo.update_for_user("s2", "u1", {"name": "renamed"})
+    result = await repo.update_schedule("s2", {"name": "renamed"})
 
     assert result is not None
     assert result.name == "renamed"
 
 
-async def test_update_for_user_returns_none_when_owner_mismatches(db_session: AsyncSession) -> None:
+async def test_update_schedule_returns_none_when_missing(db_session: AsyncSession) -> None:
     repo = ScheduleRepository(db_session)
-    await _make_schedule(db_session, schedule_id="s2", user_id="u1")
-
-    result = await repo.update_for_user("s2", "u2", {"name": "renamed"})
-
-    assert result is None
+    assert await repo.update_schedule("s2", {"name": "renamed"}) is None
 
 
-async def test_update_for_user_admin_can_modify_others(db_session: AsyncSession) -> None:
-    repo = ScheduleRepository(db_session)
-    await _make_schedule(db_session, schedule_id="s2", user_id="u1")
-
-    result = await repo.update_for_user("s2", "u2", {"name": "renamed"}, is_admin=True)
-
-    assert result is not None
-    assert result.name == "renamed"
-
-
-# ---------------------------------------------------------------------------
-# delete_for_user
-# ---------------------------------------------------------------------------
-
-
-async def test_delete_for_user_removes_row_when_owner_matches(db_session: AsyncSession) -> None:
+async def test_delete_schedule_removes_row(db_session: AsyncSession) -> None:
     repo = ScheduleRepository(db_session)
     await _make_schedule(db_session, schedule_id="s3", user_id="u1")
 
-    deleted = await repo.delete_for_user("s3", "u1")
+    deleted = await repo.delete_schedule("s3")
 
     assert deleted is True
     assert await repo.get_by_id("s3") is None
 
 
-async def test_delete_for_user_returns_false_when_owner_mismatches(db_session: AsyncSession) -> None:
+async def test_delete_schedule_returns_false_when_missing(db_session: AsyncSession) -> None:
     repo = ScheduleRepository(db_session)
-    await _make_schedule(db_session, schedule_id="s3", user_id="u1")
-
-    deleted = await repo.delete_for_user("s3", "u2")
-
-    assert deleted is False
-    assert (await repo.get_by_id("s3")) is not None
+    assert await repo.delete_schedule("s3") is False
 
 
-async def test_delete_for_user_admin_can_remove_others(db_session: AsyncSession) -> None:
+async def test_list_schedules_filters_by_owner_uid(db_session: AsyncSession) -> None:
     repo = ScheduleRepository(db_session)
-    await _make_schedule(db_session, schedule_id="s3", user_id="u1")
+    await _make_schedule(db_session, schedule_id="s1", user_id="u1")
+    await _make_schedule(db_session, schedule_id="s2", user_id="u2")
 
-    deleted = await repo.delete_for_user("s3", "u2", is_admin=True)
+    own = await repo.list_schedules(uid="u1")
+    assert {s.id for s in own} == {"s1"}
 
-    assert deleted is True
-
-
-# ---------------------------------------------------------------------------
-# list_logs_for_user
-# ---------------------------------------------------------------------------
+    all_rows = await repo.list_schedules(uid=None)
+    assert {s.id for s in all_rows} == {"s1", "s2"}
 
 
-async def test_list_logs_for_user_returns_logs_when_owner_matches(db_session: AsyncSession) -> None:
+async def test_get_logs_by_schedule_id(db_session: AsyncSession) -> None:
     repo = ScheduleRepository(db_session)
     await _make_schedule(db_session, schedule_id="s4", user_id="u1")
     await _make_log(db_session, schedule_id="s4")
 
-    logs = await repo.list_logs_for_user("s4", "u1", limit=20, offset=0)
-
+    logs = await repo.get_logs_by_schedule_id("s4", limit=20, offset=0)
     assert len(logs) == 1
 
-
-async def test_list_logs_for_user_returns_empty_when_owner_mismatches(db_session: AsyncSession) -> None:
-    repo = ScheduleRepository(db_session)
-    await _make_schedule(db_session, schedule_id="s4", user_id="u1")
-    await _make_log(db_session, schedule_id="s4")
-
-    logs = await repo.list_logs_for_user("s4", "u2", limit=20, offset=0)
-
-    assert logs == []
-
-
-async def test_list_logs_for_user_admin_can_read_others(db_session: AsyncSession) -> None:
-    repo = ScheduleRepository(db_session)
-    await _make_schedule(db_session, schedule_id="s4", user_id="u1")
-    await _make_log(db_session, schedule_id="s4")
-
-    logs = await repo.list_logs_for_user("s4", "u2", limit=20, offset=0, is_admin=True)
-
-    assert len(logs) == 1
+    assert await repo.get_logs_by_schedule_id("s9") == []

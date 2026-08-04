@@ -717,7 +717,7 @@ class PostgresManager(metaclass=SingletonMeta):
                 id VARCHAR(64) PRIMARY KEY,
                 name VARCHAR(255) NOT NULL,
                 description TEXT,
-                user_id VARCHAR(64) NOT NULL,
+                uid VARCHAR(64) NOT NULL,
                 agent_slug VARCHAR(64) NOT NULL,
                 cron_expr VARCHAR(128) NOT NULL,
                 timezone VARCHAR(64) NOT NULL DEFAULT 'Asia/Shanghai',
@@ -747,9 +747,11 @@ class PostgresManager(metaclass=SingletonMeta):
             )
             """,
             "CREATE INDEX IF NOT EXISTS idx_schedule_defs_poll ON schedule_definitions(enabled, next_run_at)",
-            "CREATE INDEX IF NOT EXISTS idx_schedule_defs_user ON schedule_definitions(user_id)",
-            "CREATE INDEX IF NOT EXISTS idx_schedule_logs_schedule ON schedule_logs(schedule_id)",
-            "CREATE INDEX IF NOT EXISTS idx_schedule_logs_created ON schedule_logs(created_at)",
+            # 单列索引由模型列 index=True（BusinessBase.metadata.create_all）统一生成，
+            # 这里不再重复创建，并幂等清理存量库中此前的重复 idx_* 索引
+            "DROP INDEX IF EXISTS idx_schedule_defs_user",
+            "DROP INDEX IF EXISTS idx_schedule_logs_schedule",
+            "DROP INDEX IF EXISTS idx_schedule_logs_created",
             """
             DO $$
             BEGIN
@@ -762,6 +764,22 @@ class PostgresManager(metaclass=SingletonMeta):
                 ) THEN
                     EXECUTE 'ALTER TABLE schedule_definitions RENAME COLUMN agent_config_id TO agent_slug';
                     EXECUTE 'ALTER TABLE schedule_definitions ALTER COLUMN agent_slug TYPE VARCHAR(64) USING agent_slug::VARCHAR(64)';
+                END IF;
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'schedule_definitions' AND column_name = 'user_id'
+                ) AND NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'schedule_definitions' AND column_name = 'uid'
+                ) THEN
+                    EXECUTE 'ALTER TABLE schedule_definitions RENAME COLUMN user_id TO uid';
+                END IF;
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_constraint
+                    WHERE conname = 'fk_schedule_definitions_uid'
+                ) THEN
+                    EXECUTE 'ALTER TABLE schedule_definitions ADD CONSTRAINT fk_schedule_definitions_uid '
+                            'FOREIGN KEY (uid) REFERENCES users(uid)';
                 END IF;
             END $$;
             """,

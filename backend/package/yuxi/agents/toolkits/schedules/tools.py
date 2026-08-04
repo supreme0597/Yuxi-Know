@@ -1,7 +1,8 @@
 """agent 运行时 schedule 管理工具
 
-7 个 LangGraph @tool：
-  - list_my_schedules
+8 个 LangGraph @tool：
+  - list_agents
+  - list_schedules
   - get_schedule
   - create_schedule
   - update_schedule
@@ -9,9 +10,10 @@
   - trigger_schedule
   - list_schedule_logs
 
-所有工具通过 runtime.context.user_id 强制 owner 隔离；
-admin 通过 runtime.context.is_admin（若 BaseContext 带）或
-fallback 到 user.role 判断。
+所有工具仅操作"当前用户自己的"定时任务（按 runtime.context.uid 强制 owner 隔离），
+不做任何角色/权限晋升（admin/superadmin 的越权查看与管控仅由 HTTP router 负责）。
+agent 绑定通过 AgentRepository.get_visible_by_slug 复用既有可见性判定
+（内部走 user_can_access_agent），可用的智能体清单由 list_agents 提供。
 """
 
 import json
@@ -19,17 +21,20 @@ import uuid
 from typing import Any
 
 from langgraph.prebuilt.tool_node import ToolRuntime
-from pydantic import BaseModel
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from pydantic import BaseModel, Field
 
 from yuxi.agents.toolkits.registry import tool
 from yuxi.repositories.agent_repository import AgentRepository
 from yuxi.repositories.schedule_repository import ScheduleRepository
+from yuxi.repositories.user_repository import UserRepository
 from yuxi.services.schedule_manager import compute_next_run
-from yuxi.services.schedule_service import ScheduleService
+from yuxi.services.schedule_service import (
+    ScheduleService,
+    ScheduleValidationError,
+    validate_timezone,
+)
 from yuxi.storage.postgres.manager import pg_manager
-from yuxi.storage.postgres.models_business import ScheduleDefinition, User
+from yuxi.storage.postgres.models_business import Agent, ScheduleDefinition
 from yuxi.utils import logger
 
 
@@ -37,32 +42,11 @@ from yuxi.utils import logger
 
 
 def _resolve_user(runtime: ToolRuntime) -> str | None:
-    """从 runtime.context 拿当前用户 uid；缺失返回 None。"""
+    """从 runtime.context 拿当前用户 uid（BaseContext.uid）；缺失返回 None。"""
     context = getattr(runtime, "context", None)
     if context is None:
         return None
-    # 运行时上下文以 uid 标识用户（BaseContext.uid），兼容旧字段名 user_id。
-    return getattr(context, "uid", None) or getattr(context, "user_id", None)
-
-
-async def _is_admin(runtime: ToolRuntime, db_session: AsyncSession) -> bool:
-    """判断当前用户是否为 admin。
-
-    优先使用 runtime.context.is_admin（若 BaseContext 扩展过该字段）；
-    否则通过 user_id 查 users.role 兜底。
-    """
-    context = getattr(runtime, "context", None)
-    if context is not None:
-        flag = getattr(context, "is_admin", None)
-        if flag is not None:
-            return bool(flag)
-    user_id = _resolve_user(runtime)
-    if not user_id:
-        return False
-    stmt = select(User.role).where(User.uid == user_id).limit(1)
-    result = await db_session.execute(stmt)
-    role = result.scalar_one_or_none()
-    return role in ("admin", "superadmin")
+    return getattr(context, "uid", None)
 
 
 def _json_or_error(obj: Any, err: str) -> str:
@@ -76,34 +60,68 @@ def _json_or_error(obj: Any, err: str) -> str:
         return err
 
 
-async def _check_agent_ownership(
-    db_session: AsyncSession,
-    agent_slug: str,
-    user_id: str,
-    is_admin: bool,
-) -> str | None:
-    """校验 agent 归属当前用户。
+async def _resolve_agent(db_session, user_id: str, agent_ref: str) -> tuple[Agent | None, str | None]:
+    """按 slug 解析当前用户可见且启用的 Agent。
 
-    返回 None 表示通过；返回字符串为面向 LLM 的中文错误消息。
-    admin 跳过校验。
+    可见性复用 AgentRepository.get_visible_by_slug（内部走 user_can_access_agent），
+    与 router 保持一致；可用智能体清单由 list_agents 提供。
+    返回 (agent, error)；agent 为 None 时 error 为面向 LLM 的中文错误消息。
     """
-    if is_admin:
-        return None
-    config = await AgentRepository(db_session).get_by_slug(slug=agent_slug)
-    if config is None or str(config.created_by) != str(user_id):
-        return "无权使用该 agent"
-    return None
+    user = await UserRepository().get_by_uid_with_db(db_session, user_id)
+    if user is None:
+        return None, "无法获取用户信息"
+    agent = await AgentRepository(db_session).get_visible_by_slug(slug=agent_ref, user=user, kind="any")
+    if agent is None:
+        return None, f"指定的 Agent 不存在或无权使用: {agent_ref}"
+    return agent, None
 
 
-# ========== list_my_schedules ==========
+# ========== list_agents ==========
+
+
+@tool(
+    category="schedules",
+    tags=["查询智能体"],
+    display_name="查看可用智能体",
+    description="""列出当前用户可用的智能体（slug + 名称）。
+当用户用智能体名称（而非 slug）表达想绑定的智能体时，先调用本工具获取清单，
+把名称映射到对应的 agent_slug，再传给 create_schedule / update_schedule。""",
+)
+async def list_agents(runtime: ToolRuntime) -> str:  # type: ignore[no-redef]
+    """列出当前用户可用的智能体（slug + 名称），供选择定时任务绑定的智能体。
+
+    Returns:
+        JSON 数组；每条含 slug/name/description/is_subagent。
+    """
+    user_id = _resolve_user(runtime)
+    if not user_id:
+        return "无法获取用户信息"
+
+    try:
+        async with pg_manager.get_async_session_context() as session:
+            user = await UserRepository().get_by_uid_with_db(session, user_id)
+            if user is None:
+                return "无法获取用户信息"
+            agents = await AgentRepository(session).list_visible(user=user)
+        payload = [
+            {"slug": a.slug, "name": a.name, "description": a.description, "is_subagent": a.is_subagent}
+            for a in agents
+        ]
+        return _json_or_error(payload, "未找到任何可用智能体")
+    except Exception as e:
+        logger.error(f"list_agents 工具异常: {e}")
+        return f"查询失败: {e}"
+
+
+# ========== list_schedules ==========
 
 
 LIST_DEFAULT_LIMIT = 20
 LIST_MAX_LIMIT = 100
 
 
-class ListMySchedulesInput(BaseModel):
-    """列出当前用户的定时任务；admin 看全部。"""
+class ListSchedulesInput(BaseModel):
+    """列出当前用户的定时任务。"""
 
     limit: int = LIST_DEFAULT_LIMIT
     offset: int = 0
@@ -111,16 +129,18 @@ class ListMySchedulesInput(BaseModel):
 
 @tool(
     category="schedules",
-    tags=["定时任务", "列表"],
-    display_name="列出我的定时任务",
-    args_schema=ListMySchedulesInput,
+    tags=["查询定时任务"],
+    display_name="列出定时任务",
+    description="""列出当前用户的定时任务（分页）。
+创建、修改或删除前，如需确认已有任务，先调用本工具查看现有任务及其 id。""",
+    args_schema=ListSchedulesInput,
 )  # type: ignore[misc]
-async def list_my_schedules(  # type: ignore[no-redef]
+async def list_schedules(  # type: ignore[no-redef]
     limit: int,
     offset: int,
     runtime: ToolRuntime,
 ) -> str:
-    """列出当前用户可访问的定时任务列表（admin 看全部）。
+    """列出当前用户的定时任务列表。
 
     Args:
         limit: 最多返回条数（默认 20，最大 100）
@@ -137,10 +157,8 @@ async def list_my_schedules(  # type: ignore[no-redef]
     offset = max(int(offset), 0)
 
     async with pg_manager.get_async_session_context() as session:
-        is_admin = await _is_admin(runtime, session)
-        user_filter = None if is_admin else user_id
         repo = ScheduleRepository(session)
-        rows = await repo.list_schedules(user_id=user_filter, limit=limit, offset=offset)
+        rows = await repo.list_schedules(uid=user_id, limit=limit, offset=offset)
 
     payload = [
         {
@@ -168,8 +186,10 @@ class GetScheduleInput(BaseModel):
 
 @tool(
     category="schedules",
-    tags=["定时任务", "查询"],
+    tags=["查看定时任务"],
     display_name="查看定时任务详情",
+    description="""查看单条定时任务的详情（cron、时区、目标 Agent、下次运行时间、启用状态等）。
+需要确认任务当前配置时使用；schedule_id 可来自 list_schedules。""",
     args_schema=GetScheduleInput,
 )  # type: ignore[misc]
 async def get_schedule(schedule_id: str, runtime: ToolRuntime) -> str:  # type: ignore[no-redef]
@@ -186,9 +206,8 @@ async def get_schedule(schedule_id: str, runtime: ToolRuntime) -> str:  # type: 
         return "无法获取用户信息"
 
     async with pg_manager.get_async_session_context() as session:
-        is_admin = await _is_admin(runtime, session)
         repo = ScheduleRepository(session)
-        row = await repo.get_by_id_for_user(schedule_id, user_id, is_admin=is_admin)
+        row = await repo.get_by_id(schedule_id, user_id)
 
     if row is None:
         return "未找到该任务"
@@ -203,19 +222,19 @@ class CreateScheduleInput(BaseModel):
 
     name: str
     description: str | None = None
-    agent_slug: str
+    agent_slug: str = Field(..., description="目标 Agent 的 slug（可通过 list_agents 查询可用智能体）")
     cron_expr: str
     timezone: str = "Asia/Shanghai"
     query: str
-    image_content: str | None = None
-    schedule_config: dict = {}
     enabled: bool = True
 
 
 @tool(
     category="schedules",
-    tags=["定时任务", "创建"],
+    tags=["创建定时任务"],
     display_name="创建定时任务",
+    description="""创建一个定时任务：绑定目标 Agent（agent_slug 来自 list_agents）、cron 表达式、时区与运行内容（query）。
+创建后由 cron 表达式与 timezone 决定下次自动执行时间。""",
     args_schema=CreateScheduleInput,
 )  # type: ignore[misc]
 async def create_schedule(  # type: ignore[no-redef]
@@ -225,22 +244,25 @@ async def create_schedule(  # type: ignore[no-redef]
     cron_expr: str,
     timezone: str,
     query: str,
-    image_content: str | None,
-    schedule_config: dict | None = None,
     enabled: bool = True,
     runtime: ToolRuntime = None,
 ) -> str:
-    """创建新的定时任务。普通用户只能绑定自己创建的 agent；admin 不受限。"""
+    """创建新的定时任务；agent_slug 需为当前用户可见且启用的智能体（可先通过 list_agents 查询）。"""
     user_id = _resolve_user(runtime)
     if not user_id:
         return "无法获取用户信息"
 
     try:
         async with pg_manager.get_async_session_context() as session:
-            is_admin = await _is_admin(runtime, session)
-            err = await _check_agent_ownership(session, agent_slug, user_id, is_admin)
+            agent, err = await _resolve_agent(session, user_id, agent_slug)
             if err:
                 return err
+
+            # 校验时区（与启用状态无关，避免脏值延迟到调度才报错）
+            try:
+                validate_timezone(timezone)
+            except ScheduleValidationError as e:
+                return str(e.detail)
 
             # 计算 next_run_at；cron 失败由 compute_next_run 抛
             next_run = None
@@ -254,13 +276,11 @@ async def create_schedule(  # type: ignore[no-redef]
                 id=str(uuid.uuid4()),
                 name=name,
                 description=description,
-                user_id=str(user_id),
-                agent_slug=agent_slug,
+                uid=str(user_id),
+                agent_slug=agent.slug,
                 cron_expr=cron_expr,
                 timezone=timezone,
                 query=query,
-                image_content=image_content,
-                config=schedule_config or {},
                 enabled=enabled,
                 next_run_at=next_run,
             )
@@ -281,19 +301,21 @@ class UpdateScheduleInput(BaseModel):
     schedule_id: str
     name: str | None = None
     description: str | None = None
-    agent_slug: str | None = None
+    agent_slug: str | None = Field(
+        None, description="目标 Agent 的 slug（可通过 list_agents 查询可用智能体）；留空不修改"
+    )
     cron_expr: str | None = None
     timezone: str | None = None
     query: str | None = None
-    image_content: str | None = None
-    schedule_config: dict | None = None
     enabled: bool | None = None
 
 
 @tool(
     category="schedules",
-    tags=["定时任务", "修改"],
+    tags=["修改定时任务"],
     display_name="修改定时任务",
+    description="""修改已有定时任务的部分字段（名称、目标 Agent、cron、时区、query、启用状态），只更新提供的字段。
+不要臆造 agent_slug，可从 list_agents 获取。""",
     args_schema=UpdateScheduleInput,
 )  # type: ignore[misc]
 async def update_schedule(  # type: ignore[no-redef]
@@ -304,26 +326,30 @@ async def update_schedule(  # type: ignore[no-redef]
     cron_expr: str | None,
     timezone: str | None,
     query: str | None,
-    image_content: str | None,
-    schedule_config: dict | None = None,
     enabled: bool | None = None,
     runtime: ToolRuntime = None,
 ) -> str:
-    """更新定时任务；agent_slug 必须归属当前用户（admin 跳过）。"""
+    """更新定时任务；agent_slug 需为当前用户可见且启用的智能体（可先通过 list_agents 查询）。"""
     user_id = _resolve_user(runtime)
     if not user_id:
         return "无法获取用户信息"
 
     try:
         async with pg_manager.get_async_session_context() as session:
-            is_admin = await _is_admin(runtime, session)
             if agent_slug is not None:
-                err = await _check_agent_ownership(session, agent_slug, user_id, is_admin)
+                agent, err = await _resolve_agent(session, user_id, agent_slug)
                 if err:
                     return err
 
+            # 若显式修改时区，先校验有效性
+            if timezone is not None:
+                try:
+                    validate_timezone(timezone)
+                except ScheduleValidationError as e:
+                    return str(e.detail)
+
             repo = ScheduleRepository(session)
-            existing = await repo.get_by_id_for_user(schedule_id, user_id, is_admin=is_admin)
+            existing = await repo.get_by_id(schedule_id, user_id)
             if existing is None:
                 return "未找到该任务"
 
@@ -333,17 +359,13 @@ async def update_schedule(  # type: ignore[no-redef]
             if description is not None:
                 update_data["description"] = description
             if agent_slug is not None:
-                update_data["agent_slug"] = agent_slug
+                update_data["agent_slug"] = agent.slug
             if cron_expr is not None:
                 update_data["cron_expr"] = cron_expr
             if timezone is not None:
                 update_data["timezone"] = timezone
             if query is not None:
                 update_data["query"] = query
-            if image_content is not None:
-                update_data["image_content"] = image_content
-            if schedule_config is not None:
-                update_data["config"] = schedule_config
             if enabled is not None:
                 update_data["enabled"] = enabled
 
@@ -360,7 +382,7 @@ async def update_schedule(  # type: ignore[no-redef]
                 else:
                     update_data["next_run_at"] = None
 
-            updated = await repo.update_for_user(schedule_id, user_id, update_data, is_admin=is_admin)
+            updated = await repo.update_schedule(schedule_id, update_data)
             if updated is None:
                 return "未找到该任务"
             return _json_or_error(updated.to_dict(), "更新失败")
@@ -380,8 +402,10 @@ class DeleteScheduleInput(BaseModel):
 
 @tool(
     category="schedules",
-    tags=["定时任务", "删除", "危险"],
+    tags=["删除定时任务"],
     display_name="删除定时任务",
+    description="""删除定时任务（仅限本人创建，按 owner 隔离）。
+不可恢复，执行前必须与用户确认。""",
     args_schema=DeleteScheduleInput,
 )  # type: ignore[misc]
 async def delete_schedule(schedule_id: str, runtime: ToolRuntime) -> str:  # type: ignore[no-redef]
@@ -392,9 +416,11 @@ async def delete_schedule(schedule_id: str, runtime: ToolRuntime) -> str:  # typ
 
     try:
         async with pg_manager.get_async_session_context() as session:
-            is_admin = await _is_admin(runtime, session)
             repo = ScheduleRepository(session)
-            ok = await repo.delete_for_user(schedule_id, user_id, is_admin=is_admin)
+            existing = await repo.get_by_id(schedule_id, user_id)
+            if existing is None:
+                return "未找到该任务"
+            ok = await repo.delete_schedule(schedule_id)
         if not ok:
             return "未找到该任务"
         return _json_or_error({"deleted": True, "schedule_id": schedule_id}, "删除失败")
@@ -416,8 +442,9 @@ class ListScheduleLogsInput(BaseModel):
 
 @tool(
     category="schedules",
-    tags=["定时任务", "日志"],
+    tags=["查询执行日志"],
     display_name="查看定时任务执行日志",
+    description="""查看某条定时任务的历史执行日志，用于排查任务是否按时触发、运行结果如何。""",
     args_schema=ListScheduleLogsInput,
 )  # type: ignore[misc]
 async def list_schedule_logs(  # type: ignore[no-redef]
@@ -426,7 +453,7 @@ async def list_schedule_logs(  # type: ignore[no-redef]
     offset: int,
     runtime: ToolRuntime,
 ) -> str:
-    """列出指定任务的执行日志（按 owner 隔离；admin 可看全部）。"""
+    """列出指定任务的执行日志（按 owner 隔离）。"""
     user_id = _resolve_user(runtime)
     if not user_id:
         return "无法获取用户信息"
@@ -436,11 +463,11 @@ async def list_schedule_logs(  # type: ignore[no-redef]
 
     try:
         async with pg_manager.get_async_session_context() as session:
-            is_admin = await _is_admin(runtime, session)
             repo = ScheduleRepository(session)
-            logs = await repo.list_logs_for_user(schedule_id, user_id, limit=limit, offset=offset, is_admin=is_admin)
-        if not logs:
-            return "未找到该任务"
+            existing = await repo.get_by_id(schedule_id, user_id)
+            if existing is None:
+                return "未找到该任务"
+            logs = await repo.get_logs_by_schedule_id(schedule_id, limit=limit, offset=offset)
         return _json_or_error([log.to_dict() for log in logs], "未找到该任务")
     except Exception as e:
         logger.error(f"list_schedule_logs 工具异常: {e}")
@@ -458,8 +485,9 @@ class TriggerScheduleInput(BaseModel):
 
 @tool(
     category="schedules",
-    tags=["定时任务", "执行"],
+    tags=["触发定时任务"],
     display_name="手动触发定时任务",
+    description="""立即手动触发一次定时任务运行，不影响原有 cron 周期；即使任务处于禁用状态也可触发。""",
     args_schema=TriggerScheduleInput,
 )  # type: ignore[misc]
 async def trigger_schedule(schedule_id: str, runtime: ToolRuntime) -> str:  # type: ignore[no-redef]
@@ -473,9 +501,8 @@ async def trigger_schedule(schedule_id: str, runtime: ToolRuntime) -> str:  # ty
 
     try:
         async with pg_manager.get_async_session_context() as session:
-            is_admin = await _is_admin(runtime, session)
             repo = ScheduleRepository(session)
-            schedule = await repo.get_by_id_for_user(schedule_id, user_id, is_admin=is_admin)
+            schedule = await repo.get_by_id(schedule_id, user_id)
             if schedule is None:
                 return "未找到该任务"
 

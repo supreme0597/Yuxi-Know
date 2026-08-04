@@ -7,7 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from server.utils.auth_middleware import get_db, get_required_user
 from yuxi.repositories.agent_repository import AgentRepository
 from yuxi.repositories.schedule_repository import ScheduleRepository
-from yuxi.services.schedule_service import ScheduleService
+from yuxi.services.schedule_service import (
+    ScheduleService,
+    ScheduleValidationError,
+    validate_timezone,
+)
 from yuxi.services.schedule_manager import compute_next_run
 from yuxi.storage.postgres.models_business import ScheduleDefinition, User
 from yuxi.utils.logging_config import logger
@@ -39,29 +43,25 @@ class ScheduleUpdateRequest(BaseModel):
     enabled: bool | None = None
 
 
-def _is_admin(user: User) -> bool:
-    return user.role in ["admin", "superadmin"]
+def _is_superadmin(user: User) -> bool:
+    """仅 superadmin 可查看/管理全部定时任务。"""
+    return user.role == "superadmin"
 
 
 def _raise_not_found(message: str = "任务配置不存在"):
     raise HTTPException(status_code=404, detail=message)
 
 
-def _raise_forbidden(message: str = "无权进行该操作"):
-    raise HTTPException(status_code=403, detail=message)
+def _as_http(err: ScheduleValidationError) -> HTTPException:
+    """将共享校验异常转为对应 HTTP 响应。"""
+    return HTTPException(status_code=err.status_code, detail=err.detail)
 
 
-async def _verify_agent_ownership(db: AsyncSession, agent_slug: str, current_user: User) -> None:
-    """校验 agent 归属当前用户；失败抛 403。admin 跳过。
-
-    注：Agent 的 owner 记录在 `created_by`（值为 User.uid 的字符串形式）。
-    与 tools.py 中的 `_check_agent_ownership` 行为保持一致。
-    """
-    if _is_admin(current_user):
-        return
-    config_item = await AgentRepository(db).get_by_slug(slug=agent_slug)
-    if config_item is None or str(config_item.created_by) != str(current_user.uid):
-        raise HTTPException(status_code=403, detail="无权使用该 agent")
+def _assert_visible(schedule: ScheduleDefinition | None, current_user: User) -> ScheduleDefinition:
+    """校验任务存在且当前用户可见（超管可见全部，其余仅自己）；否则抛 404。"""
+    if schedule is None or (not _is_superadmin(current_user) and str(schedule.uid) != str(current_user.uid)):
+        _raise_not_found()
+    return schedule
 
 
 @schedule_router.post("")
@@ -72,9 +72,19 @@ async def create_schedule_route(
 ):
     """创建定时任务"""
     try:
-        # 校验 agent 归属（admin 跳过）
+        # 校验 agent 可见性（复用 AgentRepository 的权限查询）
         if payload.agent_slug is not None:
-            await _verify_agent_ownership(db, payload.agent_slug, current_user)
+            agent = await AgentRepository(db).get_visible_by_slug(
+                slug=payload.agent_slug, user=current_user, kind="any"
+            )
+            if agent is None:
+                raise HTTPException(status_code=404, detail="指定的 Agent 不存在或无权使用")
+
+        # 校验时区（与启用状态无关，避免脏值延迟到调度才报错）
+        try:
+            validate_timezone(payload.timezone)
+        except ScheduleValidationError as e:
+            raise _as_http(e)
 
         next_run = None
         if payload.enabled:
@@ -87,7 +97,7 @@ async def create_schedule_route(
             id=str(uuid.uuid4()),
             name=payload.name,
             description=payload.description,
-            user_id=str(current_user.uid),
+            uid=str(current_user.uid),
             agent_slug=payload.agent_slug,
             cron_expr=payload.cron_expr,
             timezone=payload.timezone,
@@ -119,9 +129,9 @@ async def list_schedules_route(
     """查询定时任务列表"""
     try:
         repo = ScheduleRepository(db)
-        user_filter = None if _is_admin(current_user) else str(current_user.id)
+        owner_uid = None if _is_superadmin(current_user) else str(current_user.uid)
 
-        items = await repo.list_schedules(user_id=user_filter, limit=limit, offset=offset)
+        items = await repo.list_schedules(uid=owner_uid, limit=limit, offset=offset)
         return {"success": True, "data": [item.to_dict() for item in items]}
     except Exception as e:
         logger.error(f"Failed to list schedules: {e}")
@@ -136,14 +146,7 @@ async def get_schedule_route(
 ):
     """获取定时任务详情"""
     repo = ScheduleRepository(db)
-    schedule = await repo.get_by_id_for_user(
-        schedule_id,
-        str(current_user.id),
-        is_admin=_is_admin(current_user),
-    )
-    if not schedule:
-        _raise_not_found()
-
+    schedule = _assert_visible(await repo.get_by_id(schedule_id), current_user)
     return {"success": True, "data": schedule.to_dict()}
 
 
@@ -156,18 +159,20 @@ async def update_schedule_route(
 ):
     """更新定时任务"""
     try:
-        # 若替换 agent_slug，先校验归属
+        # 超管不可修改定时任务配置（含绑定 agent），仅可查看与启停
+        if _is_superadmin(current_user):
+            raise HTTPException(status_code=403, detail="超管不可修改定时任务配置，仅可查看与启停")
+
+        # 若替换 agent_slug，先校验可见性（复用 AgentRepository 的权限查询）
         if payload.agent_slug is not None:
-            await _verify_agent_ownership(db, payload.agent_slug, current_user)
+            agent = await AgentRepository(db).get_visible_by_slug(
+                slug=payload.agent_slug, user=current_user, kind="any"
+            )
+            if agent is None:
+                raise HTTPException(status_code=404, detail="指定的 Agent 不存在或无权使用")
 
         repo = ScheduleRepository(db)
-        schedule = await repo.get_by_id_for_user(
-            schedule_id,
-            str(current_user.id),
-            is_admin=_is_admin(current_user),
-        )
-        if not schedule:
-            _raise_not_found()
+        schedule = _assert_visible(await repo.get_by_id(schedule_id), current_user)
 
         update_data = payload.model_dump(exclude_unset=True)
 
@@ -175,6 +180,13 @@ async def update_schedule_route(
         cron_expr = update_data.get("cron_expr", schedule.cron_expr)
         timezone_str = update_data.get("timezone", schedule.timezone)
         enabled = update_data.get("enabled", schedule.enabled)
+
+        # 若本次显式修改了时区，先校验有效性
+        if "timezone" in update_data:
+            try:
+                validate_timezone(timezone_str)
+            except ScheduleValidationError as e:
+                raise _as_http(e)
 
         if "enabled" in update_data or "cron_expr" in update_data or "timezone" in update_data:
             if enabled:
@@ -185,12 +197,7 @@ async def update_schedule_route(
             else:
                 update_data["next_run_at"] = None
 
-        updated_schedule = await repo.update_for_user(
-            schedule_id,
-            str(current_user.id),
-            update_data,
-            is_admin=_is_admin(current_user),
-        )
+        updated_schedule = await repo.update_schedule(schedule_id, update_data)
         await db.commit()
         return {"success": True, "data": updated_schedule.to_dict() if updated_schedule else {}}
     except HTTPException:
@@ -209,19 +216,9 @@ async def delete_schedule_route(
     """删除定时任务"""
     try:
         repo = ScheduleRepository(db)
-        schedule = await repo.get_by_id_for_user(
-            schedule_id,
-            str(current_user.id),
-            is_admin=_is_admin(current_user),
-        )
-        if not schedule:
-            _raise_not_found()
+        schedule = _assert_visible(await repo.get_by_id(schedule_id), current_user)
 
-        success = await repo.delete_for_user(
-            schedule_id,
-            str(current_user.id),
-            is_admin=_is_admin(current_user),
-        )
+        success = await repo.delete_schedule(schedule_id)
         await db.commit()
         return {"success": success}
     except HTTPException:
@@ -241,13 +238,7 @@ async def patch_schedule_route(
     """局部更新定时任务（例如单独切换启用状态）"""
     try:
         repo = ScheduleRepository(db)
-        schedule = await repo.get_by_id_for_user(
-            schedule_id,
-            str(current_user.id),
-            is_admin=_is_admin(current_user),
-        )
-        if not schedule:
-            _raise_not_found()
+        schedule = _assert_visible(await repo.get_by_id(schedule_id), current_user)
 
         update_data = {}
         if "enabled" in payload:
@@ -261,12 +252,7 @@ async def patch_schedule_route(
             else:
                 update_data["next_run_at"] = None
 
-        updated_schedule = await repo.update_for_user(
-            schedule_id,
-            str(current_user.id),
-            update_data,
-            is_admin=_is_admin(current_user),
-        )
+        updated_schedule = await repo.update_schedule(schedule_id, update_data)
         await db.commit()
         return {"success": True, "data": updated_schedule.to_dict() if updated_schedule else {}}
     except HTTPException:
@@ -285,13 +271,7 @@ async def trigger_schedule_route(
     """手动立即触发一次定时任务的运行"""
     try:
         repo = ScheduleRepository(db)
-        schedule = await repo.get_by_id_for_user(
-            schedule_id,
-            str(current_user.id),
-            is_admin=_is_admin(current_user),
-        )
-        if not schedule:
-            _raise_not_found()
+        schedule = _assert_visible(await repo.get_by_id(schedule_id), current_user)
 
         service = ScheduleService()
         thread_id, run_id = await service.manual_trigger_schedule(schedule=schedule, db=db)
@@ -315,23 +295,10 @@ async def list_schedule_logs_route(
     """获取指定定时任务配置的历史执行日志列表"""
     try:
         repo = ScheduleRepository(db)
-        logs = await repo.list_logs_for_user(
-            schedule_id,
-            str(current_user.id),
-            limit=limit,
-            offset=offset,
-            is_admin=_is_admin(current_user),
-        )
-        if not logs:
-            # 校验 schedule 是否存在/有权访问，避免对不存在的 id 返回空列表而误判
-            schedule = await repo.get_by_id_for_user(
-                schedule_id,
-                str(current_user.id),
-                is_admin=_is_admin(current_user),
-            )
-            if not schedule:
-                _raise_not_found()
+        # 先校验任务存在且可见，避免对不存在/无权的 id 返回空列表而误判
+        _assert_visible(await repo.get_by_id(schedule_id), current_user)
 
+        logs = await repo.get_logs_by_schedule_id(schedule_id, limit=limit, offset=offset)
         return {"success": True, "data": [log.to_dict() for log in logs]}
     except HTTPException:
         raise
