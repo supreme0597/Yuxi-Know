@@ -170,11 +170,11 @@ def test_normal_user_cannot_manage_provider_without_creator():
     assert user_can_manage_provider(u, p) is False
 
 
-def test_superadmin_cannot_manage_others_non_builtin():
-    """superadmin 对普通供应商同样遵循仅创建人规则。"""
+def test_superadmin_can_manage_others_non_builtin():
+    """superadmin 兜底可管理任何普通供应商。"""
     u = _user("admin", role="superadmin")
     p = _provider(created_by="other")
-    assert user_can_manage_provider(u, p) is False
+    assert user_can_manage_provider(u, p) is True
 
 
 def test_normal_user_can_manage_own():
