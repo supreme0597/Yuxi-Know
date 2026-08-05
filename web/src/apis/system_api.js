@@ -1,4 +1,4 @@
-import { apiGet, apiAdminGet, apiAdminPost, apiAdminPut, apiAdminDelete } from './base'
+import { apiGet, apiPost, apiPut, apiDelete, apiAdminGet, apiAdminPost } from './base'
 
 /**
  * 系统管理API模块
@@ -91,8 +91,9 @@ export const chatModelApi = {}
 // =============================================================================
 
 export const modelProviderApi = {
+  // 供应商接口的权限由后端按可见性 / 管理权校验，前端不拦截普通用户
   getProviders: async () => {
-    return apiAdminGet('/api/system/model-providers')
+    return apiGet('/api/system/model-providers')
   },
 
   getV2Models: async (modelType = 'chat') => {
@@ -104,24 +105,22 @@ export const modelProviderApi = {
   },
 
   getModelStatusBySpec: async (spec) => {
-    return apiAdminGet(`/api/system/model-providers/models/status?spec=${encodeURIComponent(spec)}`)
+    return apiGet(`/api/system/model-providers/models/status?spec=${encodeURIComponent(spec)}`)
   },
 
   createProvider: async (payload) => {
-    return apiAdminPost('/api/system/model-providers', payload)
+    return apiPost('/api/system/model-providers', payload)
   },
 
   updateProvider: async (providerId, payload) => {
-    return apiAdminPut(`/api/system/model-providers/${encodeURIComponent(providerId)}`, payload)
+    return apiPut(`/api/system/model-providers/${encodeURIComponent(providerId)}`, payload)
   },
 
   deleteProvider: async (providerId) => {
-    return apiAdminDelete(`/api/system/model-providers/${encodeURIComponent(providerId)}`)
+    return apiDelete(`/api/system/model-providers/${encodeURIComponent(providerId)}`)
   },
 
   fetchRemoteModels: async (providerId) => {
-    return apiAdminGet(
-      `/api/system/model-providers/${encodeURIComponent(providerId)}/remote-models`
-    )
+    return apiGet(`/api/system/model-providers/${encodeURIComponent(providerId)}/remote-models`)
   }
 }

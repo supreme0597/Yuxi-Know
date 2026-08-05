@@ -5,21 +5,18 @@ import { useRoute, useRouter } from 'vue-router'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import AgentManagePanel from '@/components/model-management/AgentManagePanel.vue'
 import ModelProviderManagePanel from '@/components/model-management/ModelProviderManagePanel.vue'
-import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
 const router = useRouter()
-const userStore = useUserStore()
 
 const activeTab = ref('agents')
 const agentPanelRef = ref(null)
 const providerPanelRef = ref(null)
 
-const modelManageTabs = computed(() => {
-  const tabs = [{ key: 'agents', label: '智能体' }]
-  if (userStore.isAdmin) tabs.push({ key: 'providers', label: '模型供应商' })
-  return tabs
-})
+const modelManageTabs = [
+  { key: 'agents', label: '智能体' },
+  { key: 'providers', label: '模型供应商' }
+]
 
 const activePanel = computed(() =>
   activeTab.value === 'providers' ? providerPanelRef.value : agentPanelRef.value
@@ -28,14 +25,11 @@ const activePanel = computed(() =>
 const activeLoading = computed(() => activePanel.value?.loading || false)
 const activeStats = computed(() => activePanel.value?.stats || {})
 
-const normalizeTab = (tab) => {
-  if (tab === 'providers' && userStore.isAdmin) return 'providers'
-  return 'agents'
-}
+const normalizeTab = (tab) => (tab === 'providers' ? 'providers' : 'agents')
 
 watch(
-  () => [route.query.tab, userStore.isAdmin],
-  ([tab]) => {
+  () => route.query.tab,
+  (tab) => {
     const nextTab = normalizeTab(tab)
     if (activeTab.value !== nextTab) activeTab.value = nextTab
   },
@@ -85,7 +79,7 @@ watch(activeTab, (tab) => {
       <div v-show="activeTab === 'agents'" class="tab-panel">
         <AgentManagePanel ref="agentPanelRef" />
       </div>
-      <div v-if="userStore.isAdmin && activeTab === 'providers'" class="tab-panel">
+      <div v-if="activeTab === 'providers'" class="tab-panel">
         <ModelProviderManagePanel ref="providerPanelRef" />
       </div>
     </div>

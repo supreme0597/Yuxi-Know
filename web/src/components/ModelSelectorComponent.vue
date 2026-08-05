@@ -52,6 +52,7 @@
           >
             <template #suffix>
               <button
+                v-if="userStore.isAdmin"
                 :disabled="props.disabled || state.refreshingCache"
                 :title="state.refreshingCache ? '刷新中...' : '刷新缓存'"
                 class="cache-refresh-button"
@@ -96,6 +97,7 @@
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
 import { modelProviderApi } from '@/apis/system_api'
+import { useUserStore } from '@/stores/user'
 import { RefreshCw, X } from 'lucide-vue-next'
 import { useModelStatus } from '@/composables/useModelStatus'
 
@@ -135,6 +137,7 @@ const v2Models = ref({})
 const loadingV2Models = ref(false)
 const dropdownOpen = ref(false)
 const modelSearchKeyword = ref('')
+const userStore = useUserStore()
 let fetchV2ModelsPromise = null
 
 const filteredV2Models = computed(() => {
