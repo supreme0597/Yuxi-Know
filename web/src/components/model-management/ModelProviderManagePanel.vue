@@ -58,8 +58,20 @@ const providerTypeLabelMap = Object.fromEntries(
 // Provider form state
 const showProviderModal = ref(false)
 const editingProviderId = ref(null) // null = creating, string = editing
+const providerFormRef = ref(null)
 // 编辑弹窗打开时共享范围的快照，保存时未变更则不提交，避免非 admin 创建人因 force_private 静默清空共享
 const initialShareConfigJson = ref('')
+const providerFormRules = {
+  provider_id: [
+    { required: true, message: 'Provider ID 不能为空' },
+    {
+      pattern: /^[a-zA-Z0-9_-]{2,100}$/,
+      message: 'Provider ID 只能包含字母、数字、下划线和中划线，长度 2-100'
+    }
+  ],
+  display_name: [{ required: true, message: '展示名称不能为空' }],
+  base_url: [{ required: true, message: 'Base URL 不能为空' }]
+}
 const providerForm = reactive({
   provider_id: '',
   display_name: '',
@@ -490,7 +502,18 @@ const buildProviderPayload = () => {
   return payload
 }
 
+const validateProviderForm = async () => {
+  if (!providerFormRef.value) return true
+  try {
+    await providerFormRef.value.validate()
+    return true
+  } catch {
+    return false
+  }
+}
+
 const createProvider = async () => {
+  if (!(await validateProviderForm())) return
   saving.value = true
   try {
     await modelProviderApi.createProvider(buildProviderPayload())
@@ -505,6 +528,7 @@ const createProvider = async () => {
 }
 
 const saveProvider = async () => {
+  if (!(await validateProviderForm())) return
   if (
     editingProviderId.value &&
     providerContainsDefaultModel(providerForm.provider_id) &&
@@ -929,119 +953,118 @@ defineExpose({
         </div>
       </template>
       <div class="modal-form">
-        <div class="form-row">
-          <label class="form-label">
-            <span>Provider ID</span>
-            <a-input
-              v-model:value="providerForm.provider_id"
-              :disabled="!!editingProviderId"
-              placeholder="my-provider"
-            />
-          </label>
-          <label class="form-label">
-            <span>展示名称</span>
-            <a-input v-model:value="providerForm.display_name" placeholder="My Provider" />
-          </label>
-        </div>
+        <a-form
+          ref="providerFormRef"
+          :model="providerForm"
+          :rules="providerFormRules"
+          layout="vertical"
+          class="provider-form"
+        >
+          <div class="form-row">
+            <a-form-item
+              label="Provider ID"
+              name="provider_id"
+              :rules="editingProviderId ? [] : providerFormRules.provider_id"
+            >
+              <a-input
+                v-model:value="providerForm.provider_id"
+                :disabled="!!editingProviderId"
+                placeholder="my-provider"
+              />
+            </a-form-item>
+            <a-form-item label="展示名称" name="display_name">
+              <a-input v-model:value="providerForm.display_name" placeholder="My Provider" />
+            </a-form-item>
+          </div>
 
-        <div class="form-row">
-          <label class="form-label">
-            <span>Base URL</span>
-            <a-input
-              v-model:value="providerForm.base_url"
-              placeholder="https://api.example.com/v1"
-            />
-          </label>
-          <label class="form-label">
-            <span>Provider Type</span>
-            <a-select v-model:value="providerForm.provider_type">
-              <a-select-option
-                v-for="option in PROVIDER_TYPE_OPTIONS"
-                :key="option.value"
-                :value="option.value"
-              >
-                {{ option.label }}
-              </a-select-option>
+          <div class="form-row">
+            <a-form-item label="Base URL" name="base_url">
+              <a-input
+                v-model:value="providerForm.base_url"
+                placeholder="https://api.example.com/v1"
+              />
+            </a-form-item>
+            <a-form-item label="Provider Type" name="provider_type">
+              <a-select v-model:value="providerForm.provider_type">
+                <a-select-option
+                  v-for="option in PROVIDER_TYPE_OPTIONS"
+                  :key="option.value"
+                  :value="option.value"
+                >
+                  {{ option.label }}
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+          </div>
+
+          <div class="form-row">
+            <a-form-item label="API Key Env" name="api_key_env">
+              <a-input v-model:value="providerForm.api_key_env" placeholder="环境变量名" />
+            </a-form-item>
+            <a-form-item label="API Key" name="api_key">
+              <a-input-password
+                v-model:value="providerForm.api_key"
+                :placeholder="providerForm.api_key_placeholder || '请输入 API Key'"
+              />
+            </a-form-item>
+          </div>
+
+          <div class="form-row">
+            <a-form-item label="Models Endpoint" name="models_endpoint">
+              <a-input v-model:value="providerForm.models_endpoint" placeholder="/models" />
+            </a-form-item>
+          </div>
+
+          <template v-if="providerForm.capabilities.includes('embedding')">
+            <div class="form-row">
+              <a-form-item label="Embedding Base URL" name="embedding_base_url">
+                <a-input
+                  v-model:value="providerForm.embedding_base_url"
+                  placeholder="https://api.example.com/v1/embeddings"
+                />
+              </a-form-item>
+              <a-form-item label="Embedding Endpoint" name="embedding_models_endpoint">
+                <a-input
+                  v-model:value="providerForm.embedding_models_endpoint"
+                  placeholder="/embeddings/models"
+                />
+              </a-form-item>
+            </div>
+          </template>
+
+          <template v-if="providerForm.capabilities.includes('rerank')">
+            <div class="form-row">
+              <a-form-item label="Rerank Base URL" name="rerank_base_url">
+                <a-input
+                  v-model:value="providerForm.rerank_base_url"
+                  placeholder="https://api.example.com/v1/rerank"
+                />
+              </a-form-item>
+              <a-form-item label="Rerank Endpoint" name="rerank_models_endpoint">
+                <a-input
+                  v-model:value="providerForm.rerank_models_endpoint"
+                  placeholder="按供应商文档填写，留空则不自动加载"
+                />
+              </a-form-item>
+            </div>
+          </template>
+
+          <a-form-item label="能力" name="capabilities">
+            <a-select v-model:value="providerForm.capabilities" mode="multiple">
+              <a-select-option value="chat">chat</a-select-option>
+              <a-select-option value="embedding">embedding</a-select-option>
+              <a-select-option value="rerank">rerank</a-select-option>
             </a-select>
-          </label>
-        </div>
+          </a-form-item>
 
-        <div class="form-row">
-          <label class="form-label">
-            <span>API Key Env</span>
-            <a-input v-model:value="providerForm.api_key_env" placeholder="环境变量名" />
-          </label>
-          <label class="form-label">
-            <span>API Key</span>
-            <a-input-password
-              v-model:value="providerForm.api_key"
-              :placeholder="providerForm.api_key_placeholder || '请输入 API Key'"
+          <a-form-item label="状态" name="is_enabled">
+            <a-switch
+              v-model:checked="providerForm.is_enabled"
+              checked-children="启用"
+              un-checked-children="停用"
             />
-          </label>
-        </div>
-
-        <div class="form-row">
-          <label class="form-label">
-            <span>Models Endpoint</span>
-            <a-input v-model:value="providerForm.models_endpoint" placeholder="/models" />
-          </label>
-        </div>
-
-        <template v-if="providerForm.capabilities.includes('embedding')">
-          <div class="form-row">
-            <label class="form-label">
-              <span>Embedding Base URL</span>
-              <a-input
-                v-model:value="providerForm.embedding_base_url"
-                placeholder="https://api.example.com/v1/embeddings"
-              />
-            </label>
-            <label class="form-label">
-              <span>Embedding Endpoint</span>
-              <a-input
-                v-model:value="providerForm.embedding_models_endpoint"
-                placeholder="/embeddings/models"
-              />
-            </label>
-          </div>
-        </template>
-
-        <template v-if="providerForm.capabilities.includes('rerank')">
-          <div class="form-row">
-            <label class="form-label">
-              <span>Rerank Base URL</span>
-              <a-input
-                v-model:value="providerForm.rerank_base_url"
-                placeholder="https://api.example.com/v1/rerank"
-              />
-            </label>
-            <label class="form-label">
-              <span>Rerank Endpoint</span>
-              <a-input
-                v-model:value="providerForm.rerank_models_endpoint"
-                placeholder="按供应商文档填写，留空则不自动加载"
-              />
-            </label>
-          </div>
-        </template>
-
-        <label class="form-label full-width">
-          <span>能力</span>
-          <a-select v-model:value="providerForm.capabilities" mode="multiple">
-            <a-select-option value="chat">chat</a-select-option>
-            <a-select-option value="embedding">embedding</a-select-option>
-            <a-select-option value="rerank">rerank</a-select-option>
-          </a-select>
-        </label>
-
-        <div class="form-switch">
-          <span>状态</span>
-          <a-switch
-            v-model:checked="providerForm.is_enabled"
-            checked-children="启用"
-            un-checked-children="停用"
-          />
-        </div>
+          </a-form-item>
+        </a-form>
 
         <label class="form-label full-width">
           <span>共享范围</span>
@@ -1701,6 +1724,22 @@ defineExpose({
   display: flex;
   flex-direction: column;
   gap: 14px;
+
+  .provider-form {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+
+    :deep(.ant-form-item) {
+      margin-bottom: 0;
+    }
+
+    :deep(.ant-form-item-label > label) {
+      color: var(--gray-700);
+      font-size: 12px;
+      font-weight: 500;
+    }
+  }
 }
 
 .form-row {
@@ -1723,19 +1762,6 @@ defineExpose({
 
 .full-width {
   grid-column: 1 / -1;
-}
-
-.form-switch {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 0;
-
-  > span {
-    color: var(--gray-700);
-    font-size: 12px;
-    font-weight: 500;
-  }
 }
 
 .advanced-collapse {
