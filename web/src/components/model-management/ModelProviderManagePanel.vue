@@ -25,6 +25,18 @@ import { useUserStore } from '@/stores/user'
 
 const configStore = useConfigStore()
 const userStore = useUserStore()
+
+// 供应商共享范围可选等级：默认按角色（admin/superadmin 全等级、普通用户仅指定人）；
+// 可通过 shareAccessLevels 参数覆盖（如只开放「指定人」）
+const props = defineProps({
+  shareAccessLevels: { type: Array, default: null }
+})
+const effectiveShareAccessLevels = computed(() => {
+  if (props.shareAccessLevels?.length) return props.shareAccessLevels
+  return userStore.isSuperAdmin || userStore.isAdmin
+    ? ['global', 'department', 'user']
+    : ['user']
+})
 const loading = ref(false)
 const remoteLoading = ref(false)
 const saving = ref(false)
@@ -46,6 +58,8 @@ const providerTypeLabelMap = Object.fromEntries(
 // Provider form state
 const showProviderModal = ref(false)
 const editingProviderId = ref(null) // null = creating, string = editing
+// 编辑弹窗打开时共享范围的快照，保存时未变更则不提交，避免非 admin 创建人因 force_private 静默清空共享
+const initialShareConfigJson = ref('')
 const providerForm = reactive({
   provider_id: '',
   display_name: '',
@@ -123,12 +137,6 @@ const providerTabCount = (value) => {
   if (value === 'global') return list.filter((p) => p.share_config?.access_level === 'global').length
   return list.length
 }
-const allowedAccessLevels = computed(() => {
-  if (userStore.isSuperAdmin || userStore.isAdmin) {
-    return ['global', 'department', 'user']
-  }
-  return ['user']
-})
 const filteredProviders = computed(() => {
   const keyword = searchQuery.value.trim().toLowerCase()
   const filteredByTab = (() => {
@@ -368,6 +376,7 @@ function getProviderStatus(provider) {
 
 const openCreateProviderModal = () => {
   editingProviderId.value = null
+  initialShareConfigJson.value = ''
   Object.assign(providerForm, {
     provider_id: '',
     display_name: '',
@@ -425,6 +434,15 @@ const openEditProviderModal = (provider) => {
     headers_text: formatJsonText(provider.headers_json),
     extra_text: formatJsonText(provider.extra_json)
   })
+  initialShareConfigJson.value = JSON.stringify({
+    access_level: provider.share_config?.access_level || 'global',
+    department_ids: Array.isArray(provider.share_config?.department_ids)
+      ? [...provider.share_config.department_ids]
+      : [],
+    user_uids: Array.isArray(provider.share_config?.user_uids)
+      ? [...provider.share_config.user_uids]
+      : []
+  })
   showProviderModal.value = true
 }
 
@@ -434,22 +452,8 @@ const editingProviderCanManage = computed(() => {
   return p?.can_manage ?? true
 })
 
-const buildProviderPayload = () => ({
-  provider_id: providerForm.provider_id || undefined,
-  display_name: providerForm.display_name,
-  provider_type: providerForm.provider_type,
-  default_protocol: null,
-  base_url: providerForm.base_url,
-  embedding_base_url: providerForm.embedding_base_url || null,
-  rerank_base_url: providerForm.rerank_base_url || null,
-  models_endpoint: providerForm.models_endpoint || null,
-  embedding_models_endpoint: providerForm.embedding_models_endpoint || null,
-  rerank_models_endpoint: providerForm.rerank_models_endpoint || null,
-  api_key_env: providerForm.api_key_env || null,
-  // 编辑弹窗中 key 输入框默认为空（仅显示脱敏占位），未输入新值时不提交该字段，
-  // 避免后端把「未修改」误判为「清空 API Key」。
-  api_key: providerForm.api_key || undefined,
-  share_config: {
+const buildProviderPayload = () => {
+  const shareConfig = {
     access_level: providerForm.share_config?.access_level || 'global',
     department_ids: Array.isArray(providerForm.share_config?.department_ids)
       ? providerForm.share_config.department_ids
@@ -457,12 +461,34 @@ const buildProviderPayload = () => ({
     user_uids: Array.isArray(providerForm.share_config?.user_uids)
       ? providerForm.share_config.user_uids
       : []
-  },
-  capabilities: providerForm.capabilities,
-  is_enabled: providerForm.is_enabled,
-  headers_json: parseJsonObject(providerForm.headers_text, '请求头'),
-  extra_json: parseJsonObject(providerForm.extra_text, '扩展配置')
-})
+  }
+  const payload = {
+    provider_id: providerForm.provider_id || undefined,
+    display_name: providerForm.display_name,
+    provider_type: providerForm.provider_type,
+    default_protocol: null,
+    base_url: providerForm.base_url,
+    embedding_base_url: providerForm.embedding_base_url || null,
+    rerank_base_url: providerForm.rerank_base_url || null,
+    models_endpoint: providerForm.models_endpoint || null,
+    embedding_models_endpoint: providerForm.embedding_models_endpoint || null,
+    rerank_models_endpoint: providerForm.rerank_models_endpoint || null,
+    api_key_env: providerForm.api_key_env || null,
+    // 编辑弹窗中 key 输入框默认为空（仅显示脱敏占位），未输入新值时不提交该字段，
+    // 避免后端把「未修改」误判为「清空 API Key」。
+    api_key: providerForm.api_key || undefined,
+    capabilities: providerForm.capabilities,
+    is_enabled: providerForm.is_enabled,
+    headers_json: parseJsonObject(providerForm.headers_text, '请求头'),
+    extra_json: parseJsonObject(providerForm.extra_text, '扩展配置')
+  }
+  // 编辑时若共享范围未变更则不提交，避免后端 force_private 把共享清成仅自己；
+  // 新建时始终提交。
+  if (!editingProviderId.value || JSON.stringify(shareConfig) !== initialShareConfigJson.value) {
+    payload.share_config = shareConfig
+  }
+  return payload
+}
 
 const createProvider = async () => {
   saving.value = true
@@ -1021,7 +1047,7 @@ defineExpose({
           <span>共享范围</span>
           <ShareConfigForm
             v-model="providerForm.share_config"
-            :allowed-access-levels="allowedAccessLevels"
+            :allowed-access-levels="effectiveShareAccessLevels"
             :auto-select-user-dept="true"
           />
         </label>

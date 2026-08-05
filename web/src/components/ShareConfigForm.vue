@@ -376,6 +376,17 @@ const loadDepartments = async () => {
 }
 
 const loadUsers = async () => {
+  if (!userStore.isAdmin) {
+    // 普通用户：只列出当前共享范围内的用户（uid 即登录标识），支持取消共享，不加载全量用户
+    const selfEntry = currentUserUid.value
+      ? [{ uid: currentUserUid.value, username: userStore.username || '我', department_name: '' }]
+      : []
+    const sharedEntries = (config.user_uids || [])
+      .filter((uid) => uid !== currentUserUid.value)
+      .map((uid) => ({ uid, username: uid, department_name: '' }))
+    users.value = [...selfEntry, ...sharedEntries]
+    return
+  }
   try {
     users.value = await authApi.getUserAccessOptions()
     if (config.access_level === 'user') ensureCurrentUser()
