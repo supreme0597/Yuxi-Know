@@ -782,6 +782,21 @@ defineExpose({
 <template>
   <div class="model-provider-manage-panel">
     <PageShoulder v-model:search="searchQuery" search-placeholder="搜索供应商...">
+      <template #filters>
+        <a-segmented
+          v-model:value="providerTab"
+          class="provider-tabs"
+          :options="providerTabOptions"
+          aria-label="按可见范围筛选供应商"
+        >
+          <template #label="{ value }">
+            <span class="provider-tab-label">
+              <span>{{ providerTabLabel(value) }}</span>
+              <span class="provider-tab-count">{{ providerTabCount(value) }}</span>
+            </span>
+          </template>
+        </a-segmented>
+      </template>
       <template #actions>
         <a-button type="primary" class="lucide-icon-btn" @click="openCreateProviderModal">
           <Plus :size="14" />
@@ -792,20 +807,6 @@ defineExpose({
         </a-button>
       </template>
     </PageShoulder>
-
-    <a-segmented
-      v-model:value="providerTab"
-      class="provider-tabs"
-      :options="providerTabOptions"
-      aria-label="按可见范围筛选供应商"
-    >
-      <template #label="{ value }">
-        <span class="provider-tab-label">
-          <span>{{ providerTabLabel(value) }}</span>
-          <span class="provider-tab-count">{{ providerTabCount(value) }}</span>
-        </span>
-      </template>
-    </a-segmented>
 
     <ExtensionCardGrid :min-width="320">
       <InfoCard
@@ -1303,17 +1304,17 @@ defineExpose({
 }
 
 .provider-tabs {
-  margin: 14px var(--page-padding) 0;
+  flex-shrink: 0;
 
   :deep(.ant-segmented) {
     padding: 3px;
-    border-radius: 9px;
+    border-radius: 8px;
     background: var(--gray-100);
   }
 
   :deep(.ant-segmented-item) {
     color: var(--gray-600);
-    font-size: 13px;
+    font-size: 12px;
     transition:
       color 0.16s ease,
       background 0.16s ease;
@@ -1331,29 +1332,29 @@ defineExpose({
   }
 
   :deep(.ant-segmented-item-label) {
-    min-height: 30px;
-    padding: 0 14px;
-    line-height: 30px;
+    min-height: 26px;
+    padding: 0 12px;
+    line-height: 26px;
   }
 }
 
 .provider-tab-label {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
 }
 
 .provider-tab-count {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
   border-radius: 999px;
   background: var(--gray-200);
   color: var(--gray-600);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 500;
   line-height: 1;
 }
