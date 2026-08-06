@@ -353,6 +353,25 @@ async def get_agent_run_progress(run_id: str, *, message_limit: int = RUN_PROGRE
     return {"last_seq": last_seq, "messages": list(reversed(messages))}
 
 
+# 浏览器 cookie 由 agent 请求自动采集，仅作为运行期参数透传到沙盒环境变量，
+# 不写入任何持久化存储（Postgres / run meta）。
+BROWSER_COOKIES_MAX_SIZE = 32_768
+
+
+def serialize_browser_cookies(cookies: dict) -> str | None:
+    """把请求携带的浏览器 cookie 序列化为 JSON 字符串，供沙盒注入。
+
+    为空或超出大小上限时返回 None（跳过注入），避免异常 cookie 撑爆 env。
+    """
+    if not cookies:
+        return None
+    payload = json.dumps(cookies, ensure_ascii=False, separators=(",", ":"))
+    if len(payload) > BROWSER_COOKIES_MAX_SIZE:
+        logger.warning(f"browser cookies too large ({len(payload)} bytes), skip sandbox injection")
+        return None
+    return payload
+
+
 async def create_agent_run_view(
     *,
     input_message: AgentRunInputMessage | None,
@@ -364,6 +383,7 @@ async def create_agent_run_view(
     model_spec: str | None = None,
     resume: object | None = None,
     created_by_run_id: str | None = None,
+    browser_cookies: str | None = None,
 ) -> dict:
     """创建 chat/resume run 的 HTTP 入口，输入正文由 Message 承载，run 只登记运行元数据。"""
     meta = meta or {}
@@ -428,7 +448,7 @@ async def create_agent_run_view(
     )
     if created:
         await db.commit()
-        await enqueue_agent_run(run.id)
+        await enqueue_agent_run(run.id, browser_cookies)
 
     return _build_run_response(run)
 
@@ -679,10 +699,14 @@ async def prepare_agent_run_creation_scope(
     )
 
 
-async def enqueue_agent_run(run_id: str) -> None:
-    """把已持久化的 run 投递到后台 worker 队列。"""
+async def enqueue_agent_run(run_id: str, browser_cookies: str | None = None) -> None:
+    """把已持久化的 run 投递到后台 worker 队列。
+
+    ``browser_cookies`` 作为 arq 任务的位置参数传给 worker，仅存于队列消息中、
+    运行期消费，不落库。
+    """
     queue = await get_arq_pool()
-    await queue.enqueue_job("process_agent_run", run_id, _job_id=f"run:{run_id}")
+    await queue.enqueue_job("process_agent_run", run_id, browser_cookies, _job_id=f"run:{run_id}")
 
 
 async def get_agent_run_view(*, run_id: str, current_uid: str, db: AsyncSession) -> dict:

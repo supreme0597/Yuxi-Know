@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +22,7 @@ from yuxi.services.agent_run_service import (
     get_active_run_by_thread,
     get_agent_run_result,
     get_agent_run_view,
+    serialize_browser_cookies,
     stream_agent_run_events,
 )
 from yuxi.services.input_message_service import build_chat_input_message
@@ -255,6 +256,7 @@ async def set_agent_default(
 @agent_router.post("/runs")
 async def create_agent_run(
     payload: AgentRunCreate,
+    request: Request,
     current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -271,6 +273,7 @@ async def create_agent_run(
         db=db,
         resume=payload.resume,
         created_by_run_id=payload.created_by_run_id,
+        browser_cookies=serialize_browser_cookies(dict(request.cookies)),
     )
 
 

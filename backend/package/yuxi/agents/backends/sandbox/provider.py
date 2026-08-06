@@ -19,6 +19,21 @@ def sandbox_provisioner_token() -> str:
     return token
 
 
+# 浏览器 cookie 注入沙盒后对应的环境变量名（值为 JSON 字符串）。
+COOKIE_ENV_VAR = "SANDBOX_COOKIES_JSON"
+
+
+def _merge_cookies_env(uid: str, cookies: str | None) -> dict[str, str]:
+    """加载用户持久化 env，并可选合并运行期浏览器 cookie。
+
+    cookie 仅作为运行期参数注入，不写入 agent_envs 持久化表。
+    """
+    env = load_user_agent_env(uid)
+    if cookies:
+        env[COOKIE_ENV_VAR] = cookies
+    return env
+
+
 def sandbox_id_for_thread(thread_id: str, skills_thread_id: str | None = None, *, uid: str | None = None) -> str:
     file_thread_id = str(thread_id or "").strip()
     skills_id = str(skills_thread_id or file_thread_id).strip()
@@ -149,6 +164,7 @@ class ProvisionerSandboxProvider:
         uid: str,
         file_thread_id: str | None = None,
         skills_thread_id: str | None = None,
+        cookies: str | None = None,
     ) -> str:
         file_id = str(file_thread_id or thread_id).strip()
         skills_id = str(skills_thread_id or thread_id).strip()
@@ -174,7 +190,7 @@ class ProvisionerSandboxProvider:
                 sandbox_id,
                 thread_id,
                 uid,
-                load_user_agent_env(uid),
+                _merge_cookies_env(uid, cookies),
                 file_thread_id=file_id,
                 skills_thread_id=skills_id,
             )
@@ -197,6 +213,7 @@ class ProvisionerSandboxProvider:
         create_if_missing: bool = False,
         file_thread_id: str | None = None,
         skills_thread_id: str | None = None,
+        cookies: str | None = None,
     ) -> SandboxConnection | None:
         file_id = str(file_thread_id or thread_id).strip()
         skills_id = str(skills_thread_id or thread_id).strip()
@@ -222,7 +239,7 @@ class ProvisionerSandboxProvider:
                     sandbox_id,
                     thread_id,
                     uid,
-                    load_user_agent_env(uid),
+                    _merge_cookies_env(uid, cookies),
                     file_thread_id=file_id,
                     skills_thread_id=skills_id,
                 )

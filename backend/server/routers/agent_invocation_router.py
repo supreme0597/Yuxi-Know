@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from yuxi.services.agent_invocation_service import (
@@ -10,6 +10,7 @@ from yuxi.services.agent_invocation_service import (
     create_agent_eval_run_view,
     get_agent_call_run_result_view,
 )
+from yuxi.services.agent_run_service import serialize_browser_cookies
 from yuxi.storage.postgres.models_business import User
 
 from server.utils.auth_middleware import get_db, get_required_user
@@ -55,6 +56,7 @@ class AgentEvalRunCreate(BaseModel):
 @agent_invocation_router.post("/agent-call/runs")
 async def create_agent_call_run(
     payload: AgentCallRunCreate,
+    request: Request,
     current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -70,6 +72,7 @@ async def create_agent_call_run(
         stream=payload.stream,
         current_user=current_user,
         db=db,
+        browser_cookies=serialize_browser_cookies(dict(request.cookies)),
     )
 
 

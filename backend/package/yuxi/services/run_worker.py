@@ -261,7 +261,7 @@ async def _consume_stream_with_cancel(agen, run_ctx: RunContext):
             return
 
 
-async def process_agent_run(ctx, run_id: str):
+async def process_agent_run(ctx, run_id: str, browser_cookies: str | None = None):
     """执行队列中的 AgentRun，并只从 run 列和输入消息恢复运行参数。"""
     run = await _get_run(run_id)
     if not run:
@@ -394,6 +394,7 @@ async def process_agent_run(ctx, run_id: str):
                     current_user=user,
                     db=db,
                     save_user_message=False,
+                    browser_cookies=browser_cookies,
                 )
             else:
                 raise RuntimeError(f"unsupported run_type after validation: {run_type}")
