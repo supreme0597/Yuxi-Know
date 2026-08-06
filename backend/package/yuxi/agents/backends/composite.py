@@ -119,7 +119,6 @@ class _BackendScope:
     readable_skills: list[str]
     file_thread_id: str
     skills_thread_id: str
-    cookies: str | None = None
 
     @classmethod
     def from_runtime(cls, runtime) -> _BackendScope:
@@ -159,7 +158,6 @@ class _BackendScope:
             readable_skills=normalize_string_list(selected if isinstance(selected, list) else []),
             file_thread_id=string_value("file_thread_id") or thread_id,
             skills_thread_id=string_value("skills_thread_id") or thread_id,
-            cookies=string_value("cookies"),
         )
 
     def create_backend(self) -> CompositeBackend:
@@ -170,7 +168,6 @@ class _BackendScope:
                 readable_skills=self.readable_skills,
                 file_thread_id=self.file_thread_id,
                 skills_thread_id=self.skills_thread_id,
-                cookies=self.cookies,
             ),
             routes={
                 "/skills/": SelectedSkillsReadonlyBackend(selected_slugs=self.readable_skills),

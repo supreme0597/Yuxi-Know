@@ -777,7 +777,6 @@ async def stream_agent_chat(
     current_user,
     db,
     save_user_message: bool = True,
-    browser_cookies: str | None = None,
 ) -> AsyncIterator[bytes]:
     start_time = asyncio.get_event_loop().time()
 
@@ -912,7 +911,7 @@ async def stream_agent_chat(
         await db.commit()
 
         # 先构建 langgraph_config
-        langgraph_config = {"configurable": {"thread_id": thread_id, "uid": uid, "cookies": browser_cookies}}
+        langgraph_config = {"configurable": {"thread_id": thread_id, "uid": uid}}
 
         # LangGraph 会自动从 checkpointer 恢复 state（包括 uploads）
         # 无需手动加载或传递

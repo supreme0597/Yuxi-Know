@@ -10,7 +10,7 @@
 
 - 新增将请求携带的浏览器 cookie 注入沙盒环境变量的能力，供 agent 在沙盒内发起带登录态的 HTTP 请求
 - cookie 由后端在 agent 请求入口（`/api/agent/runs`、`/api/agent-invocation/agent-call/runs`）服务端读取 `request.cookies` 采集，含 HttpOnly cookie，无需前端读取 `document.cookie`
-- 透传链路：`router → create_agent_run_view → enqueue_agent_run（arq 第二位置参数）→ process_agent_run → stream_agent_chat 的 langgraph configurable → ProvisionerSandboxBackend → ProvisionerSandboxProvider → 注入容器 env`，全程不写入 Postgres 与 run meta
+- 透传链路：`router（服务端读 request.cookies）→ create_agent_run_view → enqueue_agent_run（arq 第二位置参数，跨进程载体）→ process_agent_run（worker 内设置运行期 contextvar）→ ProvisionerSandboxProvider 读 contextvar → 注入容器 env`；cookie 不再进入 langgraph configurable / state，全程不写入 Postgres 与 run meta
 - 沙盒内以环境变量 `SANDBOX_COOKIES_JSON`（JSON 字符串）获取，合并进用户 `agent_env`，与既有 env 注入通道一致
 - cookie 大小上限 32KB，超限跳过注入并告警；subagent 与 eval 路径暂不注入
 

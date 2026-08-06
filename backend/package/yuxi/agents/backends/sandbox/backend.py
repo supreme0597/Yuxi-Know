@@ -181,7 +181,6 @@ class ProvisionerSandboxBackend(BaseSandbox):
         readable_skills: list[str] | None = None,
         file_thread_id: str | None = None,
         skills_thread_id: str | None = None,
-        cookies: str | None = None,
     ):
         self._thread_id = str(thread_id or "").strip()
         if not self._thread_id:
@@ -197,7 +196,6 @@ class ProvisionerSandboxBackend(BaseSandbox):
             raise ValueError("uid is required for ProvisionerSandboxBackend")
 
         self._readable_skills = list(readable_skills or [])
-        self._cookies = cookies
         self._provider = get_sandbox_provider()
         self._id = sandbox_id_for_thread(self._file_thread_id, self._skills_thread_id, uid=self._uid)
         self._client: Any | None = None
@@ -231,7 +229,6 @@ class ProvisionerSandboxBackend(BaseSandbox):
             create_if_missing=True,
             file_thread_id=self._file_thread_id,
             skills_thread_id=self._skills_thread_id,
-            cookies=self._cookies,
         )
         if connection is None:
             raise RuntimeError(f"sandbox is unavailable for thread {self._thread_id}")

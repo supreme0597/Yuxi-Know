@@ -13,6 +13,7 @@ from yuxi.agents.mcp.service import ensure_builtin_mcp_servers_in_db
 from yuxi.agents.skills.service import init_builtin_skills
 from yuxi.config import config as sys_config
 from yuxi.repositories.agent_run_repository import TERMINAL_RUN_STATUSES, AgentRunRepository
+from yuxi.agents.backends.sandbox.provider import sandbox_cookies_var
 from yuxi.services.chat_service import stream_agent_chat, stream_agent_resume
 from yuxi.services.input_message_service import restore_chat_input_message
 from yuxi.services.run_queue_service import (
@@ -386,6 +387,7 @@ async def process_agent_run(ctx, run_id: str, browser_cookies: str | None = None
                     db=db,
                 )
             elif run_type in {"chat", "subagent"}:
+                sandbox_cookies_var.set(browser_cookies)
                 stream = stream_agent_chat(
                     agent_slug=agent_slug,
                     thread_id=thread_id,
@@ -394,7 +396,6 @@ async def process_agent_run(ctx, run_id: str, browser_cookies: str | None = None
                     current_user=user,
                     db=db,
                     save_user_message=False,
-                    browser_cookies=browser_cookies,
                 )
             else:
                 raise RuntimeError(f"unsupported run_type after validation: {run_type}")
