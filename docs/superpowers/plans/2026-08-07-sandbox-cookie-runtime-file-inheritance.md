@@ -337,16 +337,7 @@ async def test_runtime_secret_ttl_is_derived_from_worker_policy(monkeypatch):
     ]
 ~~~
 
-Replace the Compose persistence assertion with:
-
-~~~python
-@pytest.mark.parametrize("compose_file", ["docker-compose.yml", "docker-compose.prod.yml"])
-def test_compose_does_not_define_a_cookie_specific_redis(compose_file):
-    compose = yaml.safe_load((REPOSITORY_ROOT / compose_file).read_text())
-    assert "runtime-secret-redis" not in compose["services"]
-    assert "runtime-secret-redis" not in compose["services"]["api"].get("depends_on", {})
-    assert "runtime-secret-redis" not in compose["services"]["worker"].get("depends_on", {})
-~~~
+Delete the old Compose-source unit assertion. The API test container does not mount repository-root Compose files, and asserting YAML source structure is lower value than parsing the real deployment configuration. Step 5 validates both Compose files through `docker compose ... config --quiet`.
 
 - [x] **Step 2: Run RED tests**
 
@@ -787,6 +778,7 @@ git commit -m "docs(sandbox): 更新 Cookie 运行期文件架构"
 
 **Files:**
 
+- Modify: backend/test/unit/backends/test_sandbox_backends.py
 - Verify: backend/test/integration/test_sandbox_runtime_cookie_header_file.py
 - Verify: all files changed by Tasks 1 through 5
 
@@ -799,7 +791,7 @@ git commit -m "docs(sandbox): 更新 Cookie 运行期文件架构"
 - Proves: no-Cookie run clears stale content
 - Proves: no extra Redis service is required
 
-- [ ] **Step 1: Update the integration secret fixture**
+- [x] **Step 1: Update remaining sandbox test fixtures**
 
 Use:
 
@@ -809,9 +801,9 @@ secret = BrowserCookieRuntimeSecret(
 )
 ~~~
 
-The file assertions remain unchanged.
+Use the same header-only construction in the sandbox backend unit fixtures. The file assertions remain unchanged.
 
-- [ ] **Step 2: Run focused unit tests**
+- [x] **Step 2: Run focused unit tests**
 
 ~~~bash
 docker exec api-dev uv run --group test pytest test/unit/agents/test_summary_graph_config.py test/unit/backends/test_sandbox_backends.py test/unit/backends/test_sandbox_provisioner_client.py test/unit/backends/test_sandbox_provisioner_config.py test/unit/middlewares/test_sandbox_cookie_middleware.py test/unit/routers/test_agent_invocation_router.py test/unit/routers/test_agent_router_cookie_header.py test/unit/services/test_agent_run_service.py test/unit/services/test_run_queue_service.py test/unit/services/test_run_runtime_secret_service.py test/unit/services/test_run_worker.py test/unit/services/test_subagent_run_service.py -q
@@ -819,7 +811,7 @@ docker exec api-dev uv run --group test pytest test/unit/agents/test_summary_gra
 
 Expected: all selected tests pass.
 
-- [ ] **Step 3: Run the real provisioner integration test**
+- [x] **Step 3: Run the real provisioner integration test**
 
 Start the provisioner:
 
@@ -842,7 +834,7 @@ docker network ls --filter name=yuxi-know-sandbox --format '{{.Name}}'
 
 Expected: both commands print no test resource.
 
-- [ ] **Step 4: Run the complete unit suite**
+- [x] **Step 4: Run the complete unit suite**
 
 ~~~bash
 docker exec api-dev uv run --group test pytest test/unit -q
@@ -850,7 +842,7 @@ docker exec api-dev uv run --group test pytest test/unit -q
 
 Expected: all requirement-related tests pass. If the existing macOS /private/var versus /var remote-skill path-alias failure remains, report it separately and do not modify that unrelated test in this task.
 
-- [ ] **Step 5: Run Ruff**
+- [x] **Step 5: Run Ruff**
 
 ~~~bash
 docker exec api-dev uv run --group dev ruff check package/yuxi/services/run_queue_service.py package/yuxi/services/run_runtime_secret_service.py package/yuxi/services/agent_run_service.py package/yuxi/services/run_worker.py package/yuxi/services/subagent_run_service.py package/yuxi/agents/middlewares/sandbox_cookie.py server/routers/agent_router.py server/routers/agent_invocation_router.py test/unit/services/test_run_queue_service.py test/unit/services/test_run_runtime_secret_service.py test/unit/services/test_agent_run_service.py test/unit/services/test_run_worker.py test/unit/services/test_subagent_run_service.py test/unit/middlewares/test_sandbox_cookie_middleware.py test/unit/routers/test_agent_router_cookie_header.py test/unit/routers/test_agent_invocation_router.py test/integration/test_sandbox_runtime_cookie_header_file.py
@@ -858,7 +850,7 @@ docker exec api-dev uv run --group dev ruff check package/yuxi/services/run_queu
 
 Expected: All checks passed.
 
-- [ ] **Step 6: Run final source and diff checks**
+- [x] **Step 6: Run final source and diff checks**
 
 ~~~bash
 rg -n "runtime-secret-redis|AGENT_RUN_RUNTIME_SECRET_REDIS_URL|AGENT_RUN_RUNTIME_SECRET_TTL_SECONDS|YUXI_PUBLIC_ORIGIN|YUXI_COOKIE_ALLOWED_DOMAIN|allowed_domain|secret\.origin|secret\.header.*logger|secret\.header.*print" backend docker docker-compose.yml docker-compose.prod.yml .env.template docs/agents docs/develop-guides
@@ -867,7 +859,7 @@ git diff --check
 
 Expected: no obsolete production reference or secret logging is found; git diff check exits zero.
 
-- [ ] **Step 7: Review the final diff**
+- [x] **Step 7: Review the final diff**
 
 ~~~bash
 git diff 1d8cfbef -- .env.template backend/package/yuxi/services backend/package/yuxi/agents/middlewares/sandbox_cookie.py backend/server/routers backend/test docker-compose.yml docker-compose.prod.yml docs/agents/sandbox-architecture.md docs/develop-guides/changelog.md docs/superpowers/plans/2026-08-07-sandbox-cookie-runtime-file-inheritance.md
@@ -885,25 +877,25 @@ Confirm:
 
 ## Acceptance Checklist
 
-- [ ] No new Redis service, volume, health check or deployment dependency exists for this feature.
-- [ ] Cookie run secrets use the existing main Redis client.
-- [ ] AGENT_RUN_JOB_TIMEOUT_SECONDS defaults to 3600 and supports a positive integer environment override.
-- [ ] AGENT_RUN_MAX_TRIES defaults to 2 and supports a positive integer environment override.
-- [ ] API and worker receive identical timeout and max-tries values from the same deployment configuration.
-- [ ] Secret TTL equals job timeout × max tries × 2.
-- [ ] No independent secret TTL environment variable remains.
-- [ ] Main Redis persistence settings are unchanged, and the documentation explains the AOF/RDB/backup retention tradeoff.
-- [ ] Raw Cookie Header is preserved exactly and limited to 32 KiB.
-- [ ] Redis, ARQ, Postgres, prompts and logs do not receive accidental extra copies beyond the approved run key.
-- [ ] No YUXI_COOKIE_ALLOWED_DOMAIN environment variable or allowed_domain field exists.
-- [ ] The prompt contains the fixed Header file path and states that the content is a raw Cookie Header, not JSON.
-- [ ] The prompt contains no origin, domain whitelist, hostname matcher or redirect policy.
-- [ ] Main agent and subagent receive the same file-path prompt only when a secret exists.
-- [ ] Subagent copies the complete parent BrowserCookieRuntimeSecret to its child run key.
-- [ ] Resume uses the newest request Header and replaces or clears the previous run's file content.
-- [ ] Sandbox file creation remains lazy.
-- [ ] Directory and file permissions remain 0700 and 0600.
-- [ ] Reused sandboxes refresh once per run.
-- [ ] Recreated sandboxes receive the active Header again through instance_id detection.
-- [ ] Run exit and no-Cookie runs remove stale Header files.
-- [ ] Focused unit tests, real integration test, Ruff, Compose parsing, source search and git diff check pass.
+- [x] No new Redis service, volume, health check or deployment dependency exists for this feature.
+- [x] Cookie run secrets use the existing main Redis client.
+- [x] AGENT_RUN_JOB_TIMEOUT_SECONDS defaults to 3600 and supports a positive integer environment override.
+- [x] AGENT_RUN_MAX_TRIES defaults to 2 and supports a positive integer environment override.
+- [x] API and worker receive identical timeout and max-tries values from the same deployment configuration.
+- [x] Secret TTL equals job timeout × max tries × 2.
+- [x] No independent secret TTL environment variable remains.
+- [x] Main Redis persistence settings are unchanged, and the documentation explains the AOF/RDB/backup retention tradeoff.
+- [x] Raw Cookie Header is preserved exactly and limited to 32 KiB.
+- [x] Redis, ARQ, Postgres, prompts and logs do not receive accidental extra copies beyond the approved run key.
+- [x] No YUXI_COOKIE_ALLOWED_DOMAIN environment variable or allowed_domain field exists.
+- [x] The prompt contains the fixed Header file path and states that the content is a raw Cookie Header, not JSON.
+- [x] The prompt contains no origin, domain whitelist, hostname matcher or redirect policy.
+- [x] Main agent and subagent receive the same file-path prompt only when a secret exists.
+- [x] Subagent copies the complete parent BrowserCookieRuntimeSecret to its child run key.
+- [x] Resume uses the newest request Header and replaces or clears the previous run's file content.
+- [x] Sandbox file creation remains lazy.
+- [x] Directory and file permissions remain 0700 and 0600.
+- [x] Reused sandboxes refresh once per run.
+- [x] Recreated sandboxes receive the active Header again through instance_id detection.
+- [x] Run exit and no-Cookie runs remove stale Header files.
+- [x] Focused unit tests, real integration test, Ruff, Compose parsing, source search and git diff check pass.
