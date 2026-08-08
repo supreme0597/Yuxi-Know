@@ -35,7 +35,7 @@ async def test_runtime_cookie_header_file_reinjects_after_sandbox_recreate():
     thread_id = f"cookie-thread-{suffix}"
     uid = f"cookie-user-{suffix}"
     cookie_header = "session=cookie-integration-marker; theme=dark; session=path-specific"
-    secret = BrowserCookieRuntimeSecret(cookie_header, "https://yuxi.example.com")
+    secret = BrowserCookieRuntimeSecret(header=cookie_header)
     backend = ProvisionerSandboxBackend(thread_id=thread_id, uid=uid)
     client = None
 

@@ -441,7 +441,6 @@ async def test_runtime_cookie_file_writes_exact_raw_header_atomically(monkeypatc
     backend, _connection, shell_calls, writes = _runtime_cookie_backend(monkeypatch)
     secret = BrowserCookieRuntimeSecret(
         header="sid=cookie-secret-marker; theme=dark; sid=path-specific",
-        origin="https://yuxi.example.com",
     )
 
     async with sandbox_runtime_scope(SandboxRuntimeCredentials("run-1", secret)):
@@ -476,7 +475,7 @@ async def test_runtime_cookie_file_clears_stale_header_when_secret_is_absent(mon
 @pytest.mark.asyncio
 async def test_runtime_cookie_file_syncs_once_per_run_and_instance(monkeypatch) -> None:
     backend, _connection, _shell_calls, writes = _runtime_cookie_backend(monkeypatch)
-    secret = BrowserCookieRuntimeSecret("sid=cookie-secret-marker", "https://yuxi.example.com")
+    secret = BrowserCookieRuntimeSecret(header="sid=cookie-secret-marker")
 
     async with sandbox_runtime_scope(SandboxRuntimeCredentials("run-1", secret)):
         backend._get_client()
@@ -488,7 +487,7 @@ async def test_runtime_cookie_file_syncs_once_per_run_and_instance(monkeypatch) 
 @pytest.mark.asyncio
 async def test_runtime_cookie_file_resyncs_when_instance_changes_at_same_url(monkeypatch) -> None:
     backend, connection, _shell_calls, writes = _runtime_cookie_backend(monkeypatch)
-    secret = BrowserCookieRuntimeSecret("sid=cookie-secret-marker", "https://yuxi.example.com")
+    secret = BrowserCookieRuntimeSecret(header="sid=cookie-secret-marker")
 
     async with sandbox_runtime_scope(SandboxRuntimeCredentials("run-1", secret)):
         backend._get_client()
@@ -501,7 +500,7 @@ async def test_runtime_cookie_file_resyncs_when_instance_changes_at_same_url(mon
 @pytest.mark.asyncio
 async def test_runtime_cookie_file_failed_write_clears_target_and_does_not_mark_synced(monkeypatch) -> None:
     backend, _connection, shell_calls, writes = _runtime_cookie_backend(monkeypatch, write_success=False)
-    secret = BrowserCookieRuntimeSecret("sid=cookie-secret-marker", "https://yuxi.example.com")
+    secret = BrowserCookieRuntimeSecret(header="sid=cookie-secret-marker")
 
     with pytest.raises(RuntimeError, match="failed to sync sandbox runtime cookie file") as exc_info:
         async with sandbox_runtime_scope(SandboxRuntimeCredentials("run-1", secret)):
