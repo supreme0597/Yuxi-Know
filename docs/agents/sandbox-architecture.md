@@ -162,7 +162,37 @@ skills 的结合方式分成两层。第一层是提示词层，`prepare_agent_r
 
 知识库不再与沙盒文件系统结合。它不会被复制到每个线程目录，也不会生成虚拟目录；模型通过专门的知识库工具检索，并在需要更完整上下文时用 `open_kb_document` 按 `kb_id` 和 `file_id` 打开文档内容。
 
-## 十一、当前推荐如何使用 Docker 沙盒
+## 十一、浏览器 Cookie 如何进入沙盒
+
+浏览器 Cookie 使用一条独立的运行期凭据链，不复用用户持久化环境变量，也不把 Cookie 写进 AgentRun、LangGraph state 或 ARQ 参数：
+
+```text
+HTTP 原始 Cookie Header + 服务端规范化的 Yuxi origin
+→ 独立无持久化 Redis Hash agent-run:runtime-secret:<run_id>
+→ ARQ（只传 run_id）
+→ worker 的 run 级 ContextVar
+→ 动态系统提示词（只含 origin、文件路径和安全规则）
+→ 第一次实际访问沙盒
+→ /home/gem/.yuxi-runtime/browser-cookie-header.txt
+```
+
+API 在 `/api/agent/runs` 和 `/api/agent-invocation/agent-call/runs` 入口读取原始 `Cookie` Header，不调用 `request.cookies` 重建字典。浏览器在发起 Yuxi 请求时已经根据 Domain、Path、Secure 等属性筛选出适用 cookie；HTTP `Cookie` Header 只剩最终的名称和值序列，不包含 Domain/Path 元数据，因此运行期文件保留浏览器发来的原始字符串，不转换为 JSON，也不尝试恢复已经丢失的属性。Header 按 Latin-1 字节表示限制为 32 KiB。
+
+允许 origin 由服务端控制，不接受用户消息、请求体或未经校验的 `Origin` Header。生产环境必须配置浏览器可见的 `YUXI_PUBLIC_ORIGIN`，例如 `https://yuxi.example.com`；开发环境未配置时才从 `request.base_url` 规范化。比较规则是精确的 `scheme + host + port`：默认端口省略，非默认端口保留；子域名、主机别名、IP 和不同端口都不视为同 origin。这样不会依赖 Uvicorn 是否信任某一层反向代理，也不会把外部 HTTPS 误识别成内部 HTTP。
+
+Redis Hash 以 `run_id` 隔离保存 `header` 和 `origin`，默认 TTL 为 14,400 秒，可通过 `AGENT_RUN_RUNTIME_SECRET_TTL_SECONDS` 调整。它必须连接 `AGENT_RUN_RUNTIME_SECRET_REDIS_URL` 指向的独立 volatile Redis；Compose 内置的 `runtime-secret-redis` 关闭 AOF/RDB、把 `/data` 放在 tmpfs 且不挂载宿主机目录。不得复用开启 AOF 的主 `REDIS_URL`，因为 TTL/DEL 只会追加删除记录，无法立即擦除旧 AOF 中的 Header。外部部署也必须提供等价的无持久化实例。
+
+ARQ 的 `process_agent_run` 参数始终只有 `run_id`。chat 和 resume 都读取自己的 run 凭据；resume 使用本次 HTTP 请求携带的最新 Header。subagent 启动时把父 run 当前凭据复制到 child run 的 Redis key，因此主 Agent 与子 Agent 具有一致的运行边界，但各自仍有独立生命周期。队列投递失败、run 进入终态或 TTL 到期会删除 Redis 凭据；首次可重试失败不会提前删除，以便第二次 worker 尝试继续使用。
+
+沙盒创建仍然是懒执行。仅仅创建 run、查看 viewer 或读取宿主机文件树不会创建沙盒，也不会生成 Cookie 文件。只有 run 内第一次真正调用沙盒文件或 shell 能力时，`ProvisionerSandboxBackend` 才会在 `/home/gem/.yuxi-runtime` 下写入 `browser-cookie-header.txt`。`SANDBOX_COOKIE_HEADER_FILE` 是创建沙盒时注入的固定路径指针，Header 本身不进入环境变量。目录权限为 `0700`，文件权限为 `0600`，写入过程使用同目录临时文件并原子替换；run 退出时会尽力删除，下一次有运行期上下文但无 Cookie 的 run 会主动清除旧文件。无 run 上下文的 viewer/API 访问不会删除正在使用的文件。
+
+Docker 的 `/home/gem` 位于 `tmpfs`，Kubernetes 对应 `emptyDir`，所以 `.yuxi-runtime` 不属于 workspace、uploads、outputs 或其它持久化挂载。idle reaper 删除容器或 Pod 后，文件随实例一起消失。Provisioner 会返回真实 `instance_id`（Docker container ID、Kubernetes Pod UID；memory 后端使用随机 ID），后端按 `(run_id, instance_id)` 判断是否已经同步；沙盒超时删除后即使代理 URL 不变，新实例也会重新写入。`runtime-contract-version=cookie-header-file-v1` 标签/注解会让升级前缺少固定路径指针的旧实例在首次发现时重建一次。
+
+主 Agent 和 subagent 都安装了动态 Cookie 提示词中间件。只有当前 run 存在凭据时，系统提示词才会加入允许 origin、`SANDBOX_COOKIE_HEADER_FILE` 路径、精确同源比较、跨 origin 重定向检查以及禁止打印、记录、复制或持久化 Header 的规则；Header 内容本身永远不会进入提示词。自动重定向必须关闭，或逐跳检查 `Location` 后再决定是否继续携带 Cookie。
+
+需要明确的是，原始 Header 文件对 Agent 进程可读，因此上述同源限制属于模型执行策略，不是网络层强制隔离。如果未来要求即使模型或脚本误用也绝不能把 Cookie 发往其它 origin，应另行引入只接受目标 Yuxi origin 的认证代理，而不是继续增强提示词。
+
+## 十二、当前推荐如何使用 Docker 沙盒
 
 如果只是正常开发、调试或单机部署，最简单也是当前默认的方式就是保留 `SANDBOX_PROVIDER=provisioner`，同时把 `SANDBOX_PROVISIONER_BACKEND` 设为 `docker`。这会让整个项目继续由 Docker Compose 管理，而沙盒实例由 provisioner 动态创建。通常不需要手工 `docker run` 沙盒镜像，也不需要在 Compose 文件里静态声明每一个沙盒容器。
 
@@ -188,13 +218,13 @@ curl http://localhost:8002/health
 
 升级已有开发环境时可以重新运行初始化脚本，让脚本补生成 `SANDBOX_PROVISIONER_TOKEN`。历史共享沙盒网络中的容器会在下次发现时被重建到各自独立的网络。
 
-## 十二、如何理解文件管理与暴露边界
+## 十三、如何理解文件管理与暴露边界
 
 从产品行为上看，viewer 文件系统和 artifact 下载接口优先走的是宿主机路径解析，而不是无条件透传到沙盒容器内部。这么设计有两个直接收益。第一，浏览 `/` 或 `/home/gem/user-data` 这样的树形入口时，不需要为了只读查看而冷启动沙盒。第二，权限边界更好做，因为 `resolve_virtual_path` 会把用户可见路径严格限制在预定义的 `user-data` 和 `skills` 命名空间内。
 
 从工程上看，当前实现更像“双层文件系统”。对 Agent 执行来说，真正工作的对象是远程沙盒进程暴露的文件 API；对 viewer、附件下载和一部分 artifact 查看来说，系统会优先在宿主机侧解析虚拟路径，再用本地文件读取或只读 backend 下载内容。这也是为什么你会看到既有 `ProvisionerSandboxBackend`，又有 `viewer_filesystem_service`、`SelectedSkillsReadonlyBackend` 这样的配套实现。
 
-## 十三、环境变量配置与传递链
+## 十四、环境变量配置与传递链
 
 sandbox-provisioner 的环境变量传递分**两层**，需要分别理解：
 
@@ -210,6 +240,9 @@ sandbox-provisioner 的环境变量传递分**两层**，需要分别理解：
 | `SANDBOX_VIRTUAL_PATH_PREFIX` | 虚拟路径前缀 | `/home/gem/user-data` |
 | `SANDBOX_EXEC_TIMEOUT_SECONDS` | 命令执行超时时间 | `180` |
 | `SANDBOX_MAX_OUTPUT_BYTES` | 最大输出字节数 | `262144` |
+| `YUXI_PUBLIC_ORIGIN` | 浏览器可见的规范 Yuxi origin；生产环境必填 | `https://yuxi.example.com` |
+| `AGENT_RUN_RUNTIME_SECRET_REDIS_URL` | Cookie 运行期凭据专用无持久化 Redis | `redis://runtime-secret-redis:6379/0` |
+| `AGENT_RUN_RUNTIME_SECRET_TTL_SECONDS` | 浏览器 Cookie Redis 运行期凭据 TTL（秒） | `14400` |
 
 ### 第二层：sandbox-provisioner 内部配置
 
@@ -287,6 +320,8 @@ CHECK_YUXI_SANDBOX_ENV_EXISTS=True
 
 如果需要给所有沙盒容器注入额外的环境变量（如代理配置、认证信息等），可以添加到 `sandbox.env` 文件中。
 
+`SANDBOX_COOKIE_HEADER_FILE=/home/gem/.yuxi-runtime/browser-cookie-header.txt` 是应用层保留的固定指针：创建沙盒时会覆盖用户 `agent_env` 中的同名值，并移除历史 `SANDBOX_COOKIES_JSON`。不要在 `sandbox.env` 或用户环境变量中写入 Cookie Header 内容。
+
 ### 配置方式汇总
 
 | 配置目标 | 配置位置 | 示例变量 |
@@ -295,13 +330,13 @@ CHECK_YUXI_SANDBOX_ENV_EXISTS=True
 | provisioner 自身行为 | `.env` 或 compose 环境 | `PROVISIONER_BACKEND`, `DOCKER_*` |
 | 沙盒容器内部环境 | `sandbox.env` 文件 | 代理、认证等运行时变量 |
 
-## 十四、和旧版文档相比，今天最重要的理解方式
+## 十五、和旧版文档相比，今天最重要的理解方式
 
 当前项目不应再按“应用直接管理一个长期存在的本地 sandbox 服务”去理解。更准确的认识应该是：Yuxi 只管理线程和上下文；provisioner 负责创建线程对应的沙盒实例；文件系统不是简单地暴露一个容器根目录，而是把可写工作区、只读 skills 等组合成一个受控命名空间（知识库不再映射为沙盒目录，改由 `query_kb`/`open_kb_document` 等工具访问）。
 
 因此，当你在界面上“启用沙盒”或者在文档里“选择 K8s”时，本质上做的不是切换一段业务逻辑，而是在切换 provisioner 的底层实例承载方式。选择 `docker` 时，沙盒由当前部署机上的 Docker daemon 动态创建；选择 `kubernetes` 时，沙盒由目标 K8s 集群动态创建。Yuxi 自己始终只面对一个 provisioner 服务地址。
 
-## 十五、排障时建议先看什么
+## 十六、排障时建议先看什么
 
 如果怀疑是 provisioner 级问题，先看 `http://localhost:8002/health`，确认 backend 类型和 idle timeout 是否符合预期。默认 Docker 部署下这里应看到 `backend=docker`。接着看 `docker logs sandbox-provisioner --tail 200`，因为这里能直接看到创建容器、复用旧实例、健康检查失败和 idle reaper 删除的日志。
 

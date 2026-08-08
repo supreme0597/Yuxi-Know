@@ -18,7 +18,10 @@ from yuxi.agents.backends.composite import (
 )
 from yuxi.agents.backends.sandbox import resolve_virtual_path, sandbox_id_for_thread
 from yuxi.agents.backends.sandbox.backend import ProvisionerSandboxBackend
+from yuxi.agents.backends.sandbox.provider import SANDBOX_COOKIE_HEADER_FILE
+from yuxi.agents.backends.sandbox.runtime_context import SandboxRuntimeCredentials, sandbox_runtime_scope
 from yuxi.agents.middlewares.skills import SkillsMiddleware
+from yuxi.services.run_runtime_secret_service import BrowserCookieRuntimeSecret
 from yuxi.utils.paths import VIRTUAL_PATH_CONVERSATION_HISTORY, VIRTUAL_PATH_LARGE_TOOL_RESULTS
 
 
@@ -240,7 +243,11 @@ def test_provider_uses_distinct_sandbox_scope_for_different_uid(monkeypatch) -> 
     class FakeClient:
         def create(self, sandbox_id, thread_id, uid, env, *, file_thread_id=None, skills_thread_id=None):
             created.append((sandbox_id, thread_id, uid, env, file_thread_id, skills_thread_id))
-            return SimpleNamespace(sandbox_id=sandbox_id, sandbox_url=f"http://sandbox/{uid}")
+            return SimpleNamespace(
+                sandbox_id=sandbox_id,
+                sandbox_url=f"http://sandbox/{uid}",
+                instance_id=f"instance-{uid}",
+            )
 
         def touch(self, _sandbox_id):
             return True
@@ -270,6 +277,10 @@ def test_provider_uses_distinct_sandbox_scope_for_different_uid(monkeypatch) -> 
     assert sandbox_1 != sandbox_2
     assert created[0][2] == "user-1"
     assert created[1][2] == "user-2"
+    assert created[0][3] == {
+        "A": "user-1",
+        "SANDBOX_COOKIE_HEADER_FILE": "/home/gem/.yuxi-runtime/browser-cookie-header.txt",
+    }
 
 
 def test_provider_get_create_if_missing_ensures_expected_split_scope(monkeypatch) -> None:
@@ -280,7 +291,7 @@ def test_provider_get_create_if_missing_ensures_expected_split_scope(monkeypatch
     class FakeClient:
         def create(self, sandbox_id, thread_id, uid, env, *, file_thread_id=None, skills_thread_id=None):
             calls.append((sandbox_id, thread_id, uid, env, file_thread_id, skills_thread_id))
-            return SimpleNamespace(sandbox_id=sandbox_id, sandbox_url="http://sandbox")
+            return SimpleNamespace(sandbox_id=sandbox_id, sandbox_url="http://sandbox", instance_id="instance-1")
 
         def discover(self, _sandbox_id):
             raise AssertionError("create_if_missing should ensure sandbox through provisioner create")
@@ -304,6 +315,7 @@ def test_provider_get_create_if_missing_ensures_expected_split_scope(monkeypatch
 
     sandbox_id = sandbox_id_for_thread("parent-thread", "child-skills-thread", uid="user-1")
     assert connection.sandbox_id == sandbox_id
+    assert connection.instance_id == "instance-1"
     assert connection.file_thread_id == "parent-thread"
     assert connection.skills_thread_id == "child-skills-thread"
     assert calls == [
@@ -311,11 +323,34 @@ def test_provider_get_create_if_missing_ensures_expected_split_scope(monkeypatch
             sandbox_id,
             "child-thread",
             "user-1",
-            {"A": "user-1"},
+            {
+                "A": "user-1",
+                "SANDBOX_COOKIE_HEADER_FILE": "/home/gem/.yuxi-runtime/browser-cookie-header.txt",
+            },
             "parent-thread",
             "child-skills-thread",
         )
     ]
+
+
+def test_load_sandbox_env_reserves_cookie_header_file_pointer(monkeypatch) -> None:
+    from yuxi.agents.backends.sandbox.provider import load_sandbox_env
+
+    monkeypatch.setattr(
+        "yuxi.agents.backends.sandbox.provider.load_user_agent_env",
+        lambda _uid: {
+            "USER_VALUE": "ok",
+            "SANDBOX_COOKIE_HEADER_FILE": "/tmp/user-controlled",
+            "SANDBOX_COOKIES_JSON": "legacy-secret",
+        },
+    )
+
+    env = load_sandbox_env("user-1")
+
+    assert env == {
+        "USER_VALUE": "ok",
+        "SANDBOX_COOKIE_HEADER_FILE": "/home/gem/.yuxi-runtime/browser-cookie-header.txt",
+    }
 
 
 def test_provisioner_uses_file_and_skills_thread_ids(monkeypatch) -> None:
@@ -325,7 +360,7 @@ def test_provisioner_uses_file_and_skills_thread_ids(monkeypatch) -> None:
     class FakeProvider:
         def get(self, thread_id, **kwargs):
             provider_calls.append((thread_id, kwargs))
-            return SimpleNamespace(sandbox_url="http://sandbox")
+            return SimpleNamespace(sandbox_url="http://sandbox", instance_id="instance-1")
 
     monkeypatch.setattr("yuxi.agents.backends.sandbox.backend.get_sandbox_provider", lambda: FakeProvider())
     monkeypatch.setattr(
@@ -357,6 +392,127 @@ def test_provisioner_uses_file_and_skills_thread_ids(monkeypatch) -> None:
             },
         )
     ]
+
+
+def _runtime_cookie_backend(monkeypatch, *, write_success: bool = True):
+    connection = SimpleNamespace(sandbox_url="http://sandbox", instance_id="instance-1")
+    shell_calls = []
+    writes = []
+
+    class FakeProvider:
+        def get(self, thread_id, **kwargs):
+            del thread_id, kwargs
+            return connection
+
+    def exec_command(*, command: str, timeout: int):
+        assert "cookie-secret-marker" not in command
+        shell_calls.append((command, timeout))
+        return SimpleNamespace(data=SimpleNamespace(exit_code=0, output=""))
+
+    def write_file(*, file: str, content: str):
+        writes.append((file, content))
+        return SimpleNamespace(
+            success=write_success,
+            message="write failed: cookie-secret-marker" if not write_success else "",
+        )
+
+    client = SimpleNamespace(
+        shell=SimpleNamespace(exec_command=exec_command),
+        file=SimpleNamespace(write_file=write_file),
+    )
+    monkeypatch.setattr("yuxi.agents.backends.sandbox.backend.get_sandbox_provider", lambda: FakeProvider())
+    monkeypatch.setattr("yuxi.agents.backends.sandbox.backend.sync_thread_readable_skills", lambda *_args: None)
+    backend = ProvisionerSandboxBackend(thread_id="thread-1", uid="user-1")
+    backend._build_client = MethodType(lambda self, sandbox_url: client, backend)
+    return backend, connection, shell_calls, writes
+
+
+def test_runtime_cookie_file_is_not_touched_without_run_context(monkeypatch) -> None:
+    backend, _connection, shell_calls, writes = _runtime_cookie_backend(monkeypatch)
+
+    backend._get_client()
+
+    assert shell_calls == []
+    assert writes == []
+
+
+@pytest.mark.asyncio
+async def test_runtime_cookie_file_writes_exact_raw_header_atomically(monkeypatch) -> None:
+    backend, _connection, shell_calls, writes = _runtime_cookie_backend(monkeypatch)
+    secret = BrowserCookieRuntimeSecret(
+        header="sid=cookie-secret-marker; theme=dark; sid=path-specific",
+        origin="https://yuxi.example.com",
+    )
+
+    async with sandbox_runtime_scope(SandboxRuntimeCredentials("run-1", secret)):
+        backend._get_client()
+        commands = [command for command, _timeout in shell_calls]
+        assert commands[0] == "mkdir -p /home/gem/.yuxi-runtime"
+        assert commands[1] == "chmod 700 /home/gem/.yuxi-runtime"
+        assert commands[2].startswith("chmod 600 /home/gem/.yuxi-runtime/.browser-cookie-header-")
+        assert commands[3].startswith("mv -f /home/gem/.yuxi-runtime/.browser-cookie-header-")
+        assert commands[3].endswith(f" {SANDBOX_COOKIE_HEADER_FILE}")
+
+    assert len(writes) == 1
+    assert writes[0][0].startswith("/home/gem/.yuxi-runtime/.browser-cookie-header-")
+    assert writes[0][1] == secret.header
+    assert shell_calls[-1][0] == f"rm -f {SANDBOX_COOKIE_HEADER_FILE}"
+
+
+@pytest.mark.asyncio
+async def test_runtime_cookie_file_clears_stale_header_when_secret_is_absent(monkeypatch) -> None:
+    backend, _connection, shell_calls, writes = _runtime_cookie_backend(monkeypatch)
+
+    async with sandbox_runtime_scope(SandboxRuntimeCredentials("run-1", None)):
+        backend._get_client()
+
+    assert writes == []
+    assert [command for command, _timeout in shell_calls] == [
+        f"rm -f {SANDBOX_COOKIE_HEADER_FILE}",
+        f"rm -f {SANDBOX_COOKIE_HEADER_FILE}",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_runtime_cookie_file_syncs_once_per_run_and_instance(monkeypatch) -> None:
+    backend, _connection, _shell_calls, writes = _runtime_cookie_backend(monkeypatch)
+    secret = BrowserCookieRuntimeSecret("sid=cookie-secret-marker", "https://yuxi.example.com")
+
+    async with sandbox_runtime_scope(SandboxRuntimeCredentials("run-1", secret)):
+        backend._get_client()
+        backend._get_client()
+
+    assert len(writes) == 1
+
+
+@pytest.mark.asyncio
+async def test_runtime_cookie_file_resyncs_when_instance_changes_at_same_url(monkeypatch) -> None:
+    backend, connection, _shell_calls, writes = _runtime_cookie_backend(monkeypatch)
+    secret = BrowserCookieRuntimeSecret("sid=cookie-secret-marker", "https://yuxi.example.com")
+
+    async with sandbox_runtime_scope(SandboxRuntimeCredentials("run-1", secret)):
+        backend._get_client()
+        connection.instance_id = "instance-2"
+        backend._get_client()
+
+    assert len(writes) == 2
+
+
+@pytest.mark.asyncio
+async def test_runtime_cookie_file_failed_write_clears_target_and_does_not_mark_synced(monkeypatch) -> None:
+    backend, _connection, shell_calls, writes = _runtime_cookie_backend(monkeypatch, write_success=False)
+    secret = BrowserCookieRuntimeSecret("sid=cookie-secret-marker", "https://yuxi.example.com")
+
+    with pytest.raises(RuntimeError, match="failed to sync sandbox runtime cookie file") as exc_info:
+        async with sandbox_runtime_scope(SandboxRuntimeCredentials("run-1", secret)):
+            backend._get_client()
+
+    commands = [command for command, _timeout in shell_calls]
+    assert "cookie-secret-marker" not in str(exc_info.value)
+    assert len(writes) == 1
+    assert f"rm -f {SANDBOX_COOKIE_HEADER_FILE}" in commands
+    assert any(command.startswith("rm -f /home/gem/.yuxi-runtime/.browser-cookie-header-") for command in commands)
+    assert backend._runtime_cookie_sync_key is None
 
 
 def test_provisioner_denies_reads_outside_allowed_roots(monkeypatch) -> None:

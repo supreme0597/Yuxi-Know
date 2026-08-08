@@ -35,6 +35,7 @@ from yuxi.services.input_message_service import (
     build_chat_input_message_from_openai_content,
 )
 from yuxi.services.run_queue_service import list_run_stream_events
+from yuxi.services.run_runtime_secret_service import BrowserCookieRuntimeSecret
 from yuxi.storage.postgres.models_business import User
 from yuxi.utils.logging_config import logger
 
@@ -57,7 +58,7 @@ async def create_agent_call_run_view(
     stream: bool,
     current_user: User,
     db: AsyncSession,
-    browser_cookies: str | None = None,
+    browser_cookie: BrowserCookieRuntimeSecret | None = None,
 ) -> dict[str, Any]:
     """创建外部系统非流式 Agent 调用，并返回 Agent Call 响应结构。
 
@@ -85,7 +86,7 @@ async def create_agent_call_run_view(
         current_user=current_user,
         db=db,
         conversation_title="Agent Call Run",
-        browser_cookies=browser_cookies,
+        browser_cookie=browser_cookie,
     )
     if async_mode:
         return _build_agent_call_response(
@@ -182,7 +183,7 @@ async def create_agent_invocation_run_view(
     db: AsyncSession,
     conversation_title: str,
     attachment_file_ids: list[str] | None = None,
-    browser_cookies: str | None = None,
+    browser_cookie: BrowserCookieRuntimeSecret | None = None,
 ) -> dict[str, Any]:
     """统一创建外部调用类 AgentRun，入口负责把请求解析成 input/meta。"""
     invocation_metadata = dict(invocation_metadata or {})
@@ -231,7 +232,7 @@ async def create_agent_invocation_run_view(
         current_uid=str(current_user.uid),
         db=db,
         model_spec=model_spec,
-        browser_cookies=browser_cookies,
+        browser_cookie=browser_cookie,
     )
 
 

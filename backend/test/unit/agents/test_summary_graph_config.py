@@ -49,6 +49,8 @@ async def test_chatbot_summary_trim_limit_matches_summary_threshold(monkeypatch:
     assert captured["summary_kwargs"]["trim_tokens_to_summarize"] == 123 * 1024
     assert captured["summary_kwargs"]["l1_l2_trigger_ratio"] == 0.75
     middleware_names = [type(middleware).__name__ for middleware in middlewares]
+    assert middleware_names.count("SandboxCookiePromptMiddleware") == 1
+    assert middleware_names.index("SandboxCookiePromptMiddleware") < middleware_names.index("SkillsMiddleware")
     assert middleware_names.index("ModelRetryMiddleware") < middleware_names.index("ImageInputCompatibilityMiddleware")
 
 
@@ -64,4 +66,6 @@ async def test_subagent_summary_trim_limit_matches_summary_threshold(monkeypatch
     assert captured["summary_kwargs"]["trim_tokens_to_summarize"] == 64 * 1024
     assert captured["summary_kwargs"]["l1_l2_trigger_ratio"] == 0.75
     middleware_names = [type(middleware).__name__ for middleware in middlewares]
+    assert middleware_names.count("SandboxCookiePromptMiddleware") == 1
+    assert middleware_names.index("SandboxCookiePromptMiddleware") < middleware_names.index("SkillsMiddleware")
     assert middleware_names.index("ModelRetryMiddleware") < middleware_names.index("ImageInputCompatibilityMiddleware")

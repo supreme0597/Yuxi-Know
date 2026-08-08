@@ -1,10 +1,18 @@
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
 import pytest
 import yuxi.services.run_worker as run_worker
+from yuxi.agents.backends.sandbox.runtime_context import (
+    SandboxRuntimeCredentials,
+    get_sandbox_runtime_credentials,
+    register_sandbox_runtime_cleanup,
+    sandbox_runtime_scope,
+)
+from yuxi.services.run_runtime_secret_service import BrowserCookieRuntimeSecret
 
 
 class _RaisingAsyncIter:
@@ -74,6 +82,13 @@ def _patch_common(monkeypatch: pytest.MonkeyPatch, run_obj: SimpleNamespace):
         del self
         return False
 
+    async def fake_load_runtime_secret(run_id: str):
+        del run_id
+        return None
+
+    async def fake_delete_runtime_secret(run_id: str):
+        del run_id
+
     monkeypatch.setattr(run_worker.pg_manager, "get_async_session_context", fake_session_ctx)
     monkeypatch.setattr(run_worker, "_get_run", fake_get_run)
     monkeypatch.setattr(run_worker, "_load_user", fake_load_user)
@@ -84,6 +99,174 @@ def _patch_common(monkeypatch: pytest.MonkeyPatch, run_obj: SimpleNamespace):
     monkeypatch.setattr(run_worker.RunContext, "start", fake_noop)
     monkeypatch.setattr(run_worker.RunContext, "close", fake_noop)
     monkeypatch.setattr(run_worker.RunContext, "is_cancelled", fake_not_cancelled)
+    monkeypatch.setattr(run_worker, "load_run_browser_cookie_secret", fake_load_runtime_secret, raising=False)
+    monkeypatch.setattr(run_worker, "delete_run_browser_cookie_secret", fake_delete_runtime_secret, raising=False)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("run_type", ["chat", "resume", "subagent"])
+async def test_process_agent_run_exposes_loaded_runtime_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+    run_type: str,
+):
+    run_obj = _build_run()
+    run_obj.run_type = run_type
+    if run_type == "subagent":
+        run_obj.input_payload = {
+            "model_spec": "provider:model",
+            "runtime": {
+                "parent_thread_id": "parent-thread",
+                "file_thread_id": "shared-file-thread",
+                "skills_thread_id": "thread-1",
+            },
+        }
+    _patch_common(monkeypatch, run_obj)
+    secret = BrowserCookieRuntimeSecret(header="sid=latest", origin="https://yuxi.example.com")
+    captured = {}
+    deleted = []
+
+    async def fake_load_runtime_secret(run_id: str):
+        assert run_id == "run-1"
+        return secret
+
+    async def fake_delete_runtime_secret(run_id: str):
+        deleted.append(run_id)
+
+    async def fake_load_input_message(message_id: int | None):
+        assert message_id == 10
+        metadata = {"resume": {"answer": "continue"}} if run_type == "resume" else {}
+        return SimpleNamespace(content="hello", image_content=None, extra_metadata=metadata)
+
+    async def fake_append_event(*args, **kwargs):
+        del args, kwargs
+
+    async def fake_mark_terminal(run_id: str, status: str, **kwargs):
+        del run_id, kwargs
+        run_obj.status = status
+
+    def fake_stream(**kwargs):
+        del kwargs
+        captured["credentials"] = get_sandbox_runtime_credentials()
+        return _BytesAsyncIter([b'{"status":"finished","request_id":"req-1","thread_id":"thread-1"}\n'])
+
+    monkeypatch.setattr(run_worker, "load_run_browser_cookie_secret", fake_load_runtime_secret, raising=False)
+    monkeypatch.setattr(run_worker, "delete_run_browser_cookie_secret", fake_delete_runtime_secret, raising=False)
+    monkeypatch.setattr(run_worker, "_load_input_message", fake_load_input_message)
+    monkeypatch.setattr(run_worker, "append_run_event", fake_append_event)
+    monkeypatch.setattr(run_worker, "mark_run_terminal", fake_mark_terminal)
+    monkeypatch.setattr(run_worker, "stream_agent_chat", fake_stream)
+    monkeypatch.setattr(run_worker, "stream_agent_resume", fake_stream)
+
+    await run_worker.process_agent_run({"job_try": 1}, "run-1")
+
+    assert captured["credentials"] == SandboxRuntimeCredentials(run_id="run-1", browser_cookie=secret)
+    assert deleted == ["run-1"]
+    assert get_sandbox_runtime_credentials() is None
+
+
+@pytest.mark.asyncio
+async def test_sandbox_runtime_scope_runs_cleanup_on_error_and_cancellation():
+    credentials = SandboxRuntimeCredentials(run_id="run-1", browser_cookie=None)
+    cleaned = []
+
+    with pytest.raises(ValueError, match="boom"):
+        async with sandbox_runtime_scope(credentials):
+            register_sandbox_runtime_cleanup("sandbox-1", lambda: cleaned.append("error"))
+            raise ValueError("boom")
+
+    with pytest.raises(asyncio.CancelledError):
+        async with sandbox_runtime_scope(credentials):
+            register_sandbox_runtime_cleanup("sandbox-1", lambda: cleaned.append("cancel"))
+            raise asyncio.CancelledError
+
+    assert cleaned == ["error", "cancel"]
+    assert get_sandbox_runtime_credentials() is None
+
+
+@pytest.mark.asyncio
+async def test_process_agent_run_retry_exit_runs_cleanup_and_retains_secret(monkeypatch: pytest.MonkeyPatch):
+    run_obj = _build_run()
+    _patch_common(monkeypatch, run_obj)
+    cleaned = []
+    deleted = []
+
+    async def fake_append_event(*args, **kwargs):
+        del args, kwargs
+
+    async def fake_delete_runtime_secret(run_id: str):
+        deleted.append(run_id)
+
+    def fake_stream_agent_chat(**kwargs):
+        del kwargs
+        register_sandbox_runtime_cleanup("sandbox-1", lambda: cleaned.append("retry"))
+        return _RaisingAsyncIter(run_worker.RetryableRunError("temporary failure"))
+
+    monkeypatch.setattr(run_worker, "append_run_event", fake_append_event)
+    monkeypatch.setattr(run_worker, "stream_agent_chat", fake_stream_agent_chat)
+    monkeypatch.setattr(run_worker, "delete_run_browser_cookie_secret", fake_delete_runtime_secret, raising=False)
+
+    with pytest.raises(run_worker.RetryableRunError, match="temporary failure"):
+        await run_worker.process_agent_run({"job_try": 1}, "run-1")
+
+    assert cleaned == ["retry"]
+    assert deleted == []
+
+
+@pytest.mark.asyncio
+async def test_terminal_secret_cleanup_failures_do_not_mask_worker_outcome(monkeypatch: pytest.MonkeyPatch):
+    run_obj = _build_run()
+    _patch_common(monkeypatch, run_obj)
+
+    async def fake_append_event(*args, **kwargs):
+        del args, kwargs
+
+    async def fake_mark_terminal(run_id: str, status: str, **kwargs):
+        del run_id, kwargs
+        run_obj.status = status
+
+    async def failing_delete(run_id: str):
+        del run_id
+        raise RuntimeError("redis unavailable")
+
+    monkeypatch.setattr(run_worker, "append_run_event", fake_append_event)
+    monkeypatch.setattr(run_worker, "mark_run_terminal", fake_mark_terminal)
+    monkeypatch.setattr(
+        run_worker,
+        "stream_agent_chat",
+        lambda **kwargs: _BytesAsyncIter([b'{"status":"finished"}\n']),
+    )
+    monkeypatch.setattr(run_worker, "delete_run_browser_cookie_secret", failing_delete, raising=False)
+
+    await run_worker.process_agent_run({"job_try": 1}, "run-1")
+
+
+@pytest.mark.asyncio
+async def test_terminal_state_lookup_failure_does_not_mask_retry_error(monkeypatch: pytest.MonkeyPatch):
+    run_obj = _build_run()
+    _patch_common(monkeypatch, run_obj)
+    calls = 0
+
+    async def flaky_get_run(run_id: str):
+        nonlocal calls
+        assert run_id == "run-1"
+        calls += 1
+        if calls == 1:
+            return run_obj
+        raise RuntimeError("database unavailable")
+
+    async def fake_append_event(*args, **kwargs):
+        del args, kwargs
+
+    monkeypatch.setattr(run_worker, "_get_run", flaky_get_run)
+    monkeypatch.setattr(run_worker, "append_run_event", fake_append_event)
+    monkeypatch.setattr(
+        run_worker,
+        "stream_agent_chat",
+        lambda **kwargs: _RaisingAsyncIter(run_worker.RetryableRunError("retry me")),
+    )
+
+    with pytest.raises(run_worker.RetryableRunError, match="retry me"):
+        await run_worker.process_agent_run({"job_try": 1}, "run-1")
 
 
 @pytest.mark.asyncio

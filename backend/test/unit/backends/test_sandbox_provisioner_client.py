@@ -44,3 +44,43 @@ def test_sandbox_provisioner_token_is_required(monkeypatch):
 
     with pytest.raises(ValueError, match="at least 32 characters"):
         sandbox_provisioner_token()
+
+
+def test_provisioner_client_parses_instance_id_for_create_and_discover(monkeypatch):
+    responses = iter(
+        [
+            SimpleNamespace(
+                status_code=200,
+                json=lambda: {
+                    "sandbox_id": "sandbox-1",
+                    "sandbox_url": "http://sandbox/1",
+                    "status": "Running",
+                    "instance_id": "instance-create",
+                },
+            ),
+            SimpleNamespace(
+                status_code=200,
+                json=lambda: {
+                    "sandbox_id": "sandbox-1",
+                    "sandbox_url": "http://sandbox/1",
+                    "status": "Running",
+                    "instance_id": "instance-discover",
+                },
+            ),
+        ]
+    )
+    monkeypatch.setattr(
+        "yuxi.agents.backends.sandbox.provisioner_client.httpx.request",
+        lambda **kwargs: next(responses),
+    )
+    client = ProvisionerClient(
+        "http://sandbox-provisioner:8002",
+        token="test-provisioner-token-that-is-long-enough",
+    )
+
+    created = client.create("sandbox-1", "thread-1", "user-1")
+    discovered = client.discover("sandbox-1")
+
+    assert created.instance_id == "instance-create"
+    assert discovered is not None
+    assert discovered.instance_id == "instance-discover"

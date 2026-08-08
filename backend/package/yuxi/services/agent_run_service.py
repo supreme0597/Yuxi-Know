@@ -21,6 +21,7 @@ import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -44,6 +45,11 @@ from yuxi.services.run_queue_service import (
     list_run_stream_events,
     normalize_after_seq,
     publish_cancel_signal,
+)
+from yuxi.services.run_runtime_secret_service import (
+    BrowserCookieRuntimeSecret,
+    delete_run_browser_cookie_secret,
+    store_run_browser_cookie_secret,
 )
 from yuxi.storage.postgres.manager import pg_manager
 from yuxi.storage.postgres.models_business import Message, User
@@ -353,23 +359,49 @@ async def get_agent_run_progress(run_id: str, *, message_limit: int = RUN_PROGRE
     return {"last_seq": last_seq, "messages": list(reversed(messages))}
 
 
-# 浏览器 cookie 由 agent 请求自动采集，仅作为运行期参数透传到沙盒环境变量，
-# 不写入任何持久化存储（Postgres / run meta）。
-BROWSER_COOKIES_MAX_SIZE = 32_768
+BROWSER_COOKIE_HEADER_MAX_SIZE = 32_768
 
 
-def serialize_browser_cookies(cookies: dict) -> str | None:
-    """把请求携带的浏览器 cookie 序列化为 JSON 字符串，供沙盒注入。
+def _normalize_http_origin(url: str) -> str:
+    parsed = urlsplit(url)
+    scheme = parsed.scheme.lower()
+    if scheme not in {"http", "https"} or not parsed.hostname:
+        raise ValueError("request base URL must contain an HTTP origin")
+    port = parsed.port
+    default_port = 80 if scheme == "http" else 443
+    port_suffix = f":{port}" if port is not None and port != default_port else ""
+    host = parsed.hostname.lower()
+    authority_host = f"[{host}]" if ":" in host else host
+    return f"{scheme}://{authority_host}{port_suffix}"
 
-    为空或超出大小上限时返回 None（跳过注入），避免异常 cookie 撑爆 env。
-    """
-    if not cookies:
+
+def _browser_cookie_origin(request_base_url: str) -> str:
+    configured_origin = (os.getenv("YUXI_PUBLIC_ORIGIN") or "").strip()
+    if configured_origin:
+        return _normalize_http_origin(configured_origin)
+
+    environment = (os.getenv("YUXI_ENV") or "development").strip().lower()
+    if environment in {"production", "prod"}:
+        raise ValueError("YUXI_PUBLIC_ORIGIN is required for browser Cookie sandbox injection in production")
+    return _normalize_http_origin(request_base_url)
+
+
+def build_browser_cookie_runtime_secret(
+    cookie_header: str | None,
+    request_base_url: str,
+) -> BrowserCookieRuntimeSecret | None:
+    """保留浏览器发给 Yuxi 的原始 Cookie Header，并绑定服务端请求 origin。"""
+    header = str(cookie_header or "")
+    if not header:
         return None
-    payload = json.dumps(cookies, ensure_ascii=False, separators=(",", ":"))
-    if len(payload) > BROWSER_COOKIES_MAX_SIZE:
-        logger.warning(f"browser cookies too large ({len(payload)} bytes), skip sandbox injection")
+    payload_size = len(header.encode("latin-1"))
+    if payload_size > BROWSER_COOKIE_HEADER_MAX_SIZE:
+        logger.warning(f"browser cookie header too large ({payload_size} bytes), skip sandbox injection")
         return None
-    return payload
+    return BrowserCookieRuntimeSecret(
+        header=header,
+        origin=_browser_cookie_origin(request_base_url),
+    )
 
 
 async def create_agent_run_view(
@@ -383,7 +415,7 @@ async def create_agent_run_view(
     model_spec: str | None = None,
     resume: object | None = None,
     created_by_run_id: str | None = None,
-    browser_cookies: str | None = None,
+    browser_cookie: BrowserCookieRuntimeSecret | None = None,
 ) -> dict:
     """创建 chat/resume run 的 HTTP 入口，输入正文由 Message 承载，run 只登记运行元数据。"""
     meta = meta or {}
@@ -448,7 +480,7 @@ async def create_agent_run_view(
     )
     if created:
         await db.commit()
-        await enqueue_agent_run(run.id, browser_cookies)
+        await enqueue_agent_run(run.id, browser_cookie)
 
     return _build_run_response(run)
 
@@ -699,14 +731,21 @@ async def prepare_agent_run_creation_scope(
     )
 
 
-async def enqueue_agent_run(run_id: str, browser_cookies: str | None = None) -> None:
-    """把已持久化的 run 投递到后台 worker 队列。
-
-    ``browser_cookies`` 作为 arq 任务的位置参数传给 worker，仅存于队列消息中、
-    运行期消费，不落库。
-    """
-    queue = await get_arq_pool()
-    await queue.enqueue_job("process_agent_run", run_id, browser_cookies, _job_id=f"run:{run_id}")
+async def enqueue_agent_run(
+    run_id: str,
+    browser_cookie: BrowserCookieRuntimeSecret | None = None,
+) -> None:
+    """保存短期运行凭据后，以不含密钥的 ARQ 参数投递 run。"""
+    await store_run_browser_cookie_secret(run_id, browser_cookie)
+    try:
+        queue = await get_arq_pool()
+        await queue.enqueue_job("process_agent_run", run_id, _job_id=f"run:{run_id}")
+    except Exception:
+        try:
+            await delete_run_browser_cookie_secret(run_id)
+        except Exception as cleanup_exc:  # noqa: BLE001
+            logger.warning(f"Failed to delete runtime secret after enqueue failure for run {run_id}: {cleanup_exc}")
+        raise
 
 
 async def get_agent_run_view(*, run_id: str, current_uid: str, db: AsyncSession) -> dict:

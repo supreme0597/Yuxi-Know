@@ -9,6 +9,7 @@ import httpx
 class SandboxRecord:
     sandbox_id: str
     sandbox_url: str
+    instance_id: str
     status: str | None = None
 
 
@@ -59,6 +60,7 @@ class ProvisionerClient:
         return SandboxRecord(
             sandbox_id=payload["sandbox_id"],
             sandbox_url=payload["sandbox_url"],
+            instance_id=payload["instance_id"],
             status=payload.get("status"),
         )
 
@@ -72,6 +74,7 @@ class ProvisionerClient:
         return SandboxRecord(
             sandbox_id=payload["sandbox_id"],
             sandbox_url=payload["sandbox_url"],
+            instance_id=payload["instance_id"],
             status=payload.get("status"),
         )
 

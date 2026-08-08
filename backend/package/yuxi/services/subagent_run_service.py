@@ -19,6 +19,7 @@ from typing import Any
 import yuxi.services.agent_run_service as agent_run_service
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+from yuxi.agents.backends.sandbox.runtime_context import get_sandbox_runtime_credentials
 from yuxi.repositories.agent_run_repository import AgentRunRepository
 from yuxi.repositories.conversation_repository import ConversationRepository
 from yuxi.repositories.subagent_thread_repository import SubagentThreadRepository
@@ -165,7 +166,9 @@ class SubagentRunService:
         # 创建成功后入队 worker 执行；幂等命中已有 run 时不重复入队。
         if created:
             await self.db.commit()
-            await agent_run_service.enqueue_agent_run(run.id)
+            credentials = get_sandbox_runtime_credentials()
+            inherited_browser_cookie = credentials.browser_cookie if credentials is not None else None
+            await agent_run_service.enqueue_agent_run(run.id, inherited_browser_cookie)
 
         return SubagentStartResult(
             run=run,

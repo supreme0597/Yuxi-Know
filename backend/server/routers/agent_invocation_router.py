@@ -10,7 +10,7 @@ from yuxi.services.agent_invocation_service import (
     create_agent_eval_run_view,
     get_agent_call_run_result_view,
 )
-from yuxi.services.agent_run_service import serialize_browser_cookies
+from yuxi.services.agent_run_service import build_browser_cookie_runtime_secret
 from yuxi.storage.postgres.models_business import User
 
 from server.utils.auth_middleware import get_db, get_required_user
@@ -72,7 +72,10 @@ async def create_agent_call_run(
         stream=payload.stream,
         current_user=current_user,
         db=db,
-        browser_cookies=serialize_browser_cookies(dict(request.cookies)),
+        browser_cookie=build_browser_cookie_runtime_secret(
+            request.headers.get("cookie"),
+            str(request.base_url),
+        ),
     )
 
 

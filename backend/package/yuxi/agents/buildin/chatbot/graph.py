@@ -18,6 +18,7 @@ from yuxi.agents.middlewares import (
     TokenUsageMiddleware,
     create_summary_middleware,
     save_attachments_to_fs,
+    sandbox_cookie_prompt,
 )
 from yuxi.agents.middlewares.skills import SkillsMiddleware
 from yuxi.agents.middlewares.subagent_task import create_subagent_task_middleware
@@ -57,6 +58,7 @@ async def _build_middlewares(context):
             getattr(context, "tool_token_limit", DEFAULT_TOOL_RESULT_EVICTION_K_TOKENS) * 1024,
             context=context,
         ),
+        sandbox_cookie_prompt,
         save_attachments_to_fs,
         SkillsMiddleware(),
     ]

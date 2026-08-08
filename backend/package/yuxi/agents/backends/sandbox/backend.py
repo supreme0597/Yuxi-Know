@@ -25,6 +25,10 @@ from deepagents.backends.sandbox import MAX_BINARY_BYTES, BaseSandbox
 from deepagents.backends.utils import _get_file_type
 
 from yuxi.agents.skills.service import sync_thread_readable_skills
+from yuxi.agents.backends.sandbox.runtime_context import (
+    get_sandbox_runtime_credentials,
+    register_sandbox_runtime_cleanup,
+)
 from yuxi.utils.logging_config import logger
 from yuxi.utils.paths import (
     OUTPUTS_DIR_NAME,
@@ -33,7 +37,12 @@ from yuxi.utils.paths import (
     VIRTUAL_SKILLS_PATH,
     WORKSPACE_DIR_NAME,
 )
-from .provider import get_sandbox_provider, sandbox_id_for_thread, sandbox_provisioner_token
+from .provider import (
+    SANDBOX_COOKIE_HEADER_FILE,
+    get_sandbox_provider,
+    sandbox_id_for_thread,
+    sandbox_provisioner_token,
+)
 
 _USER_DATA_ROOT = "/" + VIRTUAL_PATH_PREFIX.strip("/")
 _WORKSPACE_ROOT = f"{_USER_DATA_ROOT}/{WORKSPACE_DIR_NAME}"
@@ -200,6 +209,7 @@ class ProvisionerSandboxBackend(BaseSandbox):
         self._id = sandbox_id_for_thread(self._file_thread_id, self._skills_thread_id, uid=self._uid)
         self._client: Any | None = None
         self._client_url: str | None = None
+        self._runtime_cookie_sync_key: tuple[str, str] | None = None
         self._command_timeout_seconds = int(os.getenv("SANDBOX_EXEC_TIMEOUT_SECONDS") or 180)
         self._max_output_bytes = int(os.getenv("SANDBOX_MAX_OUTPUT_BYTES") or 262_144)
 
@@ -237,7 +247,80 @@ class ProvisionerSandboxBackend(BaseSandbox):
             self._client = self._build_client(connection.sandbox_url)
             self._client_url = connection.sandbox_url
 
+        credentials = get_sandbox_runtime_credentials()
+        if credentials is not None:
+            sync_key = (credentials.run_id, connection.instance_id)
+            if self._runtime_cookie_sync_key != sync_key:
+                header = credentials.browser_cookie.header if credentials.browser_cookie is not None else None
+                self._sync_runtime_cookie_header_file(self._client, header)
+                register_sandbox_runtime_cleanup(
+                    f"{self._id}:{connection.instance_id}",
+                    lambda client=self._client: self._delete_runtime_cookie_header_file(client),
+                )
+                self._runtime_cookie_sync_key = sync_key
+
         return self._client
+
+    @staticmethod
+    def _run_runtime_file_command(client: Any, command: str, error_message: str) -> None:
+        result = client.shell.exec_command(command=command, timeout=10)
+        if result.data.exit_code != 0:
+            raise RuntimeError(error_message)
+
+    @classmethod
+    def _delete_runtime_cookie_header_file(cls, client: Any) -> None:
+        cls._run_runtime_file_command(
+            client,
+            f"rm -f {SANDBOX_COOKIE_HEADER_FILE}",
+            "failed to delete sandbox runtime cookie file",
+        )
+
+    @classmethod
+    def _cleanup_runtime_cookie_files(cls, client: Any, temp_path: str) -> None:
+        with suppress(Exception):
+            cls._delete_runtime_cookie_header_file(client)
+        with suppress(Exception):
+            cls._run_runtime_file_command(
+                client,
+                f"rm -f {temp_path}",
+                "failed to delete sandbox runtime cookie temp file",
+            )
+
+    @classmethod
+    def _sync_runtime_cookie_header_file(cls, client: Any, header: str | None) -> None:
+        if header is None:
+            cls._delete_runtime_cookie_header_file(client)
+            return
+
+        runtime_dir = str(PurePosixPath(SANDBOX_COOKIE_HEADER_FILE).parent)
+        temp_path = f"{runtime_dir}/.browser-cookie-header-{uuid.uuid4().hex}.tmp"
+        try:
+            cls._run_runtime_file_command(
+                client,
+                f"mkdir -p {runtime_dir}",
+                "failed to create sandbox runtime directory",
+            )
+            cls._run_runtime_file_command(
+                client,
+                f"chmod 700 {runtime_dir}",
+                "failed to protect sandbox runtime directory",
+            )
+            result = client.file.write_file(file=temp_path, content=header)
+            if not result.success:
+                raise RuntimeError("sandbox runtime cookie write failed")
+            cls._run_runtime_file_command(
+                client,
+                f"chmod 600 {temp_path}",
+                "failed to protect sandbox runtime cookie temp file",
+            )
+            cls._run_runtime_file_command(
+                client,
+                f"mv -f {temp_path} {SANDBOX_COOKIE_HEADER_FILE}",
+                "failed to install sandbox runtime cookie file",
+            )
+        except Exception:
+            cls._cleanup_runtime_cookie_files(client, temp_path)
+            raise RuntimeError("failed to sync sandbox runtime cookie file") from None
 
     def _read_binary(self, path: str, offset: int = 0, limit: int | None = None) -> bytes:
         """Read file content from the sandbox file API and normalize it to bytes.

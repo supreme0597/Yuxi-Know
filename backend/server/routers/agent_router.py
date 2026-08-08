@@ -18,11 +18,11 @@ from yuxi.repositories.agent_repository import (
 )
 from yuxi.services.agent_run_service import (
     cancel_agent_run_view,
+    build_browser_cookie_runtime_secret,
     create_agent_run_view,
     get_active_run_by_thread,
     get_agent_run_result,
     get_agent_run_view,
-    serialize_browser_cookies,
     stream_agent_run_events,
 )
 from yuxi.services.input_message_service import build_chat_input_message
@@ -273,7 +273,10 @@ async def create_agent_run(
         db=db,
         resume=payload.resume,
         created_by_run_id=payload.created_by_run_id,
-        browser_cookies=serialize_browser_cookies(dict(request.cookies)),
+        browser_cookie=build_browser_cookie_runtime_secret(
+            request.headers.get("cookie"),
+            str(request.base_url),
+        ),
     )
 
 

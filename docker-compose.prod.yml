@@ -3,11 +3,13 @@ x-api-worker-env: &api-worker-env
   LITE_MODE: ${LITE_MODE:-}
   RUNNING_IN_DOCKER: "true"
   YUXI_ENV: production
+  YUXI_PUBLIC_ORIGIN: ${YUXI_PUBLIC_ORIGIN:?Set YUXI_PUBLIC_ORIGIN in .env.prod, for example https://yuxi.example.com}
   PYTHONPATH: /app/package
   JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY in .env.prod}
   YUXI_INSTANCE_ID: ${YUXI_INSTANCE_ID:?Set YUXI_INSTANCE_ID in .env.prod}
   POSTGRES_URL: ${POSTGRES_URL:-postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.prod}@postgres:5432/${POSTGRES_DB:-yuxi}}
   REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+  AGENT_RUN_RUNTIME_SECRET_REDIS_URL: ${AGENT_RUN_RUNTIME_SECRET_REDIS_URL:-redis://runtime-secret-redis:6379/0}
   RUN_CANCEL_KEY_TTL_SECONDS: ${RUN_CANCEL_KEY_TTL_SECONDS:-1800}
   RUN_EVENTS_STREAM_TTL_SECONDS: ${RUN_EVENTS_STREAM_TTL_SECONDS:-7200}
   YUXI_CORS_ORIGINS: ${YUXI_CORS_ORIGINS:-}
@@ -63,6 +65,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      runtime-secret-redis:
+        condition: service_healthy
       minio:
         condition: service_healthy
       sandbox-provisioner:
@@ -92,6 +96,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      runtime-secret-redis:
         condition: service_healthy
       minio:
         condition: service_healthy
@@ -282,6 +288,21 @@ services:
       retries: 10
     volumes:
       - ./docker/volumes/redis:/data
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  runtime-secret-redis:
+    image: redis:7-alpine
+    container_name: runtime-secret-redis
+    command: redis-server --save "" --appendonly no
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    tmpfs:
+      - /data
     networks:
       - app-network
     restart: unless-stopped

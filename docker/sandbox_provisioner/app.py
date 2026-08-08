@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 SANDBOX_ENV_FILE = Path(__file__).parent / "sandbox.env"
 SAFE_PATH_SEGMENT_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 PROXY_RESPONSE_HEADERS = frozenset({"cache-control", "content-disposition", "content-type", "etag", "last-modified"})
+SANDBOX_RUNTIME_CONTRACT_VERSION = "cookie-header-file-v1"
 HOP_BY_HOP_HEADERS = frozenset(
     {
         "connection",
@@ -91,6 +92,7 @@ class CreateSandboxRequest(BaseModel):
 class SandboxResponse(BaseModel):
     sandbox_id: str
     sandbox_url: str
+    instance_id: str
     status: str | None = None
 
 
@@ -114,6 +116,7 @@ class ListSandboxesResponse(BaseModel):
 class SandboxRecord:
     sandbox_id: str
     sandbox_url: str
+    instance_id: str
     status: str | None = None
 
 
@@ -151,6 +154,7 @@ class MemoryProvisionerBackend:
             record = SandboxRecord(
                 sandbox_id=sandbox_id,
                 sandbox_url=self._url_for(sandbox_id),
+                instance_id=secrets.token_hex(16),
                 status="Running",
             )
             self._records[sandbox_id] = record
@@ -402,8 +406,14 @@ class LocalContainerProvisionerBackend:
         return SandboxRecord(
             sandbox_id=sandbox_id,
             sandbox_url=self._sandbox_url(container),
+            instance_id=str(container.id),
             status=state or "unknown",
         )
+
+    @staticmethod
+    def _has_expected_runtime_contract(container) -> bool:
+        labels = container.labels or {}
+        return labels.get("runtime-contract-version") == SANDBOX_RUNTIME_CONTRACT_VERSION
 
     @staticmethod
     def _ensure_user_data_writable(container) -> None:
@@ -449,7 +459,11 @@ class LocalContainerProvisionerBackend:
             existing = self._get_container(sandbox_id)
             if existing is not None:
                 existing.reload()
-                if not self._is_expected_skills_mount(existing, safe_skills_thread_id):
+                if not self._has_expected_runtime_contract(existing):
+                    logger.info("Recreating sandbox %s because runtime contract is stale", sandbox_id)
+                    self.delete(sandbox_id)
+                    existing = None
+                elif not self._is_expected_skills_mount(existing, safe_skills_thread_id):
                     logger.info("Recreating sandbox %s because skills mount is stale", sandbox_id)
                     self.delete(sandbox_id)
                     existing = None
@@ -500,6 +514,7 @@ class LocalContainerProvisionerBackend:
                     "skills-thread-id": safe_skills_thread_id,
                     "uid": safe_uid,
                     "managed-by": "yuxi-sandbox-provisioner",
+                    "runtime-contract-version": SANDBOX_RUNTIME_CONTRACT_VERSION,
                 },
                 "volumes": {
                     str(shared_workspace): {"bind": "/home/gem/user-data/workspace", "mode": "rw"},
@@ -538,6 +553,13 @@ class LocalContainerProvisionerBackend:
             return None
         container.reload()
         labels = container.labels or {}
+        if labels.get("runtime-contract-version") != SANDBOX_RUNTIME_CONTRACT_VERSION:
+            logger.info("Discarding stale sandbox %s with an outdated runtime contract", sandbox_id)
+            try:
+                self.delete(sandbox_id)
+            except Exception as exc:
+                logger.warning("Failed to delete stale sandbox %s during discover: %s", sandbox_id, exc)
+            return None
         thread_id = str(labels.get("thread-id") or "").strip()
         if not thread_id:
             return None
@@ -660,6 +682,7 @@ class KubernetesProvisionerBackend:
                     "file-thread-id": file_thread_id,
                     "skills-thread-id": skills_thread_id,
                     "uid": uid,
+                    "runtime-contract-version": SANDBOX_RUNTIME_CONTRACT_VERSION,
                 },
             ),
             spec=self._client.V1PodSpec(
@@ -790,6 +813,8 @@ class KubernetesProvisionerBackend:
             return False
 
         annotations = pod.metadata.annotations or {}
+        if annotations.get("runtime-contract-version") != SANDBOX_RUNTIME_CONTRACT_VERSION:
+            return False
         if str(annotations.get("uid") or "").strip() != uid:
             return False
         if str(annotations.get("file-thread-id") or annotations.get("thread-id") or "").strip() != file_thread_id:
@@ -888,6 +913,13 @@ class KubernetesProvisionerBackend:
             raise
 
         annotations = pod.metadata.annotations or {}
+        if annotations.get("runtime-contract-version") != SANDBOX_RUNTIME_CONTRACT_VERSION:
+            logger.info("Discarding stale sandbox %s with an outdated runtime contract", sandbox_id)
+            try:
+                self.delete(sandbox_id)
+            except Exception as exc:
+                logger.warning("Failed to delete stale sandbox %s during discover: %s", sandbox_id, exc)
+            return None
         thread_id = str(annotations.get("thread-id") or "").strip()
         if not thread_id:
             return None
@@ -895,6 +927,9 @@ class KubernetesProvisionerBackend:
         skills_thread_id = str(annotations.get("skills-thread-id") or thread_id).strip()
         uid = str(annotations.get("uid") or "").strip()
         if not uid:
+            return None
+        instance_id = str(pod.metadata.uid or "").strip()
+        if not instance_id:
             return None
         safe_file_thread_id = LocalContainerProvisionerBackend._validate_thread_id(file_thread_id)
         safe_skills_thread_id = LocalContainerProvisionerBackend._validate_thread_id(skills_thread_id)
@@ -923,6 +958,7 @@ class KubernetesProvisionerBackend:
         return SandboxRecord(
             sandbox_id=sandbox_id,
             sandbox_url=sandbox_url,
+            instance_id=instance_id,
             status=(pod.status.phase if pod and pod.status else "Unknown"),
         )
 
@@ -1076,6 +1112,7 @@ def sandbox_response(record: SandboxRecord) -> SandboxResponse:
     return SandboxResponse(
         sandbox_id=record.sandbox_id,
         sandbox_url=sandbox_proxy_url(record.sandbox_id),
+        instance_id=record.instance_id,
         status=record.status,
     )
 

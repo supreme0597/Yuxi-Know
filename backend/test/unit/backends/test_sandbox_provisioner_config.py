@@ -114,7 +114,82 @@ def test_memory_backend_accepts_split_thread_ids(monkeypatch):
     )
 
     assert record.sandbox_id == "sandbox-1"
+    assert len(record.instance_id) == 32
     assert backend.discover("sandbox-1") is record
+
+    backend.delete("sandbox-1")
+    recreated = backend.create("sandbox-1", "child-thread", "user-1")
+    assert recreated.instance_id != record.instance_id
+
+
+def test_docker_record_uses_container_id_as_instance_id(monkeypatch):
+    monkeypatch.setenv("PROVISIONER_BACKEND", "memory")
+    module = _load_module()
+    backend = object.__new__(module.LocalContainerProvisionerBackend)
+    backend._container_port = 8080
+    container = SimpleNamespace(
+        id="container-instance-id",
+        name="sandbox-container",
+        attrs={"State": {"Status": "running"}},
+    )
+
+    record = backend._to_record(container, "sandbox-1")
+
+    assert record.instance_id == "container-instance-id"
+
+
+def test_kubernetes_discover_uses_pod_uid_as_instance_id(monkeypatch):
+    monkeypatch.setenv("PROVISIONER_BACKEND", "memory")
+    module = _load_module()
+    monkeypatch.setitem(sys.modules, "kubernetes.client.rest", SimpleNamespace(ApiException=RuntimeError))
+    backend = object.__new__(module.KubernetesProvisionerBackend)
+    backend._namespace = "yuxi-know"
+    backend._node_host = "node.example.com"
+    pod = SimpleNamespace(
+        metadata=SimpleNamespace(
+            uid="pod-instance-uid",
+            annotations={
+                "thread-id": "thread-1",
+                "file-thread-id": "thread-1",
+                "skills-thread-id": "thread-1",
+                "uid": "user-1",
+                "runtime-contract-version": "cookie-header-file-v1",
+            },
+        ),
+        status=SimpleNamespace(phase="Running"),
+        spec=SimpleNamespace(
+            containers=[
+                SimpleNamespace(
+                    name="sandbox",
+                    volume_mounts=[
+                        SimpleNamespace(
+                            mount_path="/home/gem/user-data/workspace",
+                            sub_path="threads/shared/user-1/workspace",
+                        ),
+                        SimpleNamespace(
+                            mount_path="/home/gem/user-data/uploads",
+                            sub_path="threads/thread-1/user-data/uploads",
+                        ),
+                        SimpleNamespace(
+                            mount_path="/home/gem/user-data/outputs",
+                            sub_path="threads/thread-1/user-data/outputs",
+                        ),
+                        SimpleNamespace(mount_path="/home/gem/skills", sub_path="threads/thread-1/skills"),
+                    ],
+                )
+            ]
+        ),
+    )
+    service = SimpleNamespace(spec=SimpleNamespace(ports=[SimpleNamespace(node_port=30080)]))
+    backend._core_api = SimpleNamespace(
+        read_namespaced_pod=lambda **kwargs: pod,
+        read_namespaced_service=lambda **kwargs: service,
+    )
+
+    record = backend.discover("sandbox-1")
+
+    assert record is not None
+    assert record.instance_id == "pod-instance-uid"
 
 
 def test_docker_mount_checks_use_file_and_skills_thread_ids(monkeypatch, tmp_path):
@@ -230,10 +305,9 @@ def test_authenticated_management_api_returns_proxied_sandbox_url(monkeypatch):
     expected_url = f"http://sandbox-provisioner:8002/api/sandboxes/{sandbox_id}/proxy"
     assert create_response.status_code == 200
     assert create_response.json()["sandbox_url"] == expected_url
+    assert len(create_response.json()["instance_id"]) == 32
     assert list_response.status_code == 200
-    assert list_response.json()["sandboxes"] == [
-        {"sandbox_id": sandbox_id, "sandbox_url": expected_url, "status": "Running"}
-    ]
+    assert list_response.json()["sandboxes"] == [create_response.json()]
     assert delete_response.status_code == 200
 
 
@@ -310,6 +384,7 @@ async def test_proxy_discovers_sandbox_outside_event_loop_thread(monkeypatch):
         return module.SandboxRecord(
             sandbox_id=sandbox_id,
             sandbox_url="http://agent-sandbox:8000",
+            instance_id="instance-proxy-test",
             status="Running",
         )
 
@@ -349,8 +424,10 @@ def test_docker_backend_uses_private_network_without_published_port(monkeypatch,
     captured = []
 
     class FakeContainer:
+        id = "container-1"
         name = "yuxi-sandbox-sandbox-1"
         status = "running"
+        labels = {"runtime-contract-version": "cookie-header-file-v1"}
         attrs = {"State": {"Status": "running"}}
 
         def reload(self):
@@ -371,7 +448,52 @@ def test_docker_backend_uses_private_network_without_published_port(monkeypatch,
     assert record.sandbox_url == "http://yuxi-sandbox-sandbox-1:8080"
     assert captured[0][0] == "sandbox-image"
     assert captured[0][1]["network"] == "yuxi-know-sandbox-sandbox-1"
+    assert captured[0][1]["labels"]["runtime-contract-version"] == "cookie-header-file-v1"
     assert "ports" not in captured[0][1]
+
+
+def test_docker_backend_recreates_legacy_runtime_contract(monkeypatch, tmp_path):
+    monkeypatch.setenv("PROVISIONER_BACKEND", "memory")
+    module = _load_module()
+    captured = []
+    deleted = []
+
+    class LegacyContainer:
+        id = "legacy-container"
+        name = "yuxi-sandbox-sandbox-1"
+        status = "running"
+        labels = {"sandbox-id": "sandbox-1"}
+        attrs = {"State": {"Status": "running"}}
+
+        def reload(self):
+            return None
+
+    class NewContainer:
+        id = "new-container"
+        name = "yuxi-sandbox-sandbox-1"
+        status = "running"
+        labels = {"runtime-contract-version": "cookie-header-file-v1"}
+        attrs = {"State": {"Status": "running"}}
+
+        def reload(self):
+            return None
+
+    backend = _docker_backend(
+        module,
+        tmp_path,
+        lambda image, **kwargs: captured.append((image, kwargs)) or NewContainer(),
+    )
+    monkeypatch.setattr(backend, "_get_container", lambda _sandbox_id: LegacyContainer())
+    monkeypatch.setattr(backend, "delete", deleted.append)
+    monkeypatch.setattr(backend, "_ensure_network", backend._network_name)
+    monkeypatch.setattr(backend, "_ensure_user_data_writable", lambda _container: None)
+    monkeypatch.setattr(module, "wait_for_sandbox_ready", lambda _url, timeout_seconds: True)
+
+    record = backend.create("sandbox-1", "thread-1", "user-1")
+
+    assert deleted == ["sandbox-1"]
+    assert record.instance_id == "new-container"
+    assert captured[0][1]["labels"]["runtime-contract-version"] == "cookie-header-file-v1"
 
 
 def test_docker_backend_cleans_up_container_and_network_when_health_check_fails(monkeypatch, tmp_path):
@@ -381,8 +503,10 @@ def test_docker_backend_cleans_up_container_and_network_when_health_check_fails(
     deleted_networks = []
 
     class FakeContainer:
+        id = "container-1"
         name = "yuxi-sandbox-sandbox-1"
         status = "running"
+        labels = {"runtime-contract-version": "cookie-header-file-v1"}
         attrs = {"State": {"Status": "running"}}
         removed = False
 
@@ -479,8 +603,10 @@ def test_docker_backend_reconnects_provisioner_before_reusing_sandbox(monkeypatc
             connected.append((container.id, aliases))
 
     class FakeContainer:
+        id = "container-1"
         name = "yuxi-sandbox-sandbox-1"
         status = "running"
+        labels = {"runtime-contract-version": "cookie-header-file-v1"}
         attrs = {"State": {"Status": "running"}}
 
         def reload(self):

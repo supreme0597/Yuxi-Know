@@ -9,11 +9,11 @@ from dataclasses import dataclass, field
 
 from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
+from yuxi.agents.backends.sandbox.runtime_context import SandboxRuntimeCredentials, sandbox_runtime_scope
 from yuxi.agents.mcp.service import ensure_builtin_mcp_servers_in_db
 from yuxi.agents.skills.service import init_builtin_skills
 from yuxi.config import config as sys_config
 from yuxi.repositories.agent_run_repository import TERMINAL_RUN_STATUSES, AgentRunRepository
-from yuxi.agents.backends.sandbox.provider import sandbox_cookies_var
 from yuxi.services.chat_service import stream_agent_chat, stream_agent_resume
 from yuxi.services.input_message_service import restore_chat_input_message
 from yuxi.services.run_queue_service import (
@@ -21,6 +21,10 @@ from yuxi.services.run_queue_service import (
     clear_cancel_signal,
     has_cancel_signal,
     wait_for_cancel_signal,
+)
+from yuxi.services.run_runtime_secret_service import (
+    delete_run_browser_cookie_secret,
+    load_run_browser_cookie_secret,
 )
 from yuxi.storage.postgres.manager import pg_manager
 from yuxi.storage.postgres.models_business import Message, User
@@ -262,7 +266,28 @@ async def _consume_stream_with_cancel(agen, run_ctx: RunContext):
             return
 
 
-async def process_agent_run(ctx, run_id: str, browser_cookies: str | None = None):
+async def process_agent_run(ctx, run_id: str):
+    credentials = SandboxRuntimeCredentials(
+        run_id=run_id,
+        browser_cookie=await load_run_browser_cookie_secret(run_id),
+    )
+    try:
+        async with sandbox_runtime_scope(credentials):
+            await _process_agent_run(ctx, run_id)
+    finally:
+        await _delete_terminal_runtime_secret(run_id)
+
+
+async def _delete_terminal_runtime_secret(run_id: str) -> None:
+    try:
+        run = await _get_run(run_id)
+        if run is None or run.status in TERMINAL_RUN_STATUSES:
+            await delete_run_browser_cookie_secret(run_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"Failed to delete terminal runtime secret for run {run_id}: {exc}")
+
+
+async def _process_agent_run(ctx, run_id: str):
     """执行队列中的 AgentRun，并只从 run 列和输入消息恢复运行参数。"""
     run = await _get_run(run_id)
     if not run:
@@ -387,7 +412,6 @@ async def process_agent_run(ctx, run_id: str, browser_cookies: str | None = None
                     db=db,
                 )
             elif run_type in {"chat", "subagent"}:
-                sandbox_cookies_var.set(browser_cookies)
                 stream = stream_agent_chat(
                     agent_slug=agent_slug,
                     thread_id=thread_id,

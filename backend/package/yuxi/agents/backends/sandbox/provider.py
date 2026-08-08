@@ -5,7 +5,6 @@ import json
 import os
 import threading
 import time
-from contextvars import ContextVar
 from dataclasses import dataclass
 
 from yuxi.utils.logging_config import logger
@@ -20,24 +19,15 @@ def sandbox_provisioner_token() -> str:
     return token
 
 
-# 浏览器 cookie 注入沙盒后对应的环境变量名（值为 JSON 字符串）。
-COOKIE_ENV_VAR = "SANDBOX_COOKIES_JSON"
-
-# 运行期浏览器 cookie：由 worker 在消费 AgentRun 时通过 contextvar 注入，
-# 仅存活于单次 run 的 worker task 上下文，不落库、不进入 langgraph state。
-sandbox_cookies_var: ContextVar[str | None] = ContextVar("sandbox_cookies", default=None)
+SANDBOX_COOKIE_HEADER_FILE_ENV = "SANDBOX_COOKIE_HEADER_FILE"
+SANDBOX_COOKIE_HEADER_FILE = "/home/gem/.yuxi-runtime/browser-cookie-header.txt"
+LEGACY_SANDBOX_COOKIES_ENV = "SANDBOX_COOKIES_JSON"
 
 
-def _merge_cookies_env(uid: str) -> dict[str, str]:
-    """加载用户持久化 env，并可选合并运行期浏览器 cookie。
-
-    cookie 从运行期 contextvar 读取（由 worker 在消费 AgentRun 时设置），
-    仅作为运行期参数注入，不写入 agent_envs 持久化表，也不进入 langgraph state。
-    """
+def load_sandbox_env(uid: str) -> dict[str, str]:
     env = load_user_agent_env(uid)
-    cookies = sandbox_cookies_var.get()
-    if cookies:
-        env[COOKIE_ENV_VAR] = cookies
+    env.pop(LEGACY_SANDBOX_COOKIES_ENV, None)
+    env[SANDBOX_COOKIE_HEADER_FILE_ENV] = SANDBOX_COOKIE_HEADER_FILE
     return env
 
 
@@ -102,6 +92,7 @@ class SandboxConnection:
     uid: str
     sandbox_id: str
     sandbox_url: str
+    instance_id: str
 
 
 class ProvisionerSandboxProvider:
@@ -144,6 +135,7 @@ class ProvisionerSandboxProvider:
             uid=uid,
             sandbox_id=record.sandbox_id,
             sandbox_url=record.sandbox_url,
+            instance_id=record.instance_id,
         )
         self._connections[cache_key] = connection
         self._last_touch_at[cache_key] = time.time()
@@ -196,7 +188,7 @@ class ProvisionerSandboxProvider:
                 sandbox_id,
                 thread_id,
                 uid,
-                _merge_cookies_env(uid),
+                load_sandbox_env(uid),
                 file_thread_id=file_id,
                 skills_thread_id=skills_id,
             )
@@ -244,7 +236,7 @@ class ProvisionerSandboxProvider:
                     sandbox_id,
                     thread_id,
                     uid,
-                    _merge_cookies_env(uid),
+                    load_sandbox_env(uid),
                     file_thread_id=file_id,
                     skills_thread_id=skills_id,
                 )

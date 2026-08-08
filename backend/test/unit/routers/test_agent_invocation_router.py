@@ -8,6 +8,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from server.utils.auth_middleware import get_db, get_required_user
+from yuxi.services.run_runtime_secret_service import BrowserCookieRuntimeSecret
 
 agent_invocation_router_module = importlib.import_module("server.routers.agent_invocation_router")
 
@@ -168,6 +169,7 @@ def test_agent_call_run_creates_async_run_and_returns_agent_call_payload(monkeyp
 
     response = client.post(
         "/api/agent-invocation/agent-call/runs",
+        headers={"Cookie": "session=abc; theme=dark; session=path-specific"},
         json={
             "agent_slug": " translator ",
             "messages": [
@@ -193,6 +195,10 @@ def test_agent_call_run_creates_async_run_and_returns_agent_call_payload(monkeyp
     assert calls["kwargs"]["async_mode"] is True
     assert calls["kwargs"]["stream"] is False
     assert calls["kwargs"]["current_user"].uid == "user-1"
+    assert calls["kwargs"]["browser_cookie"] == BrowserCookieRuntimeSecret(
+        header="session=abc; theme=dark; session=path-specific",
+        origin="http://testserver",
+    )
 
 
 def test_agent_call_run_waits_and_wraps_final_result(monkeypatch: pytest.MonkeyPatch):

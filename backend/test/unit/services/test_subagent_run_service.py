@@ -7,7 +7,9 @@ from fastapi import HTTPException
 
 import yuxi.services.agent_run_service as agent_run_service
 import yuxi.services.subagent_run_service as service_module
+from yuxi.agents.backends.sandbox.runtime_context import SandboxRuntimeCredentials, sandbox_runtime_scope
 from yuxi.services.input_message_service import build_chat_input_message
+from yuxi.services.run_runtime_secret_service import BrowserCookieRuntimeSecret
 from yuxi.services.subagent_run_service import SubagentRunBusy, SubagentRunService
 from yuxi.utils.hash_utils import subagent_child_thread_id
 
@@ -309,7 +311,7 @@ def _fake_create_run_record(captured: dict[str, object], *, run_id: str = "child
 async def test_subagent_run_service_creates_child_relation_run_and_enqueue(monkeypatch: pytest.MonkeyPatch):
     db = _FakeDB()
     captured: dict[str, object] = {}
-    enqueued: list[str] = []
+    enqueued: list[tuple[str, BrowserCookieRuntimeSecret | None]] = []
     child_conversation = SimpleNamespace(id=20, uid="user-1", agent_id="worker", status="active")
     relation = _relation(child_thread_id="")
 
@@ -320,20 +322,22 @@ async def test_subagent_run_service_creates_child_relation_run_and_enqueue(monke
         created_relation=relation,
     )
 
-    async def fake_enqueue(run_id: str):
-        enqueued.append(run_id)
+    async def fake_enqueue(run_id: str, browser_cookie: BrowserCookieRuntimeSecret | None = None):
+        enqueued.append((run_id, browser_cookie))
 
     monkeypatch.setattr(SubagentRunService, "_create_run_record", _fake_create_run_record(captured))
     monkeypatch.setattr(service_module.agent_run_service, "enqueue_agent_run", fake_enqueue)
 
-    result = await SubagentRunService(db).start(
-        uid="user-1",
-        created_by_run_id="parent-run",
-        agent_item=_agent(),
-        input_message=build_chat_input_message("run in background"),
-        tool_call_id="tool-1",
-        model_spec="provider:model",
-    )
+    parent_secret = BrowserCookieRuntimeSecret(header="sid=parent", origin="https://yuxi.example.com")
+    async with sandbox_runtime_scope(SandboxRuntimeCredentials("parent-run", parent_secret)):
+        result = await SubagentRunService(db).start(
+            uid="user-1",
+            created_by_run_id="parent-run",
+            agent_item=_agent(),
+            input_message=build_chat_input_message("run in background"),
+            tool_call_id="tool-1",
+            model_spec="provider:model",
+        )
 
     child_thread_id = make_child_thread_id("parent-thread", "worker", "tool-1")
     assert result.created is True
@@ -357,7 +361,37 @@ async def test_subagent_run_service_creates_child_relation_run_and_enqueue(monke
     assert captured["create_run_record"]["input_message"].raw_message()["type"] == "human"
     assert captured["create_run_record"]["input_message"].raw_message()["content"] == "run in background"
     assert db.committed is True
-    assert enqueued == ["child-run"]
+    assert enqueued == [("child-run", parent_secret)]
+
+
+@pytest.mark.asyncio
+async def test_subagent_run_service_enqueues_without_cookie_outside_runtime_context(monkeypatch: pytest.MonkeyPatch):
+    db = _FakeDB()
+    captured: dict[str, object] = {}
+    enqueued = []
+    _patch_repos(
+        monkeypatch,
+        captured=captured,
+        child_conversation=SimpleNamespace(id=20, uid="user-1", agent_id="worker", status="active"),
+        created_relation=_relation(child_thread_id=""),
+    )
+
+    async def fake_enqueue(run_id: str, browser_cookie: BrowserCookieRuntimeSecret | None = None):
+        enqueued.append((run_id, browser_cookie))
+
+    monkeypatch.setattr(SubagentRunService, "_create_run_record", _fake_create_run_record(captured))
+    monkeypatch.setattr(service_module.agent_run_service, "enqueue_agent_run", fake_enqueue)
+
+    result = await SubagentRunService(db).start(
+        uid="user-1",
+        created_by_run_id="parent-run",
+        agent_item=_agent(),
+        input_message=build_chat_input_message("run without browser login"),
+        tool_call_id="tool-1",
+    )
+
+    assert result.run.id == "child-run"
+    assert enqueued == [("child-run", None)]
 
 
 @pytest.mark.asyncio
@@ -367,8 +401,8 @@ async def test_subagent_run_service_continues_existing_relation(monkeypatch: pyt
     relation = _relation()
     _patch_repos(monkeypatch, captured=captured, existing_relation=relation)
 
-    async def fake_enqueue(run_id: str):
-        captured["enqueued"] = run_id
+    async def fake_enqueue(run_id: str, browser_cookie: BrowserCookieRuntimeSecret | None = None):
+        captured["enqueued"] = (run_id, browser_cookie)
 
     monkeypatch.setattr(
         SubagentRunService,
@@ -393,7 +427,7 @@ async def test_subagent_run_service_continues_existing_relation(monkeypatch: pyt
     assert captured["create_run_record"]["input_message"].content == "continue"
     assert captured["create_run_record"]["input_message"].raw_message()["type"] == "human"
     assert captured["create_run_record"]["input_message"].raw_message()["content"] == "continue"
-    assert captured["enqueued"] == "child-run-2"
+    assert captured["enqueued"] == ("child-run-2", None)
 
 
 @pytest.mark.asyncio
@@ -517,8 +551,8 @@ async def test_subagent_run_service_translates_busy_run(monkeypatch: pytest.Monk
         del kwargs
         raise HTTPException(status_code=409, detail={"code": "run_busy", "active_run_id": "active-run"})
 
-    async def fake_enqueue(run_id: str):
-        del run_id
+    async def fake_enqueue(run_id: str, browser_cookie: BrowserCookieRuntimeSecret | None = None):
+        del run_id, browser_cookie
         raise AssertionError("busy run should not enqueue")
 
     monkeypatch.setattr(SubagentRunService, "_create_run_record", fake_create_run_record)

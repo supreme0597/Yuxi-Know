@@ -12,6 +12,7 @@ from yuxi.services.input_message_service import (
     build_chat_input_message_from_openai_content,
     restore_chat_input_message,
 )
+from yuxi.services.run_runtime_secret_service import BrowserCookieRuntimeSecret
 
 
 def _chat_input(content: str, image_content: str | None = None):
@@ -23,6 +24,90 @@ def _sse_data(chunk: str) -> dict:
         if line.startswith("data: "):
             return json.loads(line.removeprefix("data: "))
     raise AssertionError(f"SSE chunk has no data line: {chunk}")
+
+
+@pytest.mark.asyncio
+async def test_enqueue_agent_run_stores_secret_and_queues_only_run_id(monkeypatch: pytest.MonkeyPatch):
+    stored = []
+    queued = []
+    secret = BrowserCookieRuntimeSecret(header="sid=abc", origin="https://yuxi.example.com")
+
+    async def fake_store(run_id, browser_cookie):
+        stored.append((run_id, browser_cookie))
+
+    class Queue:
+        async def enqueue_job(self, job_name, run_id, *, _job_id):
+            queued.append((job_name, run_id, _job_id))
+
+    async def fake_get_arq_pool():
+        return Queue()
+
+    monkeypatch.setattr(agent_run_service, "store_run_browser_cookie_secret", fake_store, raising=False)
+    monkeypatch.setattr(agent_run_service, "get_arq_pool", fake_get_arq_pool)
+
+    await agent_run_service.enqueue_agent_run("run-1", secret)
+
+    assert stored == [("run-1", secret)]
+    assert queued == [("process_agent_run", "run-1", "run:run-1")]
+
+
+@pytest.mark.asyncio
+async def test_enqueue_agent_run_deletes_secret_when_queue_fails(monkeypatch: pytest.MonkeyPatch):
+    deleted = []
+
+    async def fake_store(run_id, browser_cookie):
+        del run_id, browser_cookie
+
+    async def fake_delete(run_id):
+        deleted.append(run_id)
+
+    class Queue:
+        async def enqueue_job(self, job_name, run_id, *, _job_id):
+            del job_name, run_id, _job_id
+            raise RuntimeError("queue unavailable")
+
+    async def fake_get_arq_pool():
+        return Queue()
+
+    monkeypatch.setattr(agent_run_service, "store_run_browser_cookie_secret", fake_store, raising=False)
+    monkeypatch.setattr(agent_run_service, "delete_run_browser_cookie_secret", fake_delete, raising=False)
+    monkeypatch.setattr(agent_run_service, "get_arq_pool", fake_get_arq_pool)
+
+    with pytest.raises(RuntimeError, match="queue unavailable"):
+        await agent_run_service.enqueue_agent_run(
+            "run-1",
+            BrowserCookieRuntimeSecret(header="sid=abc", origin="https://yuxi.example.com"),
+        )
+
+    assert deleted == ["run-1"]
+
+
+@pytest.mark.asyncio
+async def test_enqueue_agent_run_cleanup_failure_does_not_mask_queue_error(monkeypatch: pytest.MonkeyPatch):
+    async def fake_store(run_id, browser_cookie):
+        del run_id, browser_cookie
+
+    async def fake_delete(run_id):
+        del run_id
+        raise RuntimeError("redis cleanup failed")
+
+    class Queue:
+        async def enqueue_job(self, job_name, run_id, *, _job_id):
+            del job_name, run_id, _job_id
+            raise ValueError("queue rejected run")
+
+    async def fake_get_arq_pool():
+        return Queue()
+
+    monkeypatch.setattr(agent_run_service, "store_run_browser_cookie_secret", fake_store, raising=False)
+    monkeypatch.setattr(agent_run_service, "delete_run_browser_cookie_secret", fake_delete, raising=False)
+    monkeypatch.setattr(agent_run_service, "get_arq_pool", fake_get_arq_pool)
+
+    with pytest.raises(ValueError, match="queue rejected run"):
+        await agent_run_service.enqueue_agent_run(
+            "run-1",
+            BrowserCookieRuntimeSecret(header="sid=abc", origin="https://yuxi.example.com"),
+        )
 
 
 def test_openai_content_parts_build_and_restore_multimodal_message():
@@ -249,7 +334,8 @@ class _CreateRunDb:
         self.committed = False
         self.created_run = None
         self.created_run_kwargs = None
-        self.enqueued: list[tuple[str, str, str]] = []
+        self.enqueued: list[tuple[str, str, str | None]] = []
+        self.runtime_secrets = []
         self.order: list[str] = []
         self.request_id_lookups: list[str] = []
         self.active_run_lookup = None
@@ -709,7 +795,8 @@ async def test_create_agent_run_persists_input_before_enqueue(monkeypatch: pytes
     assert db.created_run_kwargs["input_message_id"] == 10
     assert db.added[0].run_id == db.created_run.id
     assert db.added[0].request_id == "req-1"
-    assert db.enqueued == [("process_agent_run", db.created_run.id, None, f"run:{db.created_run.id}")]
+    assert db.enqueued == [("process_agent_run", db.created_run.id, f"run:{db.created_run.id}")]
+    assert db.runtime_secrets == [(db.created_run.id, None)]
     assert db.created_run_kwargs["input_payload"] == {"model_spec": "agent-default-model"}
     assert "model_spec" not in db.added[0].extra_metadata
     assert db.added[0].extra_metadata["raw_message"]["type"] == "human"
@@ -1333,19 +1420,28 @@ def _patch_agent_run_creation(
             )
 
     class Queue:
-        async def enqueue_job(self, job_name: str, run_id: str, browser_cookies=None, _job_id: str = None):
+        async def enqueue_job(self, job_name: str, run_id: str, _job_id: str = None):
             assert db.committed is True
             db.order.append("enqueue")
-            db.enqueued.append((job_name, run_id, browser_cookies, _job_id))
+            db.enqueued.append((job_name, run_id, _job_id))
 
     async def fake_get_arq_pool():
         return Queue()
+
+    async def fake_store_run_browser_cookie_secret(run_id, secret):
+        db.runtime_secrets.append((run_id, secret))
 
     monkeypatch.setattr(agent_run_service.agent_manager, "get_agent", lambda backend_id: _FakeBackend())
     monkeypatch.setattr(agent_run_service, "AgentRepository", AgentRepo)
     monkeypatch.setattr(agent_run_service, "ConversationRepository", ConvRepo)
     monkeypatch.setattr(agent_run_service, "AgentRunRepository", _CreateRunRepo)
     monkeypatch.setattr(agent_run_service, "get_arq_pool", fake_get_arq_pool)
+    monkeypatch.setattr(
+        agent_run_service,
+        "store_run_browser_cookie_secret",
+        fake_store_run_browser_cookie_secret,
+        raising=False,
+    )
     return db
 
 
