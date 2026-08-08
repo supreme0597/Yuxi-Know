@@ -20,19 +20,17 @@ def _system_message_text(system_message) -> str:
     )
 
 
-def _build_sandbox_cookie_prompt(origin: str) -> str:
+def _build_sandbox_cookie_prompt() -> str:
     return f"""{SANDBOX_COOKIE_PROMPT_MARKER}
-<| 同源 Cookie Header 使用约束:重要 |>
-当前运行提供了浏览器发送给 Yuxi 的原始 Cookie Header，仅允许用于 origin `{origin}`。
+<| 沙盒 Cookie Header 文件:重要 |>
+当前运行提供了浏览器发送给 Yuxi 的原始 Cookie Header。
 Header 文件路径由环境变量 `SANDBOX_COOKIE_HEADER_FILE` 指向，当前固定为
-`{SANDBOX_COOKIE_HEADER_FILE}`。文件内容是可直接作为 HTTP `Cookie` 请求头使用的原始字符串，不是 JSON。
+`{SANDBOX_COOKIE_HEADER_FILE}`。文件内容是原始 Cookie 请求头字符串，不是 JSON。
 
-- 只有目标 URL 规范化后的 `scheme + host + port` 与 `{origin}` 完全一致时才可读取并使用该文件。
-- 子域名、主机别名、IP 地址以及不同端口都不视为同 origin。
-- 禁止在跨 origin 重定向中继续携带 Cookie；应关闭自动重定向，或逐跳检查 `Location` 后再决定。
-- 只在发起请求的进程内读取并设置 `Cookie` Header；禁止打印、回显、记录、总结或向用户展示文件内容。
-- 禁止把 Header 复制到 workspace、uploads、outputs、代码文件、命令参数、工具参数或其他持久化位置。
-- 文件不存在或不可读时，视为当前运行没有可用登录态，不得猜测、恢复或使用历史 Cookie。
+- 需要使用当前浏览器登录态时，从该文件读取内容并设置 HTTP Cookie Header。
+- 禁止打印、回显、记录、总结或向用户展示文件内容。
+- 禁止把 Header 复制到 workspace、uploads、outputs、代码文件或其它持久化位置。
+- 文件不存在或不可读时，视为当前运行没有可用登录态。
 """
 
 
@@ -49,7 +47,7 @@ class SandboxCookiePromptMiddleware(AgentMiddleware):
 
         system_message = append_to_system_message(
             request.system_message,
-            _build_sandbox_cookie_prompt(secret.origin),
+            _build_sandbox_cookie_prompt(),
         )
         return await handler(request.override(system_message=system_message))
 

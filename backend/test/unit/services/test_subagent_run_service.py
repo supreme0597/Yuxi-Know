@@ -328,7 +328,7 @@ async def test_subagent_run_service_creates_child_relation_run_and_enqueue(monke
     monkeypatch.setattr(SubagentRunService, "_create_run_record", _fake_create_run_record(captured))
     monkeypatch.setattr(service_module.agent_run_service, "enqueue_agent_run", fake_enqueue)
 
-    parent_secret = BrowserCookieRuntimeSecret(header="sid=parent", origin="https://yuxi.example.com")
+    parent_secret = BrowserCookieRuntimeSecret(header="sid=parent")
     async with sandbox_runtime_scope(SandboxRuntimeCredentials("parent-run", parent_secret)):
         result = await SubagentRunService(db).start(
             uid="user-1",

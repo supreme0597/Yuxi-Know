@@ -24,11 +24,10 @@ class FakeRequest:
 
 
 @pytest.mark.asyncio
-async def test_sandbox_cookie_prompt_injects_origin_and_rules_without_header():
+async def test_sandbox_cookie_prompt_describes_only_the_runtime_header_file():
     captured = {}
     secret = BrowserCookieRuntimeSecret(
         header="session=secret-value; theme=dark",
-        origin="https://yuxi.example.com",
     )
 
     async def handler(request):
@@ -40,12 +39,12 @@ async def test_sandbox_cookie_prompt_injects_origin_and_rules_without_header():
 
     text = _system_message_text(captured["request"].system_message)
     assert result == "ok"
-    assert "https://yuxi.example.com" in text
+    assert "原始 Cookie Header" in text
     assert "SANDBOX_COOKIE_HEADER_FILE" in text
     assert "/home/gem/.yuxi-runtime/browser-cookie-header.txt" in text
-    assert "scheme + host + port" in text
-    assert "跨 origin" in text
+    assert "不是 JSON" in text
     assert "session=secret-value" not in text
+    assert "origin" not in text
 
 
 @pytest.mark.asyncio
@@ -78,7 +77,7 @@ async def test_sandbox_cookie_prompt_skips_context_without_cookie():
 @pytest.mark.asyncio
 async def test_sandbox_cookie_prompt_is_injected_only_once():
     middleware = SandboxCookiePromptMiddleware()
-    secret = BrowserCookieRuntimeSecret("session=secret-value", "https://yuxi.example.com")
+    secret = BrowserCookieRuntimeSecret(header="session=secret-value")
     captured = {}
 
     async def first_handler(request):

@@ -127,7 +127,7 @@ async def test_process_agent_run_exposes_loaded_runtime_credentials(
             },
         }
     _patch_common(monkeypatch, run_obj)
-    secret = BrowserCookieRuntimeSecret(header="sid=latest", origin="https://yuxi.example.com")
+    secret = BrowserCookieRuntimeSecret(header="sid=latest")
     captured = {}
     deleted = []
 
