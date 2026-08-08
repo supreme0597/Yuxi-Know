@@ -275,7 +275,6 @@ async def create_agent_run(
         created_by_run_id=payload.created_by_run_id,
         browser_cookie=build_browser_cookie_runtime_secret(
             request.headers.get("cookie"),
-            str(request.base_url),
         ),
     )
 

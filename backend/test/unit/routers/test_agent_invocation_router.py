@@ -146,6 +146,7 @@ def test_legacy_agent_call_run_path_is_not_registered(monkeypatch: pytest.Monkey
 
 def test_agent_call_run_creates_async_run_and_returns_agent_call_payload(monkeypatch: pytest.MonkeyPatch):
     calls: dict[str, object] = {}
+    builder_calls: list[str | None] = []
 
     async def fake_create_agent_call_run_view(**kwargs):
         calls["kwargs"] = kwargs
@@ -160,10 +161,19 @@ def test_agent_call_run_creates_async_run_and_returns_agent_call_payload(monkeyp
             "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
         }
 
+    def fake_build_browser_cookie_runtime_secret(cookie_header: str | None):
+        builder_calls.append(cookie_header)
+        return BrowserCookieRuntimeSecret(header=str(cookie_header))
+
     monkeypatch.setattr(
         agent_invocation_router_module,
         "create_agent_call_run_view",
         fake_create_agent_call_run_view,
+    )
+    monkeypatch.setattr(
+        agent_invocation_router_module,
+        "build_browser_cookie_runtime_secret",
+        fake_build_browser_cookie_runtime_secret,
     )
     client = _build_app(monkeypatch)
 
@@ -195,9 +205,9 @@ def test_agent_call_run_creates_async_run_and_returns_agent_call_payload(monkeyp
     assert calls["kwargs"]["async_mode"] is True
     assert calls["kwargs"]["stream"] is False
     assert calls["kwargs"]["current_user"].uid == "user-1"
+    assert builder_calls == ["session=abc; theme=dark; session=path-specific"]
     assert calls["kwargs"]["browser_cookie"] == BrowserCookieRuntimeSecret(
         header="session=abc; theme=dark; session=path-specific",
-        origin="http://testserver",
     )
 
 

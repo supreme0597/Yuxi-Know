@@ -21,7 +21,6 @@ import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any, Literal
-from urllib.parse import urlsplit
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -362,35 +361,10 @@ async def get_agent_run_progress(run_id: str, *, message_limit: int = RUN_PROGRE
 BROWSER_COOKIE_HEADER_MAX_SIZE = 32_768
 
 
-def _normalize_http_origin(url: str) -> str:
-    parsed = urlsplit(url)
-    scheme = parsed.scheme.lower()
-    if scheme not in {"http", "https"} or not parsed.hostname:
-        raise ValueError("request base URL must contain an HTTP origin")
-    port = parsed.port
-    default_port = 80 if scheme == "http" else 443
-    port_suffix = f":{port}" if port is not None and port != default_port else ""
-    host = parsed.hostname.lower()
-    authority_host = f"[{host}]" if ":" in host else host
-    return f"{scheme}://{authority_host}{port_suffix}"
-
-
-def _browser_cookie_origin(request_base_url: str) -> str:
-    configured_origin = (os.getenv("YUXI_PUBLIC_ORIGIN") or "").strip()
-    if configured_origin:
-        return _normalize_http_origin(configured_origin)
-
-    environment = (os.getenv("YUXI_ENV") or "development").strip().lower()
-    if environment in {"production", "prod"}:
-        raise ValueError("YUXI_PUBLIC_ORIGIN is required for browser Cookie sandbox injection in production")
-    return _normalize_http_origin(request_base_url)
-
-
 def build_browser_cookie_runtime_secret(
     cookie_header: str | None,
-    request_base_url: str,
 ) -> BrowserCookieRuntimeSecret | None:
-    """保留浏览器发给 Yuxi 的原始 Cookie Header，并绑定服务端请求 origin。"""
+    """保留浏览器发给 Yuxi 的原始 Cookie Header。"""
     header = str(cookie_header or "")
     if not header:
         return None
@@ -398,10 +372,7 @@ def build_browser_cookie_runtime_secret(
     if payload_size > BROWSER_COOKIE_HEADER_MAX_SIZE:
         logger.warning(f"browser cookie header too large ({payload_size} bytes), skip sandbox injection")
         return None
-    return BrowserCookieRuntimeSecret(
-        header=header,
-        origin=_browser_cookie_origin(request_base_url),
-    )
+    return BrowserCookieRuntimeSecret(header=header)
 
 
 async def create_agent_run_view(

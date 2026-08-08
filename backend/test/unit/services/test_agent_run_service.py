@@ -30,7 +30,7 @@ def _sse_data(chunk: str) -> dict:
 async def test_enqueue_agent_run_stores_secret_and_queues_only_run_id(monkeypatch: pytest.MonkeyPatch):
     stored = []
     queued = []
-    secret = BrowserCookieRuntimeSecret(header="sid=abc", origin="https://yuxi.example.com")
+    secret = BrowserCookieRuntimeSecret(header="sid=abc")
 
     async def fake_store(run_id, browser_cookie):
         stored.append((run_id, browser_cookie))
@@ -76,7 +76,7 @@ async def test_enqueue_agent_run_deletes_secret_when_queue_fails(monkeypatch: py
     with pytest.raises(RuntimeError, match="queue unavailable"):
         await agent_run_service.enqueue_agent_run(
             "run-1",
-            BrowserCookieRuntimeSecret(header="sid=abc", origin="https://yuxi.example.com"),
+            BrowserCookieRuntimeSecret(header="sid=abc"),
         )
 
     assert deleted == ["run-1"]
@@ -106,7 +106,7 @@ async def test_enqueue_agent_run_cleanup_failure_does_not_mask_queue_error(monke
     with pytest.raises(ValueError, match="queue rejected run"):
         await agent_run_service.enqueue_agent_run(
             "run-1",
-            BrowserCookieRuntimeSecret(header="sid=abc", origin="https://yuxi.example.com"),
+            BrowserCookieRuntimeSecret(header="sid=abc"),
         )
 
 

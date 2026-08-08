@@ -74,7 +74,6 @@ async def create_agent_call_run(
         db=db,
         browser_cookie=build_browser_cookie_runtime_secret(
             request.headers.get("cookie"),
-            str(request.base_url),
         ),
     )
 
