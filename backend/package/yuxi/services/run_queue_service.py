@@ -11,12 +11,31 @@ from datetime import UTC, datetime
 from yuxi.storage.redis import close_async_redis_client, create_arq_redis_pool, get_async_redis_client
 from yuxi.utils.logging_config import logger
 
+
+def _positive_int_env(name: str, default: int) -> int:
+    raw = os.getenv(name, str(default))
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be a positive integer") from exc
+    if value <= 0:
+        raise ValueError(f"{name} must be a positive integer")
+    return value
+
+
 RUN_CANCEL_KEY_TTL_SECONDS = int(os.getenv("RUN_CANCEL_KEY_TTL_SECONDS", "1800"))
 RUN_EVENTS_STREAM_TTL_SECONDS = int(os.getenv("RUN_EVENTS_STREAM_TTL_SECONDS", "7200"))
 RUN_EVENTS_STREAM_MAXLEN = int(os.getenv("RUN_EVENTS_STREAM_MAXLEN", "0"))
 RUN_CANCEL_CHANNEL = os.getenv("RUN_CANCEL_CHANNEL", "run:cancel:ch")
+AGENT_RUN_JOB_TIMEOUT_SECONDS = _positive_int_env("AGENT_RUN_JOB_TIMEOUT_SECONDS", 3600)
+AGENT_RUN_MAX_TRIES = _positive_int_env("AGENT_RUN_MAX_TRIES", 2)
+AGENT_RUN_SECRET_TTL_SAFETY_FACTOR = 2
 
 _arq_pool = None
+
+
+def agent_run_runtime_secret_ttl_seconds() -> int:
+    return AGENT_RUN_JOB_TIMEOUT_SECONDS * AGENT_RUN_MAX_TRIES * AGENT_RUN_SECRET_TTL_SAFETY_FACTOR
 
 
 def _cancel_key(run_id: str) -> str:

@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
 import pytest
+import yuxi.services.run_queue_service as run_queue_service
 import yuxi.services.run_worker as run_worker
 from yuxi.agents.backends.sandbox.runtime_context import (
     SandboxRuntimeCredentials,
@@ -13,6 +14,11 @@ from yuxi.agents.backends.sandbox.runtime_context import (
     sandbox_runtime_scope,
 )
 from yuxi.services.run_runtime_secret_service import BrowserCookieRuntimeSecret
+
+
+def test_worker_settings_use_shared_execution_policy():
+    assert run_worker.WorkerSettings.job_timeout == run_queue_service.AGENT_RUN_JOB_TIMEOUT_SECONDS
+    assert run_worker.WorkerSettings.max_tries == run_queue_service.AGENT_RUN_MAX_TRIES
 
 
 class _RaisingAsyncIter:

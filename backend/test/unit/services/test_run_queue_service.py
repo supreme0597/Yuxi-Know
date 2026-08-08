@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import importlib
+import os
+
 import pytest
 import yuxi.services.run_queue_service as run_queue_service
 
@@ -33,6 +36,32 @@ class _FakeStreamRedis:
         del max, min
         rows = list(reversed(self.streams.get(key, [])))
         return rows[:count]
+
+
+@pytest.fixture
+def reload_execution_policy(monkeypatch: pytest.MonkeyPatch):
+    names = (
+        "AGENT_RUN_JOB_TIMEOUT_SECONDS",
+        "AGENT_RUN_MAX_TRIES",
+    )
+    original = {name: os.environ.get(name) for name in names}
+
+    def reload_with(**values):
+        for name in names:
+            monkeypatch.delenv(name, raising=False)
+        for name, value in values.items():
+            monkeypatch.setenv(name, str(value))
+        return importlib.reload(run_queue_service)
+
+    try:
+        yield reload_with
+    finally:
+        for name, value in original.items():
+            if value is None:
+                monkeypatch.delenv(name, raising=False)
+            else:
+                monkeypatch.setenv(name, value)
+        importlib.reload(run_queue_service)
 
 
 @pytest.mark.asyncio
@@ -90,3 +119,34 @@ def test_normalize_after_seq_stream_id_only():
     assert run_queue_service.normalize_after_seq("1700000000000-3") == "1700000000000-3"
     assert run_queue_service.normalize_after_seq("12") == "0-0"
     assert run_queue_service.normalize_after_seq("bad-value") == "0-0"
+
+
+def test_agent_run_execution_policy_defaults(reload_execution_policy):
+    module = reload_execution_policy()
+
+    assert module.AGENT_RUN_JOB_TIMEOUT_SECONDS == 3600
+    assert module.AGENT_RUN_MAX_TRIES == 2
+    assert module.AGENT_RUN_SECRET_TTL_SAFETY_FACTOR == 2
+    assert module.agent_run_runtime_secret_ttl_seconds() == 14_400
+
+
+def test_agent_run_execution_policy_reads_environment(reload_execution_policy):
+    module = reload_execution_policy(
+        AGENT_RUN_JOB_TIMEOUT_SECONDS="7200",
+        AGENT_RUN_MAX_TRIES="3",
+    )
+
+    assert module.AGENT_RUN_JOB_TIMEOUT_SECONDS == 7200
+    assert module.AGENT_RUN_MAX_TRIES == 3
+    assert module.agent_run_runtime_secret_ttl_seconds() == 43_200
+
+
+@pytest.mark.parametrize("name", ["AGENT_RUN_JOB_TIMEOUT_SECONDS", "AGENT_RUN_MAX_TRIES"])
+@pytest.mark.parametrize("value", ["0", "-1", "invalid"])
+def test_agent_run_execution_policy_rejects_non_positive_values(
+    reload_execution_policy,
+    name: str,
+    value: str,
+):
+    with pytest.raises(ValueError, match=name):
+        reload_execution_policy(**{name: value})

@@ -17,6 +17,8 @@ from yuxi.repositories.agent_run_repository import TERMINAL_RUN_STATUSES, AgentR
 from yuxi.services.chat_service import stream_agent_chat, stream_agent_resume
 from yuxi.services.input_message_service import restore_chat_input_message
 from yuxi.services.run_queue_service import (
+    AGENT_RUN_JOB_TIMEOUT_SECONDS,
+    AGENT_RUN_MAX_TRIES,
     append_run_stream_event,
     clear_cancel_signal,
     has_cancel_signal,
@@ -590,9 +592,9 @@ async def _worker_shutdown(ctx):
 
 class WorkerSettings:
     functions = [process_agent_run]
-    max_tries = 2
+    max_tries = AGENT_RUN_MAX_TRIES
     retry_jobs = True
-    job_timeout = 3600
+    job_timeout = AGENT_RUN_JOB_TIMEOUT_SECONDS
     keep_result = 60
     on_startup = _worker_startup
     on_shutdown = _worker_shutdown
