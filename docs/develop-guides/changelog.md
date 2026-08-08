@@ -8,12 +8,12 @@
 
 ### 浏览器 Cookie 注入沙盒（运行期，不落库）
 
-- Agent 请求入口直接保留浏览器发给 Yuxi 的原始 `Cookie` Header；生产环境从服务端配置的 `YUXI_PUBLIC_ORIGIN` 得到允许使用的规范 origin，开发环境未配置时才回退到 `request.base_url`。不再通过 `request.cookies` 转成字典或 JSON，因此重复 cookie 名、顺序和路径选择结果保持不变，仍可包含浏览器自动发送的 HttpOnly cookie。
-- 原始 Header 与 origin 作为按 `run_id` 隔离、默认 4 小时 TTL 的 Redis 临时凭据保存；该凭据使用独立的 `runtime-secret-redis`，关闭 AOF/RDB、使用 `/data` tmpfs 且不挂载宿主机卷，不得复用持久化的主 `REDIS_URL`。ARQ 任务参数只携带 `run_id`，Header 不进入 Postgres、AgentRun meta/input、LangGraph state/configurable、队列参数/结果或日志。队列失败、run 终态和 TTL 会清理凭据，retryable 的首次尝试会保留凭据供重试。
+- Agent 请求入口直接保留浏览器发给 Yuxi 的原始 `Cookie` Header，不再通过 `request.cookies` 转成字典或 JSON，因此重复 cookie 名、顺序和路径选择结果保持不变，仍可包含浏览器自动发送的 HttpOnly cookie。HTTP Header 不包含 Cookie 的 Domain/Path 属性，完整 Header 也可能包含只适用于当前 Yuxi 主机的 cookie；本功能不推导允许域，也不校验 Agent 请求的目标 URL。
+- 原始 Header 作为按 `run_id` 隔离的 Redis 临时凭据保存，并复用现有主 Redis；ARQ 任务参数只携带 `run_id`，Header 不进入 Postgres、AgentRun meta/input、LangGraph state/configurable、队列参数/结果或日志。TTL 固定按 worker 单次执行上限 × 最大尝试次数 × 2 推导，API 与 worker 从相同的 `AGENT_RUN_JOB_TIMEOUT_SECONDS` 和 `AGENT_RUN_MAX_TRIES` 配置取值。队列失败、run 终态和 TTL 会清理凭据，retryable 的首次尝试会保留凭据供重试；主 Redis 的 AOF/RDB、复制和备份策略保持不变。
 - Worker 通过 run 级 `ContextVar` 为 chat、resume 和 subagent 激活凭据；resume 使用本次请求的最新 Header，subagent 把父 run 凭据复制到 child run 的 Redis key。没有运行期上下文的 viewer/API 沙盒访问不会修改凭据文件。
 - Agent 第一次实际访问沙盒时，才把原始 Header 懒写入 `/home/gem/.yuxi-runtime/browser-cookie-header.txt`；环境变量 `SANDBOX_COOKIE_HEADER_FILE` 只提供固定路径指针。目录权限为 `0700`、文件权限为 `0600`，写入采用临时文件加原子替换，run 退出和下一次无凭据 run 会删除旧文件；不再使用 `SANDBOX_COOKIES_JSON`。
 - Provisioner 响应新增真实 `instance_id`（Docker container ID / Kubernetes Pod UID），同一逻辑沙盒被超时删除并重建后，即使代理 URL 不变也会重新注入。`cookie-header-file-v1` 运行契约会让缺少固定路径指针的历史沙盒在升级后重建一次。
-- 主 Agent 与 subagent 仅在存在凭据时动态获得同源使用说明：提示词包含允许 origin、文件路径、精确 `scheme + host + port` 比较、跨 origin 重定向和禁止泄露/持久化规则，不包含 Header 内容。该限制属于模型执行策略，不等价于网络层硬隔离；需要强制同源时仍应引入认证代理。
+- 主 Agent 与 subagent 仅在存在凭据时动态获得文件使用说明：提示词只包含固定路径、原始 Header 格式和禁止泄露/持久化要求，不包含 Header 内容，也不承担域名授权或网络隔离职责。
 - Header 按 Latin-1 字节表示限制为 32 KiB，空值或超限值跳过注入；浏览器已经只选择适用于本次 Yuxi 请求的 cookie，原始 Header 本身不含 Domain/Path 元数据。
 
 

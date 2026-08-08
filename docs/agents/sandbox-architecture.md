@@ -167,20 +167,20 @@ skills 的结合方式分成两层。第一层是提示词层，`prepare_agent_r
 浏览器 Cookie 使用一条独立的运行期凭据链，不复用用户持久化环境变量，也不把 Cookie 写进 AgentRun、LangGraph state 或 ARQ 参数：
 
 ```text
-HTTP 原始 Cookie Header + 服务端规范化的 Yuxi origin
-→ 独立无持久化 Redis Hash agent-run:runtime-secret:<run_id>
+HTTP 原始 Cookie Header
+→ 现有主 Redis Hash agent-run:runtime-secret:<run_id>
 → ARQ（只传 run_id）
 → worker 的 run 级 ContextVar
-→ 动态系统提示词（只含 origin、文件路径和安全规则）
+→ 主 Agent / subagent 动态系统提示词（只含文件路径、原始 Header 格式和保密要求）
 → 第一次实际访问沙盒
 → /home/gem/.yuxi-runtime/browser-cookie-header.txt
 ```
 
-API 在 `/api/agent/runs` 和 `/api/agent-invocation/agent-call/runs` 入口读取原始 `Cookie` Header，不调用 `request.cookies` 重建字典。浏览器在发起 Yuxi 请求时已经根据 Domain、Path、Secure 等属性筛选出适用 cookie；HTTP `Cookie` Header 只剩最终的名称和值序列，不包含 Domain/Path 元数据，因此运行期文件保留浏览器发来的原始字符串，不转换为 JSON，也不尝试恢复已经丢失的属性。Header 按 Latin-1 字节表示限制为 32 KiB。
+API 在 `/api/agent/runs` 和 `/api/agent-invocation/agent-call/runs` 入口读取原始 `Cookie` Header，不调用 `request.cookies` 重建字典。浏览器在发起 Yuxi 请求时已经根据 Domain、Path、Secure 等属性筛选出适用 cookie；HTTP `Cookie` Header 只剩最终的名称和值序列，不包含 Domain/Path 元数据，因此运行期文件保留浏览器发来的原始字符串，不转换为 JSON，也不尝试恢复已经丢失的属性。完整 Header 也可能包含只适用于当前 Yuxi 主机的 cookie；本功能不会从 Header 推导允许域，也不会校验 Agent 最终请求的目标 URL。Header 按 Latin-1 字节表示限制为 32 KiB。
 
-允许 origin 由服务端控制，不接受用户消息、请求体或未经校验的 `Origin` Header。生产环境必须配置浏览器可见的 `YUXI_PUBLIC_ORIGIN`，例如 `https://yuxi.example.com`；开发环境未配置时才从 `request.base_url` 规范化。比较规则是精确的 `scheme + host + port`：默认端口省略，非默认端口保留；子域名、主机别名、IP 和不同端口都不视为同 origin。这样不会依赖 Uvicorn 是否信任某一层反向代理，也不会把外部 HTTPS 误识别成内部 HTTP。
+Redis Hash 以 `run_id` 隔离，只保存 `header`，并复用现有主 Redis 客户端。凭据 TTL 固定按 `AGENT_RUN_JOB_TIMEOUT_SECONDS × AGENT_RUN_MAX_TRIES × 2` 推导；默认值为 `3600 × 2 × 2 = 14400` 秒。API 和 worker 通过同一个 Compose 环境锚点接收执行上限和最大尝试次数，避免 ARQ 执行策略与凭据 TTL 漂移。正常情况下 run 进入终态会先主动删除 key，TTL 主要负责进程崩溃等异常场景的兜底。
 
-Redis Hash 以 `run_id` 隔离保存 `header` 和 `origin`，默认 TTL 为 14,400 秒，可通过 `AGENT_RUN_RUNTIME_SECRET_TTL_SECONDS` 调整。它必须连接 `AGENT_RUN_RUNTIME_SECRET_REDIS_URL` 指向的独立 volatile Redis；Compose 内置的 `runtime-secret-redis` 关闭 AOF/RDB、把 `/data` 放在 tmpfs 且不挂载宿主机目录。不得复用开启 AOF 的主 `REDIS_URL`，因为 TTL/DEL 只会追加删除记录，无法立即擦除旧 AOF 中的 Header。外部部署也必须提供等价的无持久化实例。
+本功能不修改主 Redis 的 AOF、RDB、复制或备份策略。TTL 和 `DEL` 会结束应用层对 key 的访问，但已有持久化文件、副本和备份中的历史字节仍按平台原有保留策略清理；如果部署环境对运行期凭据提出更严格的物理擦除要求，应由 Redis 运维与备份策略统一解决，而不是为该功能关闭整个 Redis 的持久化。
 
 ARQ 的 `process_agent_run` 参数始终只有 `run_id`。chat 和 resume 都读取自己的 run 凭据；resume 使用本次 HTTP 请求携带的最新 Header。subagent 启动时把父 run 当前凭据复制到 child run 的 Redis key，因此主 Agent 与子 Agent 具有一致的运行边界，但各自仍有独立生命周期。队列投递失败、run 进入终态或 TTL 到期会删除 Redis 凭据；首次可重试失败不会提前删除，以便第二次 worker 尝试继续使用。
 
@@ -188,9 +188,7 @@ ARQ 的 `process_agent_run` 参数始终只有 `run_id`。chat 和 resume 都读
 
 Docker 的 `/home/gem` 位于 `tmpfs`，Kubernetes 对应 `emptyDir`，所以 `.yuxi-runtime` 不属于 workspace、uploads、outputs 或其它持久化挂载。idle reaper 删除容器或 Pod 后，文件随实例一起消失。Provisioner 会返回真实 `instance_id`（Docker container ID、Kubernetes Pod UID；memory 后端使用随机 ID），后端按 `(run_id, instance_id)` 判断是否已经同步；沙盒超时删除后即使代理 URL 不变，新实例也会重新写入。`runtime-contract-version=cookie-header-file-v1` 标签/注解会让升级前缺少固定路径指针的旧实例在首次发现时重建一次。
 
-主 Agent 和 subagent 都安装了动态 Cookie 提示词中间件。只有当前 run 存在凭据时，系统提示词才会加入允许 origin、`SANDBOX_COOKIE_HEADER_FILE` 路径、精确同源比较、跨 origin 重定向检查以及禁止打印、记录、复制或持久化 Header 的规则；Header 内容本身永远不会进入提示词。自动重定向必须关闭，或逐跳检查 `Location` 后再决定是否继续携带 Cookie。
-
-需要明确的是，原始 Header 文件对 Agent 进程可读，因此上述同源限制属于模型执行策略，不是网络层强制隔离。如果未来要求即使模型或脚本误用也绝不能把 Cookie 发往其它 origin，应另行引入只接受目标 Yuxi origin 的认证代理，而不是继续增强提示词。
+主 Agent 和 subagent 都安装了动态 Cookie 提示词中间件。只有当前 run 存在凭据时，系统提示词才会说明 `SANDBOX_COOKIE_HEADER_FILE` 的固定路径、文件内容是原始 Cookie Header 而不是 JSON，以及禁止打印、记录、复制或持久化 Header；Header 内容本身永远不会进入提示词。该提示词不声明允许域、不执行同源授权，也不替代网络层访问控制。
 
 ## 十二、当前推荐如何使用 Docker 沙盒
 
@@ -240,9 +238,8 @@ sandbox-provisioner 的环境变量传递分**两层**，需要分别理解：
 | `SANDBOX_VIRTUAL_PATH_PREFIX` | 虚拟路径前缀 | `/home/gem/user-data` |
 | `SANDBOX_EXEC_TIMEOUT_SECONDS` | 命令执行超时时间 | `180` |
 | `SANDBOX_MAX_OUTPUT_BYTES` | 最大输出字节数 | `262144` |
-| `YUXI_PUBLIC_ORIGIN` | 浏览器可见的规范 Yuxi origin；生产环境必填 | `https://yuxi.example.com` |
-| `AGENT_RUN_RUNTIME_SECRET_REDIS_URL` | Cookie 运行期凭据专用无持久化 Redis | `redis://runtime-secret-redis:6379/0` |
-| `AGENT_RUN_RUNTIME_SECRET_TTL_SECONDS` | 浏览器 Cookie Redis 运行期凭据 TTL（秒） | `14400` |
+| `AGENT_RUN_JOB_TIMEOUT_SECONDS` | AgentRun worker 单次执行上限（秒），同时参与运行凭据 TTL 推导 | `3600` |
+| `AGENT_RUN_MAX_TRIES` | AgentRun 最大尝试次数，同时参与运行凭据 TTL 推导 | `2` |
 
 ### 第二层：sandbox-provisioner 内部配置
 
