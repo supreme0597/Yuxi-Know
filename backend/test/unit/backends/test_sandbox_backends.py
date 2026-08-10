@@ -17,12 +17,9 @@ from yuxi.agents.backends.composite import (
     create_agent_filesystem_middleware,
 )
 from yuxi.agents.backends.sandbox import resolve_virtual_path, sandbox_id_for_thread
-from yuxi.agents.backends.sandbox.backend import ProvisionerSandboxBackend
-from yuxi.agents.backends.sandbox.runtime_context import (
-    SANDBOX_COOKIE_HEADER_FILE,
-    SandboxRuntimeCredentials,
-    sandbox_runtime_scope,
-)
+from yuxi.agents.backends.sandbox import runtime_context as sandbox_runtime_context
+from yuxi.agents.backends.sandbox.backend import SANDBOX_COOKIE_HEADER_FILE, ProvisionerSandboxBackend
+from yuxi.agents.backends.sandbox.runtime_context import SandboxRuntimeCredentials, sandbox_runtime_scope
 from yuxi.agents.middlewares.skills import SkillsMiddleware
 from yuxi.services.run_runtime_secret_service import BrowserCookieRuntimeSecret
 from yuxi.utils.paths import VIRTUAL_PATH_CONVERSATION_HISTORY, VIRTUAL_PATH_LARGE_TOOL_RESULTS
@@ -31,6 +28,10 @@ _RUNTIME_COOKIE_CLEANUP_COMMAND = (
     f"rm -f {SANDBOX_COOKIE_HEADER_FILE} "
     f"{SANDBOX_COOKIE_HEADER_FILE.rsplit('/', 1)[0]}/.browser-cookie-header-*.tmp"
 )
+
+
+def test_runtime_context_does_not_own_cookie_file_path() -> None:
+    assert not hasattr(sandbox_runtime_context, "SANDBOX_COOKIE_HEADER_FILE")
 
 
 def _runtime(

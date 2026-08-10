@@ -3,10 +3,8 @@ from __future__ import annotations
 from deepagents.middleware._utils import append_to_system_message
 from langchain.agents.middleware import AgentMiddleware, ModelRequest, ModelResponse
 
-from yuxi.agents.backends.sandbox.runtime_context import (
-    SANDBOX_COOKIE_HEADER_FILE,
-    get_sandbox_runtime_credentials,
-)
+from yuxi.agents.backends.sandbox.backend import SANDBOX_COOKIE_HEADER_FILE
+from yuxi.agents.backends.sandbox.runtime_context import get_sandbox_runtime_credentials
 
 SANDBOX_COOKIE_PROMPT_MARKER = "<!-- sandbox_cookie_context -->"
 

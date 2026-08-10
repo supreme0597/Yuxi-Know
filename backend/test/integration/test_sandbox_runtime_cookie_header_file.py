@@ -5,12 +5,8 @@ import uuid
 
 import pytest
 
-from yuxi.agents.backends.sandbox.backend import ProvisionerSandboxBackend
-from yuxi.agents.backends.sandbox.runtime_context import (
-    SANDBOX_COOKIE_HEADER_FILE,
-    SandboxRuntimeCredentials,
-    sandbox_runtime_scope,
-)
+from yuxi.agents.backends.sandbox.backend import SANDBOX_COOKIE_HEADER_FILE, ProvisionerSandboxBackend
+from yuxi.agents.backends.sandbox.runtime_context import SandboxRuntimeCredentials, sandbox_runtime_scope
 from yuxi.services.run_runtime_secret_service import BrowserCookieRuntimeSecret
 
 
