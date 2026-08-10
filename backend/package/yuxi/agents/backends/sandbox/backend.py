@@ -54,6 +54,9 @@ _WRITABLE_ROOTS = (_WORKSPACE_ROOT, _OUTPUTS_ROOT)
 _BINARY_PREVIEW_TOO_LARGE_ERROR = f"Binary file exceeds maximum preview size of {MAX_BINARY_BYTES} bytes"
 _IMAGE_EXTENSIONS = frozenset({".gif", ".heic", ".heif", ".jpeg", ".jpg", ".png", ".webp"})
 _DOCUMENT_EXTENSIONS = frozenset({".doc", ".docx", ".pdf", ".ppt", ".pptx", ".xls", ".xlsx"})
+_SANDBOX_COOKIE_TEMP_FILE_GLOB = (
+    f"{PurePosixPath(SANDBOX_COOKIE_HEADER_FILE).parent}/.browser-cookie-header-*.tmp"
+)
 
 
 def _normalize_path(path: str) -> str:
@@ -255,7 +258,7 @@ class ProvisionerSandboxBackend(BaseSandbox):
                 self._sync_runtime_cookie_header_file(self._client, header)
                 register_sandbox_runtime_cleanup(
                     f"{self._id}:{connection.instance_id}",
-                    lambda client=self._client: self._delete_runtime_cookie_header_file(client),
+                    lambda client=self._client: self._delete_runtime_cookie_files(client),
                 )
                 self._runtime_cookie_sync_key = sync_key
 
@@ -268,28 +271,22 @@ class ProvisionerSandboxBackend(BaseSandbox):
             raise RuntimeError(error_message)
 
     @classmethod
-    def _delete_runtime_cookie_header_file(cls, client: Any) -> None:
+    def _delete_runtime_cookie_files(cls, client: Any) -> None:
         cls._run_runtime_file_command(
             client,
-            f"rm -f {SANDBOX_COOKIE_HEADER_FILE}",
-            "failed to delete sandbox runtime cookie file",
+            f"rm -f {SANDBOX_COOKIE_HEADER_FILE} {_SANDBOX_COOKIE_TEMP_FILE_GLOB}",
+            "failed to delete sandbox runtime cookie files",
         )
 
     @classmethod
-    def _cleanup_runtime_cookie_files(cls, client: Any, temp_path: str) -> None:
+    def _cleanup_runtime_cookie_files(cls, client: Any) -> None:
         with suppress(Exception):
-            cls._delete_runtime_cookie_header_file(client)
-        with suppress(Exception):
-            cls._run_runtime_file_command(
-                client,
-                f"rm -f {temp_path}",
-                "failed to delete sandbox runtime cookie temp file",
-            )
+            cls._delete_runtime_cookie_files(client)
 
     @classmethod
     def _sync_runtime_cookie_header_file(cls, client: Any, header: str | None) -> None:
         if header is None:
-            cls._delete_runtime_cookie_header_file(client)
+            cls._delete_runtime_cookie_files(client)
             return
 
         runtime_dir = str(PurePosixPath(SANDBOX_COOKIE_HEADER_FILE).parent)
@@ -305,6 +302,7 @@ class ProvisionerSandboxBackend(BaseSandbox):
                 f"chmod 700 {runtime_dir}",
                 "failed to protect sandbox runtime directory",
             )
+            cls._delete_runtime_cookie_files(client)
             result = client.file.write_file(file=temp_path, content=header)
             if not result.success:
                 raise RuntimeError("sandbox runtime cookie write failed")
@@ -319,7 +317,7 @@ class ProvisionerSandboxBackend(BaseSandbox):
                 "failed to install sandbox runtime cookie file",
             )
         except Exception:
-            cls._cleanup_runtime_cookie_files(client, temp_path)
+            cls._cleanup_runtime_cookie_files(client)
             raise RuntimeError("failed to sync sandbox runtime cookie file") from None
 
     def _read_binary(self, path: str, offset: int = 0, limit: int | None = None) -> bytes:

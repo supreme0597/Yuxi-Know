@@ -171,6 +171,149 @@ async def test_process_agent_run_exposes_loaded_runtime_credentials(
 
 
 @pytest.mark.asyncio
+async def test_process_agent_run_retries_when_runtime_secret_load_fails(monkeypatch: pytest.MonkeyPatch):
+    run_obj = _build_run()
+    _patch_common(monkeypatch, run_obj)
+    deleted = []
+
+    async def failing_load(run_id: str):
+        assert run_id == "run-1"
+        raise ConnectionError("redis unavailable")
+
+    async def fake_delete_runtime_secret(run_id: str):
+        deleted.append(run_id)
+
+    def fail_stream_agent_chat(**kwargs):
+        del kwargs
+        raise AssertionError("secret load failure must not start the agent")
+
+    monkeypatch.setattr(run_worker, "load_run_browser_cookie_secret", failing_load)
+    monkeypatch.setattr(run_worker, "delete_run_browser_cookie_secret", fake_delete_runtime_secret)
+    monkeypatch.setattr(run_worker, "stream_agent_chat", fail_stream_agent_chat)
+
+    with pytest.raises(run_worker.RetryableRunError, match="runtime secret load failed"):
+        await run_worker.process_agent_run({"job_try": 1}, "run-1")
+
+    assert run_obj.status == "pending"
+    assert deleted == []
+
+
+@pytest.mark.asyncio
+async def test_process_agent_run_fails_terminally_when_runtime_secret_load_exhausts_retries(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    run_obj = _build_run()
+    _patch_common(monkeypatch, run_obj)
+    terminal_errors = []
+    events = []
+    deleted = []
+
+    async def failing_load(run_id: str):
+        assert run_id == "run-1"
+        raise ConnectionError("redis unavailable")
+
+    async def fake_mark_terminal(run_id: str, status: str, error_type=None, error_message=None):
+        terminal_errors.append(
+            {
+                "run_id": run_id,
+                "status": status,
+                "error_type": error_type,
+                "error_message": error_message,
+            }
+        )
+        run_obj.status = status
+
+    async def fake_append_event(run_id: str, event_type: str, payload: dict, **kwargs):
+        events.append({"run_id": run_id, "event_type": event_type, "payload": payload, "kwargs": kwargs})
+
+    async def fake_delete_runtime_secret(run_id: str):
+        deleted.append(run_id)
+
+    monkeypatch.setattr(run_worker, "load_run_browser_cookie_secret", failing_load)
+    monkeypatch.setattr(run_worker, "mark_run_terminal", fake_mark_terminal)
+    monkeypatch.setattr(run_worker, "append_run_event", fake_append_event)
+    monkeypatch.setattr(run_worker, "delete_run_browser_cookie_secret", fake_delete_runtime_secret)
+
+    await run_worker.process_agent_run({"job_try": run_worker.WorkerSettings.max_tries}, "run-1")
+
+    assert terminal_errors == [
+        {
+            "run_id": "run-1",
+            "status": "failed",
+            "error_type": "runtime_secret_load_failed",
+            "error_message": "运行期 Cookie 凭据加载失败",
+        }
+    ]
+    assert events == [
+        {
+            "run_id": "run-1",
+            "event_type": "error",
+            "payload": {
+                "chunk": {
+                    "status": "error",
+                    "error_type": "runtime_secret_load_failed",
+                    "error_message": "运行期 Cookie 凭据加载失败",
+                    "retryable": False,
+                },
+                "retryable": False,
+            },
+            "kwargs": {"thread_id": None},
+        },
+        {
+            "run_id": "run-1",
+            "event_type": "end",
+            "payload": {
+                "status": "failed",
+                "chunk": {
+                    "status": "error",
+                    "error_type": "runtime_secret_load_failed",
+                    "error_message": "运行期 Cookie 凭据加载失败",
+                    "retryable": False,
+                },
+            },
+            "kwargs": {"thread_id": None},
+        },
+    ]
+    assert deleted == ["run-1"]
+
+
+@pytest.mark.asyncio
+async def test_process_agent_run_keeps_terminal_failure_when_secret_error_event_write_fails(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    run_obj = _build_run()
+    _patch_common(monkeypatch, run_obj)
+    terminal_statuses = []
+    deleted = []
+
+    async def failing_load(run_id: str):
+        assert run_id == "run-1"
+        raise ConnectionError("redis unavailable")
+
+    async def fake_mark_terminal(run_id: str, status: str, **kwargs):
+        del run_id, kwargs
+        terminal_statuses.append(status)
+        run_obj.status = status
+
+    async def failing_append_event(*args, **kwargs):
+        del args, kwargs
+        raise RuntimeError("event redis unavailable")
+
+    async def fake_delete_runtime_secret(run_id: str):
+        deleted.append(run_id)
+
+    monkeypatch.setattr(run_worker, "load_run_browser_cookie_secret", failing_load)
+    monkeypatch.setattr(run_worker, "mark_run_terminal", fake_mark_terminal)
+    monkeypatch.setattr(run_worker, "append_run_event", failing_append_event)
+    monkeypatch.setattr(run_worker, "delete_run_browser_cookie_secret", fake_delete_runtime_secret)
+
+    await run_worker.process_agent_run({"job_try": run_worker.WorkerSettings.max_tries}, "run-1")
+
+    assert terminal_statuses == ["failed"]
+    assert deleted == ["run-1"]
+
+
+@pytest.mark.asyncio
 async def test_sandbox_runtime_scope_runs_cleanup_on_error_and_cancellation():
     credentials = SandboxRuntimeCredentials(run_id="run-1", browser_cookie=None)
     cleaned = []

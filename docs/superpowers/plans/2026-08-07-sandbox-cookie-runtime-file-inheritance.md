@@ -49,7 +49,7 @@
 
 ## Global Constraints
 
-- 原始 Cookie Header 不得进入 Postgres、AgentRun input_payload/meta、LangGraph state/configurable、系统提示词、事件 payload、日志或异常文本。
+- 应用代码不得主动把原始 Cookie Header 写入 Postgres、AgentRun input_payload/meta、LangGraph state/configurable、系统提示词、事件 payload、日志或异常文本；通用 shell 的恶意回显不构成技术强保证。
 - ARQ 的 process_agent_run 签名固定为 process_agent_run(ctx, run_id: str)。
 - ARQ 参数和结果不得包含原始 Header。
 - Redis key 固定为 agent-run:runtime-secret:{run_id}。
@@ -68,6 +68,7 @@
 - 无 run context 的 viewer/API 沙盒访问不得修改 Header 文件。
 - 系统提示词只在当前 run 有 Cookie secret 时注入；main agent 和 subagent 都只收到文件路径、文件格式和保密说明。
 - 系统提示词不声明允许域，不执行同源授权，也不等价于网络层强制隔离。
+- 沙盒在 idle reaper 删除前按线程范围复用；Cookie 文件清理不等价于 run 级进程隔离，不扫描或终止同一线程中的后台进程。
 - runtime-contract-version 保持 cookie-header-file-v1；文件契约没有改变。
 - Python 测试和 Ruff 必须在 api-dev 容器内运行；第一次执行 RED 测试前先用 docker ps 确认容器已启动，未启动时运行 docker compose up -d。
 - Makefile、patch 文件、.agents、.comet 和其它用户无关改动不属于本计划。

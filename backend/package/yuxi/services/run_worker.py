@@ -38,6 +38,8 @@ LOADING_FLUSH_INTERVAL_MS = 100
 LOADING_FLUSH_MAX_CHARS = 512
 RUN_CANCEL_POLL_SECONDS = 0.2
 SUPPORTED_RUN_TYPES = {"chat", "resume", "subagent"}
+RUNTIME_SECRET_LOAD_ERROR_TYPE = "runtime_secret_load_failed"
+RUNTIME_SECRET_LOAD_ERROR_MESSAGE = "运行期 Cookie 凭据加载失败"
 
 
 class RetryableRunError(Exception):
@@ -268,12 +270,54 @@ async def _consume_stream_with_cancel(agen, run_ctx: RunContext):
             return
 
 
-async def process_agent_run(ctx, run_id: str):
-    credentials = SandboxRuntimeCredentials(
-        run_id=run_id,
-        browser_cookie=await load_run_browser_cookie_secret(run_id),
-    )
+async def _append_runtime_secret_load_failure_events(ctx, run_id: str) -> None:
+    error_chunk = {
+        "status": "error",
+        "error_type": RUNTIME_SECRET_LOAD_ERROR_TYPE,
+        "error_message": RUNTIME_SECRET_LOAD_ERROR_MESSAGE,
+        "retryable": False,
+    }
+    for event_type, payload in (
+        ("error", {"chunk": error_chunk, "retryable": False}),
+        ("end", {"status": "failed", "chunk": error_chunk}),
+    ):
+        try:
+            await append_run_event(run_id, event_type, payload, thread_id=None)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                f"Failed to append runtime secret load failure {event_type} event for run {run_id} "
+                f"(try={_job_try(ctx)}): {type(exc).__name__}"
+            )
+
+
+async def _load_sandbox_runtime_credentials(ctx, run_id: str) -> SandboxRuntimeCredentials | None:
     try:
+        return SandboxRuntimeCredentials(
+            run_id=run_id,
+            browser_cookie=await load_run_browser_cookie_secret(run_id),
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            f"Failed to load runtime secret for run {run_id} (try={_job_try(ctx)}): {type(exc).__name__}"
+        )
+        if not _is_last_try(ctx):
+            raise RetryableRunError("runtime secret load failed") from exc
+
+        await mark_run_terminal(
+            run_id,
+            "failed",
+            error_type=RUNTIME_SECRET_LOAD_ERROR_TYPE,
+            error_message=RUNTIME_SECRET_LOAD_ERROR_MESSAGE,
+        )
+        await _append_runtime_secret_load_failure_events(ctx, run_id)
+        return None
+
+
+async def process_agent_run(ctx, run_id: str):
+    try:
+        credentials = await _load_sandbox_runtime_credentials(ctx, run_id)
+        if credentials is None:
+            return
         async with sandbox_runtime_scope(credentials):
             await _process_agent_run(ctx, run_id)
     finally:

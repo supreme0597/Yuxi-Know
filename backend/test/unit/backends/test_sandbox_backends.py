@@ -24,6 +24,11 @@ from yuxi.agents.middlewares.skills import SkillsMiddleware
 from yuxi.services.run_runtime_secret_service import BrowserCookieRuntimeSecret
 from yuxi.utils.paths import VIRTUAL_PATH_CONVERSATION_HISTORY, VIRTUAL_PATH_LARGE_TOOL_RESULTS
 
+_RUNTIME_COOKIE_CLEANUP_COMMAND = (
+    f"rm -f {SANDBOX_COOKIE_HEADER_FILE} "
+    f"{SANDBOX_COOKIE_HEADER_FILE.rsplit('/', 1)[0]}/.browser-cookie-header-*.tmp"
+)
+
 
 def _runtime(
     *,
@@ -448,14 +453,15 @@ async def test_runtime_cookie_file_writes_exact_raw_header_atomically(monkeypatc
         commands = [command for command, _timeout in shell_calls]
         assert commands[0] == "mkdir -p /home/gem/.yuxi-runtime"
         assert commands[1] == "chmod 700 /home/gem/.yuxi-runtime"
-        assert commands[2].startswith("chmod 600 /home/gem/.yuxi-runtime/.browser-cookie-header-")
-        assert commands[3].startswith("mv -f /home/gem/.yuxi-runtime/.browser-cookie-header-")
-        assert commands[3].endswith(f" {SANDBOX_COOKIE_HEADER_FILE}")
+        assert commands[2] == _RUNTIME_COOKIE_CLEANUP_COMMAND
+        assert commands[3].startswith("chmod 600 /home/gem/.yuxi-runtime/.browser-cookie-header-")
+        assert commands[4].startswith("mv -f /home/gem/.yuxi-runtime/.browser-cookie-header-")
+        assert commands[4].endswith(f" {SANDBOX_COOKIE_HEADER_FILE}")
 
     assert len(writes) == 1
     assert writes[0][0].startswith("/home/gem/.yuxi-runtime/.browser-cookie-header-")
     assert writes[0][1] == secret.header
-    assert shell_calls[-1][0] == f"rm -f {SANDBOX_COOKIE_HEADER_FILE}"
+    assert shell_calls[-1][0] == _RUNTIME_COOKIE_CLEANUP_COMMAND
 
 
 @pytest.mark.asyncio
@@ -467,8 +473,8 @@ async def test_runtime_cookie_file_clears_stale_header_when_secret_is_absent(mon
 
     assert writes == []
     assert [command for command, _timeout in shell_calls] == [
-        f"rm -f {SANDBOX_COOKIE_HEADER_FILE}",
-        f"rm -f {SANDBOX_COOKIE_HEADER_FILE}",
+        _RUNTIME_COOKIE_CLEANUP_COMMAND,
+        _RUNTIME_COOKIE_CLEANUP_COMMAND,
     ]
 
 
@@ -509,8 +515,7 @@ async def test_runtime_cookie_file_failed_write_clears_target_and_does_not_mark_
     commands = [command for command, _timeout in shell_calls]
     assert "cookie-secret-marker" not in str(exc_info.value)
     assert len(writes) == 1
-    assert f"rm -f {SANDBOX_COOKIE_HEADER_FILE}" in commands
-    assert any(command.startswith("rm -f /home/gem/.yuxi-runtime/.browser-cookie-header-") for command in commands)
+    assert commands.count(_RUNTIME_COOKIE_CLEANUP_COMMAND) == 2
     assert backend._runtime_cookie_sync_key is None
 
 
