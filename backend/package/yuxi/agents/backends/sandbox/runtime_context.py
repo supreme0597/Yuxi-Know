@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from yuxi.services.run_runtime_secret_service import BrowserCookieRuntimeSecret
 from yuxi.utils.logging_config import logger
 
+SANDBOX_COOKIE_HEADER_FILE = "/home/gem/.yuxi-runtime/browser-cookie-header.txt"
+
 
 @dataclass(frozen=True, slots=True)
 class SandboxRuntimeCredentials:

@@ -26,6 +26,7 @@ from deepagents.backends.utils import _get_file_type
 
 from yuxi.agents.skills.service import sync_thread_readable_skills
 from yuxi.agents.backends.sandbox.runtime_context import (
+    SANDBOX_COOKIE_HEADER_FILE,
     get_sandbox_runtime_credentials,
     register_sandbox_runtime_cleanup,
 )
@@ -38,7 +39,6 @@ from yuxi.utils.paths import (
     WORKSPACE_DIR_NAME,
 )
 from .provider import (
-    SANDBOX_COOKIE_HEADER_FILE,
     get_sandbox_provider,
     sandbox_id_for_thread,
     sandbox_provisioner_token,

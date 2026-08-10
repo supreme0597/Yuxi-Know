@@ -18,8 +18,11 @@ from yuxi.agents.backends.composite import (
 )
 from yuxi.agents.backends.sandbox import resolve_virtual_path, sandbox_id_for_thread
 from yuxi.agents.backends.sandbox.backend import ProvisionerSandboxBackend
-from yuxi.agents.backends.sandbox.provider import SANDBOX_COOKIE_HEADER_FILE
-from yuxi.agents.backends.sandbox.runtime_context import SandboxRuntimeCredentials, sandbox_runtime_scope
+from yuxi.agents.backends.sandbox.runtime_context import (
+    SANDBOX_COOKIE_HEADER_FILE,
+    SandboxRuntimeCredentials,
+    sandbox_runtime_scope,
+)
 from yuxi.agents.middlewares.skills import SkillsMiddleware
 from yuxi.services.run_runtime_secret_service import BrowserCookieRuntimeSecret
 from yuxi.utils.paths import VIRTUAL_PATH_CONVERSATION_HISTORY, VIRTUAL_PATH_LARGE_TOOL_RESULTS

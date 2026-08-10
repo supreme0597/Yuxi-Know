@@ -19,9 +19,6 @@ def sandbox_provisioner_token() -> str:
     return token
 
 
-SANDBOX_COOKIE_HEADER_FILE = "/home/gem/.yuxi-runtime/browser-cookie-header.txt"
-
-
 def sandbox_id_for_thread(thread_id: str, skills_thread_id: str | None = None, *, uid: str | None = None) -> str:
     file_thread_id = str(thread_id or "").strip()
     skills_id = str(skills_thread_id or file_thread_id).strip()
