@@ -24,8 +24,7 @@ def _build_sandbox_cookie_prompt() -> str:
     return f"""{SANDBOX_COOKIE_PROMPT_MARKER}
 <| 沙盒 Cookie Header 文件:重要 |>
 当前运行提供了浏览器发送给 Yuxi 的原始 Cookie Header。
-Header 文件路径由环境变量 `SANDBOX_COOKIE_HEADER_FILE` 指向，当前固定为
-`{SANDBOX_COOKIE_HEADER_FILE}`。文件内容是原始 Cookie 请求头字符串，不是 JSON。
+Header 文件固定在 `{SANDBOX_COOKIE_HEADER_FILE}`，文件内容是原始 Cookie 请求头字符串，不是 JSON。
 
 - 需要使用当前浏览器登录态时，从该文件读取内容并设置 HTTP Cookie Header。
 - 禁止打印、回显、记录、总结或向用户展示文件内容。

@@ -62,14 +62,14 @@
 - BrowserCookieRuntimeSecret 只保存 header，不保存 request origin、允许域或其它授权信息。
 - 本功能不从 Cookie Header 推导 Domain/Path，不从 request host 推导公司根域，也不增加目标 URL 校验逻辑。
 - Header 文件固定为 /home/gem/.yuxi-runtime/browser-cookie-header.txt，内容是原始 Header 文本，不是 JSON。
-- SANDBOX_COOKIE_HEADER_FILE 只保存固定文件路径，不保存 Header 内容。
+- Cookie Header 文件路径固定为应用常量并只在系统提示词中说明，不注入沙盒环境变量。
 - /home/gem/.yuxi-runtime 必须位于 Docker tmpfs 或 Kubernetes emptyDir。
 - 不在 run 创建时启动沙盒；只在 ProvisionerSandboxBackend._get_client() 第一次实际取用沙盒时同步。
 - 无 run context 的 viewer/API 沙盒访问不得修改 Header 文件。
 - 系统提示词只在当前 run 有 Cookie secret 时注入；main agent 和 subagent 都只收到文件路径、文件格式和保密说明。
 - 系统提示词不声明允许域，不执行同源授权，也不等价于网络层强制隔离。
 - 沙盒在 idle reaper 删除前按线程范围复用；Cookie 文件清理不等价于 run 级进程隔离，不扫描或终止同一线程中的后台进程。
-- runtime-contract-version 保持 cookie-header-file-v1；文件契约没有改变。
+- Provisioner `instance_id` 用于同一 run 内实例重建后的文件重新同步，不使用 Cookie 路径契约触发旧实例重建。
 - Python 测试和 Ruff 必须在 api-dev 容器内运行；第一次执行 RED 测试前先用 docker ps 确认容器已启动，未启动时运行 docker compose up -d。
 - Makefile、patch 文件、.agents、.comet 和其它用户无关改动不属于本计划。
 - 每个任务遵循 RED 测试、最小实现、GREEN 测试、中文 Conventional Commit 的顺序。
@@ -638,8 +638,7 @@ def _build_sandbox_cookie_prompt() -> str:
 {SANDBOX_COOKIE_PROMPT_MARKER}
 <| 沙盒 Cookie Header 文件:重要 |>
 当前运行提供了浏览器发送给 Yuxi 的原始 Cookie Header。
-Header 文件路径由环境变量 SANDBOX_COOKIE_HEADER_FILE 指向，当前固定为
-{SANDBOX_COOKIE_HEADER_FILE}。文件内容是原始 Cookie 请求头字符串，不是 JSON。
+Header 文件固定在 {SANDBOX_COOKIE_HEADER_FILE}，文件内容是原始 Cookie 请求头字符串，不是 JSON。
 
 - 需要使用当前浏览器登录态时，从该文件读取内容并设置 HTTP Cookie Header。
 - 禁止打印、回显、记录、总结或向用户展示文件内容。

@@ -40,8 +40,9 @@ async def test_sandbox_cookie_prompt_describes_only_the_runtime_header_file():
     text = _system_message_text(captured["request"].system_message)
     assert result == "ok"
     assert "原始 Cookie Header" in text
-    assert "SANDBOX_COOKIE_HEADER_FILE" in text
     assert "/home/gem/.yuxi-runtime/browser-cookie-header.txt" in text
+    assert "SANDBOX_COOKIE_HEADER_FILE" not in text
+    assert "环境变量" not in text
     assert "不是 JSON" in text
     assert "session=secret-value" not in text
     assert "origin" not in text

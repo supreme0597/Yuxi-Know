@@ -19,15 +19,14 @@ def sandbox_provisioner_token() -> str:
     return token
 
 
-SANDBOX_COOKIE_HEADER_FILE_ENV = "SANDBOX_COOKIE_HEADER_FILE"
 SANDBOX_COOKIE_HEADER_FILE = "/home/gem/.yuxi-runtime/browser-cookie-header.txt"
 LEGACY_SANDBOX_COOKIES_ENV = "SANDBOX_COOKIES_JSON"
 
 
 def load_sandbox_env(uid: str) -> dict[str, str]:
     env = load_user_agent_env(uid)
+    env.pop("SANDBOX_COOKIE_HEADER_FILE", None)
     env.pop(LEGACY_SANDBOX_COOKIES_ENV, None)
-    env[SANDBOX_COOKIE_HEADER_FILE_ENV] = SANDBOX_COOKIE_HEADER_FILE
     return env
 
 

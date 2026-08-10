@@ -11,8 +11,8 @@
 - Agent 请求入口直接保留浏览器发给 Yuxi 的原始 `Cookie` Header，不再通过 `request.cookies` 转成字典或 JSON，因此重复 cookie 名、顺序和路径选择结果保持不变，仍可包含浏览器自动发送的 HttpOnly cookie。HTTP Header 不包含 Cookie 的 Domain/Path 属性，完整 Header 也可能包含只适用于当前 Yuxi 主机的 cookie；本功能不推导允许域，也不校验 Agent 请求的目标 URL。
 - 原始 Header 作为按 `run_id` 隔离的 Redis 临时凭据保存，并复用现有主 Redis；ARQ 任务参数只携带 `run_id`，应用代码不主动把 Header 写入 Postgres、AgentRun meta/input、LangGraph state/configurable、队列参数/结果或日志。TTL 固定按 worker 单次执行上限 × 最大尝试次数 × 2 推导，API 与 worker 从相同的 `AGENT_RUN_JOB_TIMEOUT_SECONDS` 和 `AGENT_RUN_MAX_TRIES` 配置取值。Redis Secret 读取失败会按 worker 策略重试，最后一次失败会将 run 终态化；队列失败、run 终态和 TTL 会清理凭据，retryable 的首次尝试会保留凭据供重试；主 Redis 的 AOF/RDB、复制和备份策略保持不变。
 - Worker 通过 run 级 `ContextVar` 为 chat、resume 和 subagent 激活凭据；resume 使用本次请求的最新 Header，subagent 把父 run 凭据复制到 child run 的 Redis key。没有运行期上下文的 viewer/API 沙盒访问不会修改凭据文件。
-- Agent 第一次实际访问沙盒时，才把原始 Header 懒写入 `/home/gem/.yuxi-runtime/browser-cookie-header.txt`；环境变量 `SANDBOX_COOKIE_HEADER_FILE` 只提供固定路径指针。目录权限为 `0700`、文件权限为 `0600`，写入采用临时文件加原子替换，写入前、run 退出和下一次无凭据 run 会同时删除旧正式文件与遗留临时文件；不再使用 `SANDBOX_COOKIES_JSON`。沙盒在 idle reaper 删除前按线程复用，提示词禁止回显是模型行为约束，不提供 run 级进程隔离或通用 shell 输出的技术强保证。
-- Provisioner 响应新增真实 `instance_id`（Docker container ID / Kubernetes Pod UID），同一逻辑沙盒被超时删除并重建后，即使代理 URL 不变也会重新注入。`cookie-header-file-v1` 运行契约会让缺少固定路径指针的历史沙盒在升级后重建一次。
+- Agent 第一次实际访问沙盒时，才把原始 Header 懒写入 `/home/gem/.yuxi-runtime/browser-cookie-header.txt`；路径只由系统提示词直接说明，不再注入 `SANDBOX_COOKIE_HEADER_FILE` 环境变量。目录权限为 `0700`、文件权限为 `0600`，写入采用临时文件加原子替换，写入前、run 退出和下一次无凭据 run 会同时删除旧正式文件与遗留临时文件；不再使用 `SANDBOX_COOKIES_JSON`。沙盒在 idle reaper 删除前按线程复用，提示词禁止回显是模型行为约束，不提供 run 级进程隔离或通用 shell 输出的技术强保证。
+- Provisioner 响应保留真实 `instance_id`（Docker container ID / Kubernetes Pod UID），同一 run 内的逻辑沙盒被超时删除并重建时，即使代理 URL 不变也会重新注入；不再使用 Cookie 路径契约触发旧沙盒重建。
 - 主 Agent 与 subagent 仅在存在凭据时动态获得文件使用说明：提示词只包含固定路径、原始 Header 格式和禁止泄露/持久化要求，不包含 Header 内容，也不承担域名授权或网络隔离职责。
 - Header 按 Latin-1 字节表示限制为 32 KiB，空值或超限值跳过注入；浏览器已经只选择适用于本次 Yuxi 请求的 cookie，原始 Header 本身不含 Domain/Path 元数据。
 

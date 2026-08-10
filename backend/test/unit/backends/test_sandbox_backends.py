@@ -282,10 +282,7 @@ def test_provider_uses_distinct_sandbox_scope_for_different_uid(monkeypatch) -> 
     assert sandbox_1 != sandbox_2
     assert created[0][2] == "user-1"
     assert created[1][2] == "user-2"
-    assert created[0][3] == {
-        "A": "user-1",
-        "SANDBOX_COOKIE_HEADER_FILE": "/home/gem/.yuxi-runtime/browser-cookie-header.txt",
-    }
+    assert created[0][3] == {"A": "user-1"}
 
 
 def test_provider_get_create_if_missing_ensures_expected_split_scope(monkeypatch) -> None:
@@ -328,17 +325,14 @@ def test_provider_get_create_if_missing_ensures_expected_split_scope(monkeypatch
             sandbox_id,
             "child-thread",
             "user-1",
-            {
-                "A": "user-1",
-                "SANDBOX_COOKIE_HEADER_FILE": "/home/gem/.yuxi-runtime/browser-cookie-header.txt",
-            },
+            {"A": "user-1"},
             "parent-thread",
             "child-skills-thread",
         )
     ]
 
 
-def test_load_sandbox_env_reserves_cookie_header_file_pointer(monkeypatch) -> None:
+def test_load_sandbox_env_removes_legacy_cookie_value_without_injecting_a_path(monkeypatch) -> None:
     from yuxi.agents.backends.sandbox.provider import load_sandbox_env
 
     monkeypatch.setattr(
@@ -352,10 +346,7 @@ def test_load_sandbox_env_reserves_cookie_header_file_pointer(monkeypatch) -> No
 
     env = load_sandbox_env("user-1")
 
-    assert env == {
-        "USER_VALUE": "ok",
-        "SANDBOX_COOKIE_HEADER_FILE": "/home/gem/.yuxi-runtime/browser-cookie-header.txt",
-    }
+    assert env == {"USER_VALUE": "ok"}
 
 
 def test_provisioner_uses_file_and_skills_thread_ids(monkeypatch) -> None:

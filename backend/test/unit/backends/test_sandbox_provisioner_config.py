@@ -153,7 +153,6 @@ def test_kubernetes_discover_uses_pod_uid_as_instance_id(monkeypatch):
                 "file-thread-id": "thread-1",
                 "skills-thread-id": "thread-1",
                 "uid": "user-1",
-                "runtime-contract-version": "cookie-header-file-v1",
             },
         ),
         status=SimpleNamespace(phase="Running"),
@@ -427,7 +426,7 @@ def test_docker_backend_uses_private_network_without_published_port(monkeypatch,
         id = "container-1"
         name = "yuxi-sandbox-sandbox-1"
         status = "running"
-        labels = {"runtime-contract-version": "cookie-header-file-v1"}
+        labels = {}
         attrs = {"State": {"Status": "running"}}
 
         def reload(self):
@@ -448,17 +447,16 @@ def test_docker_backend_uses_private_network_without_published_port(monkeypatch,
     assert record.sandbox_url == "http://yuxi-sandbox-sandbox-1:8080"
     assert captured[0][0] == "sandbox-image"
     assert captured[0][1]["network"] == "yuxi-know-sandbox-sandbox-1"
-    assert captured[0][1]["labels"]["runtime-contract-version"] == "cookie-header-file-v1"
+    assert "runtime-contract-version" not in captured[0][1]["labels"]
     assert "ports" not in captured[0][1]
 
 
-def test_docker_backend_recreates_legacy_runtime_contract(monkeypatch, tmp_path):
+def test_docker_backend_reuses_sandbox_without_runtime_contract(monkeypatch, tmp_path):
     monkeypatch.setenv("PROVISIONER_BACKEND", "memory")
     module = _load_module()
-    captured = []
     deleted = []
 
-    class LegacyContainer:
+    class ExistingContainer:
         id = "legacy-container"
         name = "yuxi-sandbox-sandbox-1"
         status = "running"
@@ -468,32 +466,24 @@ def test_docker_backend_recreates_legacy_runtime_contract(monkeypatch, tmp_path)
         def reload(self):
             return None
 
-    class NewContainer:
-        id = "new-container"
-        name = "yuxi-sandbox-sandbox-1"
-        status = "running"
-        labels = {"runtime-contract-version": "cookie-header-file-v1"}
-        attrs = {"State": {"Status": "running"}}
-
-        def reload(self):
-            return None
-
     backend = _docker_backend(
         module,
         tmp_path,
-        lambda image, **kwargs: captured.append((image, kwargs)) or NewContainer(),
+        lambda *_args, **_kwargs: pytest.fail("sandbox without a Cookie contract must be reused"),
     )
-    monkeypatch.setattr(backend, "_get_container", lambda _sandbox_id: LegacyContainer())
+    monkeypatch.setattr(backend, "_get_container", lambda _sandbox_id: ExistingContainer())
     monkeypatch.setattr(backend, "delete", deleted.append)
     monkeypatch.setattr(backend, "_ensure_network", backend._network_name)
+    monkeypatch.setattr(backend, "_is_expected_skills_mount", lambda _container, _thread_id: True)
+    monkeypatch.setattr(backend, "_is_on_expected_network", lambda _container, _sandbox_id: True)
+    monkeypatch.setattr(backend, "_has_expected_user_data_mounts", lambda _container, _thread_id, _uid: True)
     monkeypatch.setattr(backend, "_ensure_user_data_writable", lambda _container: None)
     monkeypatch.setattr(module, "wait_for_sandbox_ready", lambda _url, timeout_seconds: True)
 
     record = backend.create("sandbox-1", "thread-1", "user-1")
 
-    assert deleted == ["sandbox-1"]
-    assert record.instance_id == "new-container"
-    assert captured[0][1]["labels"]["runtime-contract-version"] == "cookie-header-file-v1"
+    assert deleted == []
+    assert record.instance_id == "legacy-container"
 
 
 def test_docker_backend_cleans_up_container_and_network_when_health_check_fails(monkeypatch, tmp_path):
@@ -506,7 +496,7 @@ def test_docker_backend_cleans_up_container_and_network_when_health_check_fails(
         id = "container-1"
         name = "yuxi-sandbox-sandbox-1"
         status = "running"
-        labels = {"runtime-contract-version": "cookie-header-file-v1"}
+        labels = {}
         attrs = {"State": {"Status": "running"}}
         removed = False
 
@@ -606,7 +596,7 @@ def test_docker_backend_reconnects_provisioner_before_reusing_sandbox(monkeypatc
         id = "container-1"
         name = "yuxi-sandbox-sandbox-1"
         status = "running"
-        labels = {"runtime-contract-version": "cookie-header-file-v1"}
+        labels = {}
         attrs = {"State": {"Status": "running"}}
 
         def reload(self):

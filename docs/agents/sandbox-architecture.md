@@ -184,11 +184,11 @@ Redis Hash 以 `run_id` 隔离，只保存 `header`，并复用现有主 Redis �
 
 ARQ 的 `process_agent_run` 参数始终只有 `run_id`。chat 和 resume 都读取自己的 run 凭据；resume 使用本次 HTTP 请求携带的最新 Header。subagent 启动时把父 run 当前凭据复制到 child run 的 Redis key，因此主 Agent 与子 Agent 具有一致的运行边界，但各自仍有独立生命周期。Redis key 不存在视为无 Cookie 的正常运行；读取 Redis 出错时不会降级为无 Cookie，而是按 ARQ 重试策略重试，最后一次失败会把 run 标记为 `failed`。队列投递失败、run 进入终态或 TTL 到期会删除 Redis 凭据；首次可重试失败不会提前删除，以便第二次 worker 尝试继续使用。
 
-沙盒创建仍然是懒执行。仅仅创建 run、查看 viewer 或读取宿主机文件树不会创建沙盒，也不会生成 Cookie 文件。只有 run 内第一次真正调用沙盒文件或 shell 能力时，`ProvisionerSandboxBackend` 才会在 `/home/gem/.yuxi-runtime` 下写入 `browser-cookie-header.txt`。`SANDBOX_COOKIE_HEADER_FILE` 是创建沙盒时注入的固定路径指针，Header 本身不进入环境变量。目录权限为 `0700`，文件权限为 `0600`，写入过程使用同目录临时文件并原子替换；写入前、run 退出和下一次无 Cookie run 都会同时清除正式文件及 `.browser-cookie-header-*.tmp` 临时文件。无 run 上下文的 viewer/API 访问不会删除正在使用的文件。
+沙盒创建仍然是懒执行。仅仅创建 run、查看 viewer 或读取宿主机文件树不会创建沙盒，也不会生成 Cookie 文件。只有 run 内第一次真正调用沙盒文件或 shell 能力时，`ProvisionerSandboxBackend` 才会在 `/home/gem/.yuxi-runtime` 下写入 `browser-cookie-header.txt`。固定路径由应用常量维护，不注入沙盒环境变量；Header 本身也不进入环境变量。目录权限为 `0700`，文件权限为 `0600`，写入过程使用同目录临时文件并原子替换；写入前、run 退出和下一次无 Cookie run 都会同时清除正式文件及 `.browser-cookie-header-*.tmp` 临时文件。无 run 上下文的 viewer/API 访问不会删除正在使用的文件。
 
-Docker 的 `/home/gem` 位于 `tmpfs`，Kubernetes 对应 `emptyDir`，所以 `.yuxi-runtime` 不属于 workspace、uploads、outputs 或其它持久化挂载。idle reaper 删除容器或 Pod 后，文件和实例内进程一起消失。沙盒在此之前按 `uid + file_thread_id + skills_thread_id` 复用，是线程级执行环境而非 run 级进程隔离边界；不尝试扫描或终止同一线程沙盒中的后台进程。Provisioner 会返回真实 `instance_id`（Docker container ID、Kubernetes Pod UID；memory 后端使用随机 ID），后端按 `(run_id, instance_id)` 判断是否已经同步；沙盒超时删除后即使代理 URL 不变，新实例也会重新写入。`runtime-contract-version=cookie-header-file-v1` 标签/注解会让升级前缺少固定路径指针的旧实例在首次发现时重建一次。
+Docker 的 `/home/gem` 位于 `tmpfs`，Kubernetes 对应 `emptyDir`，所以 `.yuxi-runtime` 不属于 workspace、uploads、outputs 或其它持久化挂载。idle reaper 删除容器或 Pod 后，文件和实例内进程一起消失。沙盒在此之前按 `uid + file_thread_id + skills_thread_id` 复用，是线程级执行环境而非 run 级进程隔离边界；不尝试扫描或终止同一线程沙盒中的后台进程。Provisioner 会返回真实 `instance_id`（Docker container ID、Kubernetes Pod UID；memory 后端使用随机 ID），后端按 `(run_id, instance_id)` 判断是否已经同步；它只用于同一 run 内闲置实例被删除、随后重建时向新实例重新写入文件，不承担跨 run 的文件保留。
 
-主 Agent 和 subagent 都安装了动态 Cookie 提示词中间件。只有当前 run 存在凭据时，系统提示词才会说明 `SANDBOX_COOKIE_HEADER_FILE` 的固定路径、文件内容是原始 Cookie Header 而不是 JSON，以及禁止打印、记录、复制或持久化 Header；Header 内容本身永远不会进入提示词。应用代码不得主动把 Header 写入 Postgres、事件或日志，但该提示词是模型行为约束，不能把通用 shell 的恶意回显视为技术强保证。该提示词不声明允许域、不执行同源授权，也不替代网络层访问控制。
+主 Agent 和 subagent 都安装了动态 Cookie 提示词中间件。只有当前 run 存在凭据时，系统提示词才会直接说明固定文件路径、文件内容是原始 Cookie Header 而不是 JSON，以及禁止打印、记录、复制或持久化 Header；Header 内容本身永远不会进入提示词。应用代码不得主动把 Header 写入 Postgres、事件或日志，但该提示词是模型行为约束，不能把通用 shell 的恶意回显视为技术强保证。该提示词不声明允许域、不执行同源授权，也不替代网络层访问控制。
 
 ## 十二、当前推荐如何使用 Docker 沙盒
 
@@ -317,7 +317,7 @@ CHECK_YUXI_SANDBOX_ENV_EXISTS=True
 
 如果需要给所有沙盒容器注入额外的环境变量（如代理配置、认证信息等），可以添加到 `sandbox.env` 文件中。
 
-`SANDBOX_COOKIE_HEADER_FILE=/home/gem/.yuxi-runtime/browser-cookie-header.txt` 是应用层保留的固定指针：创建沙盒时会覆盖用户 `agent_env` 中的同名值，并移除历史 `SANDBOX_COOKIES_JSON`。不要在 `sandbox.env` 或用户环境变量中写入 Cookie Header 内容。
+Cookie Header 及其文件路径不通过 `sandbox.env` 或用户 `agent_env` 注入；创建沙盒时会移除历史 `SANDBOX_COOKIES_JSON` 和 `SANDBOX_COOKIE_HEADER_FILE`。不要在这些环境变量中写入 Cookie Header 内容。
 
 ### 配置方式汇总
 
