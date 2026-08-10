@@ -332,23 +332,6 @@ def test_provider_get_create_if_missing_ensures_expected_split_scope(monkeypatch
     ]
 
 
-def test_load_sandbox_env_removes_legacy_cookie_value_without_injecting_a_path(monkeypatch) -> None:
-    from yuxi.agents.backends.sandbox.provider import load_sandbox_env
-
-    monkeypatch.setattr(
-        "yuxi.agents.backends.sandbox.provider.load_user_agent_env",
-        lambda _uid: {
-            "USER_VALUE": "ok",
-            "SANDBOX_COOKIE_HEADER_FILE": "/tmp/user-controlled",
-            "SANDBOX_COOKIES_JSON": "legacy-secret",
-        },
-    )
-
-    env = load_sandbox_env("user-1")
-
-    assert env == {"USER_VALUE": "ok"}
-
-
 def test_provisioner_uses_file_and_skills_thread_ids(monkeypatch) -> None:
     provider_calls = []
     synced = []

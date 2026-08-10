@@ -317,7 +317,7 @@ CHECK_YUXI_SANDBOX_ENV_EXISTS=True
 
 如果需要给所有沙盒容器注入额外的环境变量（如代理配置、认证信息等），可以添加到 `sandbox.env` 文件中。
 
-Cookie Header 及其文件路径不通过 `sandbox.env` 或用户 `agent_env` 注入；创建沙盒时会移除历史 `SANDBOX_COOKIES_JSON` 和 `SANDBOX_COOKIE_HEADER_FILE`。不要在这些环境变量中写入 Cookie Header 内容。
+Cookie Header 及其文件路径不通过 `sandbox.env` 或用户 `agent_env` 注入；用户配置的 `agent_env` 仍作为普通沙盒环境变量原样传递，不属于 Cookie 文件契约。不要在环境变量中写入 Cookie Header 内容。
 
 ### 配置方式汇总
 

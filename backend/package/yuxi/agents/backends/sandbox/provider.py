@@ -20,14 +20,6 @@ def sandbox_provisioner_token() -> str:
 
 
 SANDBOX_COOKIE_HEADER_FILE = "/home/gem/.yuxi-runtime/browser-cookie-header.txt"
-LEGACY_SANDBOX_COOKIES_ENV = "SANDBOX_COOKIES_JSON"
-
-
-def load_sandbox_env(uid: str) -> dict[str, str]:
-    env = load_user_agent_env(uid)
-    env.pop("SANDBOX_COOKIE_HEADER_FILE", None)
-    env.pop(LEGACY_SANDBOX_COOKIES_ENV, None)
-    return env
 
 
 def sandbox_id_for_thread(thread_id: str, skills_thread_id: str | None = None, *, uid: str | None = None) -> str:
@@ -187,7 +179,7 @@ class ProvisionerSandboxProvider:
                 sandbox_id,
                 thread_id,
                 uid,
-                load_sandbox_env(uid),
+                load_user_agent_env(uid),
                 file_thread_id=file_id,
                 skills_thread_id=skills_id,
             )
@@ -235,7 +227,7 @@ class ProvisionerSandboxProvider:
                     sandbox_id,
                     thread_id,
                     uid,
-                    load_sandbox_env(uid),
+                    load_user_agent_env(uid),
                     file_thread_id=file_id,
                     skills_thread_id=skills_id,
                 )

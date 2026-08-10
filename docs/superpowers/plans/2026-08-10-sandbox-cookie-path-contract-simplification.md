@@ -27,8 +27,8 @@
 - Test: `backend/test/unit/middlewares/test_sandbox_cookie_middleware.py`
 
 **Interfaces:**
-- Consumes: `load_sandbox_env(uid) -> dict[str, str]`。
-- Produces: 创建沙盒的环境变量不包含 `SANDBOX_COOKIE_HEADER_FILE` 或遗留 `SANDBOX_COOKIES_JSON`；仅 `SANDBOX_COOKIE_HEADER_FILE` 常量用于文件同步和提示词。
+- Consumes: 既有 `load_user_agent_env(uid) -> dict[str, str]`，Cookie 功能不增加环境变量包装层。
+- Produces: Cookie 功能不再主动注入 `SANDBOX_COOKIE_HEADER_FILE` 或 `SANDBOX_COOKIES_JSON`；用户配置的普通 Agent 环境变量保持原样透传，仅 `SANDBOX_COOKIE_HEADER_FILE` 常量用于文件同步和提示词。
 
 - [x] **Step 1: 写入红测**
 
@@ -42,7 +42,7 @@ Expected: 现有代码仍在注入环境变量且提示词仍引用环境变量�
 
 - [x] **Step 3: 写最小实现**
 
-删除 `SANDBOX_COOKIE_HEADER_FILE_ENV` 和 `load_sandbox_env()` 中的路径赋值；保留路径常量。把提示词改为“Header 文件固定路径为 `<path>`”，不再引用环境变量。
+删除 `SANDBOX_COOKIE_HEADER_FILE_ENV`，创建沙盒时恢复直接调用 `load_user_agent_env(uid)`；保留路径常量。把提示词改为“Header 文件固定路径为 `<path>`”，不再引用环境变量。
 
 - [x] **Step 4: 运行绿测**
 
