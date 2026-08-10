@@ -7,6 +7,7 @@ from typing import Any, Literal
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from yuxi.storage.postgres.manager import pg_manager
 from yuxi.storage.postgres.models_business import Agent, User
 from yuxi.utils.datetime_utils import utc_now_naive
 from yuxi.utils.share_config import SHARE_ACCESS_LEVELS, normalize_share_config
@@ -172,7 +173,7 @@ def _slugify(value: str | None) -> str:
 
 
 class AgentRepository:
-    def __init__(self, db_session: AsyncSession):
+    def __init__(self, db_session: AsyncSession | None = None):
         self.db = db_session
 
     async def ensure_default_agent(self, *, created_by: str | None = None) -> Agent:
@@ -336,6 +337,12 @@ class AgentRepository:
         if user.role == "superadmin":
             return agents
         return [agent for agent in agents if user_can_access_agent(user, agent)]
+
+    async def list_all(self) -> list[Agent]:
+        """列出全部智能体，用于系统级引用扫描（不受可见性过滤，且独立会话）。"""
+        async with pg_manager.get_async_session_context() as session:
+            result = await session.execute(select(Agent).order_by(Agent.id.asc()))
+            return list(result.scalars().all())
 
     async def list_visible_subagents(self, *, user: User) -> list[Agent]:
         result = await self.db.execute(

@@ -1,8 +1,8 @@
 """模型供应商配置数据访问层。"""
 
-import os
+import json
 
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from yuxi.storage.postgres.models_business import ModelProvider
@@ -69,42 +69,34 @@ async def get_visible_model_provider(db: AsyncSession, provider_id: str, user) -
     return provider
 
 
-async def count_provider_references(db: AsyncSession, provider_id: str) -> dict[str, list[dict]]:
-    """扫描所有可能引用该 provider 的资源，返回 {kind: [{id, name}, ...]}。"""
+async def count_provider_references(provider_id: str) -> dict[str, list[dict]]:
+    """扫描所有可能引用该 provider 的资源，返回 {kind: [{id, name}, ...]}。
+
+    各来源通过各自 repository 的现成查询函数读取（独立会话），
+    任一来源异常都不影响删除事务；缺失/不可用的来源直接跳过。
+    """
     if not provider_id:
         return {}
 
     references: dict[str, list[dict]] = {}
-    spec_pattern = f"%{provider_id}%"
 
-    if os.getenv("LITE_MODE", "").lower() not in {"true", "1"}:
-        kb_sql = (
-            "SELECT id, name FROM knowledges "
-            "WHERE embedding_model_spec = :spec OR llm_model_spec = :spec OR query_llm_model_spec = :spec"
-        )
-        try:
-            result = await db.execute(text(kb_sql), {"spec": provider_id})
-            rows = list(result.all())
-            if rows:
-                references["knowledge"] = [{"id": int(r[0]), "name": r[1]} for r in rows]
-        except Exception:
-            pass
-
-    agent_sql = "SELECT id, name FROM agents WHERE config_json::text LIKE :pattern"
+    # 知识库：直接复用现成查询函数（独立会话，缺失/异常均被下方 except 吞掉，不依赖环境开关）
     try:
-        result = await db.execute(text(agent_sql), {"pattern": spec_pattern})
-        rows = list(result.all())
-        if rows:
-            references["agent"] = [{"id": int(r[0]), "name": r[1]} for r in rows]
+        from yuxi.repositories.knowledge_base_repository import KnowledgeBaseRepository
+
+        for kb in await KnowledgeBaseRepository().get_all():
+            if any(spec == provider_id for spec in (kb.embedding_model_spec, kb.llm_model_spec) if spec):
+                references.setdefault("knowledge", []).append({"id": kb.id, "name": kb.name})
     except Exception:
         pass
 
-    config_sql = "SELECT id, key FROM config_options WHERE value::text LIKE :pattern"
+    # 智能体：扫描 config_json 是否包含该 provider_id
     try:
-        result = await db.execute(text(config_sql), {"pattern": spec_pattern})
-        rows = list(result.all())
-        if rows:
-            references["config_option"] = [{"id": int(r[0]), "name": r[1]} for r in rows]
+        from yuxi.repositories.agent_repository import AgentRepository
+
+        for agent in await AgentRepository().list_all():
+            if agent.config_json and provider_id in json.dumps(agent.config_json, ensure_ascii=False):
+                references.setdefault("agent", []).append({"id": agent.id, "name": agent.name})
     except Exception:
         pass
 

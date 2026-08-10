@@ -139,9 +139,14 @@ async def update_provider(
         unset_fields = payload.model_fields_set
         data = payload.model_dump(exclude_none=True)
         for nullable_field in (
-            "api_key_env", "api_key", "default_protocol",
-            "embedding_base_url", "rerank_base_url",
-            "models_endpoint", "embedding_models_endpoint", "rerank_models_endpoint",
+            "api_key_env",
+            "api_key",
+            "default_protocol",
+            "embedding_base_url",
+            "rerank_base_url",
+            "models_endpoint",
+            "embedding_models_endpoint",
+            "rerank_models_endpoint",
         ):
             if nullable_field in unset_fields and getattr(payload, nullable_field) is None:
                 data[nullable_field] = None
@@ -175,7 +180,7 @@ async def delete_provider(
     if provider.is_builtin:
         raise HTTPException(status_code=409, detail="内置模型供应商不能删除")
 
-    references = await count_provider_references(db, provider_id)
+    references = await count_provider_references(provider_id)
     if references:
         raise HTTPException(
             status_code=409,

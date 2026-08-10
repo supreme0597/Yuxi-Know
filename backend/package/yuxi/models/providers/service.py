@@ -362,7 +362,7 @@ async def delete_provider_config(
         return False, None
     if not user_can_manage_provider(current_user, provider):
         return False, None
-    references = await count_provider_references(db, provider_id)
+    references = await count_provider_references(provider_id)
     if references:
         return False, references
     await delete_model_provider(db, provider)

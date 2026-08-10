@@ -13,6 +13,8 @@
 - API Key 在列表响应中默认脱敏（`api_key_masked`），仅 PUT 回写场景返回明文
 - 消费侧 `select_model` 引入 `VisibilityCache`，按 `user.uid` 缓存 30s
 - 删除供应商时若被知识库 / 智能体 / 系统配置引用，返回 409 与引用列表
+- 修复删除供应商报错（500 / 删除失败）的问题：引用计数 `count_provider_references` 原本用裸 SQL 扫描 `config_options` 等表，本环境该表不存在导致事务中止、后续 DELETE 失败；现改为复用 `KnowledgeBaseRepository.get_all()` 与新增的 `AgentRepository.list_all()` 现成查询函数（各自独立会话），移除对未托管的 `config_options` 外部表的扫描，任一引用源异常都不会再中止删除事务
+- 知识库引用检测不再受 `LITE_MODE` 环境变量开关限制（原本非 LITE 才扫，且裸 SQL 还误用了不存在的 `knowledges` 表名，引用保护实际从未生效）；现始终扫描真实 `knowledge_bases` 表，避免切换环境后漏拦"被知识库引用的供应商"删除
 - 前端 `ModelProviderManagePanel` 接入 `ShareConfigForm`，新增「全部 / 我创建的 / 部门共享 / 全局共享」标签页
 - 修复编辑供应商保存时报 `NameError: name 'username' is not defined` 的问题：更新路径 `updated_by` 与创建路径一致，写入当前用户 uid
 - 管理权收紧为仅创建人可编辑 / 删除 / 修改共享范围；superadmin 兜底可管理全部；内置供应商与历史未记录创建人的供应商视为系统级资源，归管理员管理。被共享的供应商（含 admin 非创建人）不可编辑

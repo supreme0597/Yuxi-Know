@@ -12,7 +12,8 @@ from yuxi.models.providers.repository import (
     list_visible_model_providers,
 )
 from yuxi.models.providers.share import DEFAULT_PROVIDER_SHARE_CONFIG
-from yuxi.storage.postgres.models_business import ModelProvider, User
+from yuxi.storage.postgres.models_business import Agent, ModelProvider, User
+from yuxi.storage.postgres.models_knowledge import KnowledgeBase
 
 
 def _user(uid, role="user", department_id=1):
@@ -96,3 +97,68 @@ async def test_get_visible_returns_provider_when_accessible():
     result = await get_visible_model_provider(db, "p1", u)
     assert result is not None
     assert result.provider_id == "p1"
+
+
+# ---------- count_provider_references ----------
+
+
+@pytest.mark.asyncio
+async def test_count_references_isolates_source_failures(monkeypatch):
+    """任一引用源查询异常（如缺失的 config_options 表）不应抛出，返回空引用。"""
+
+    async def boom(self):
+        raise RuntimeError("relation does not exist")
+
+    monkeypatch.setattr("yuxi.repositories.knowledge_base_repository.KnowledgeBaseRepository.get_all", boom)
+    monkeypatch.setattr("yuxi.repositories.agent_repository.AgentRepository.list_all", boom)
+
+    result = await count_provider_references("p1")
+    assert result == {}
+
+
+@pytest.mark.asyncio
+async def test_count_references_detects_agent_reference(monkeypatch):
+    async def fake_agents(self):
+        return [Agent(id=1, name="a1", config_json={"llm": {"model": "p1:gpt-4"}})]
+
+    async def fake_kbs(self):
+        return []
+
+    monkeypatch.setattr("yuxi.repositories.agent_repository.AgentRepository.list_all", fake_agents)
+    monkeypatch.setattr("yuxi.repositories.knowledge_base_repository.KnowledgeBaseRepository.get_all", fake_kbs)
+
+    result = await count_provider_references("p1")
+    assert result["agent"] == [{"id": 1, "name": "a1"}]
+
+
+@pytest.mark.asyncio
+async def test_count_references_detects_kb_reference(monkeypatch):
+    async def fake_kbs(self):
+        return [KnowledgeBase(id=5, name="kb1", embedding_model_spec="p1", llm_model_spec=None)]
+
+    async def fake_agents(self):
+        return []
+
+    monkeypatch.setattr("yuxi.repositories.knowledge_base_repository.KnowledgeBaseRepository.get_all", fake_kbs)
+    monkeypatch.setattr("yuxi.repositories.agent_repository.AgentRepository.list_all", fake_agents)
+
+    result = await count_provider_references("p1")
+    assert result["knowledge"] == [{"id": 5, "name": "kb1"}]
+
+
+@pytest.mark.asyncio
+async def test_count_references_detects_kb_reference_under_lite_mode(monkeypatch):
+    """知识库引用检测不依赖 LITE_MODE 开关，避免切换环境后漏拦删除。"""
+    monkeypatch.setenv("LITE_MODE", "true")
+
+    async def fake_kbs(self):
+        return [KnowledgeBase(id=5, name="kb1", embedding_model_spec="p1", llm_model_spec=None)]
+
+    async def fake_agents(self):
+        return []
+
+    monkeypatch.setattr("yuxi.repositories.knowledge_base_repository.KnowledgeBaseRepository.get_all", fake_kbs)
+    monkeypatch.setattr("yuxi.repositories.agent_repository.AgentRepository.list_all", fake_agents)
+
+    result = await count_provider_references("p1")
+    assert result["knowledge"] == [{"id": 5, "name": "kb1"}]
